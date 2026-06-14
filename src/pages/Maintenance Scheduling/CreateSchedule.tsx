@@ -26,6 +26,16 @@ interface ChecklistItemTemplate {
 }
 
 const OTHER_GARAGE_VALUE = "__other__";
+const NON_NEGATIVE_NUMBER_PATTERN = /^\d+(?:\.\d+)?$/;
+
+const sanitizeNonNegativeNumber = (value: string) => {
+  const sanitized = value.replace(/[^\d.]/g, "");
+  const [wholeNumber, ...decimalParts] = sanitized.split(".");
+
+  return decimalParts.length > 0
+    ? `${wholeNumber}.${decimalParts.join("")}`
+    : wholeNumber;
+};
 
 export default function CreateScheduleModal({
   isOpen,
@@ -206,24 +216,48 @@ export default function CreateScheduleModal({
     }
   }, [isOpen, editingTask]);
 
-  useEffect(() => {
-    if (!isOpen || !editingTask?.garageId || garages.length === 0) return;
-
-    const garageExists = garages.some(
-      (garage) => garage.id === editingTask.garageId,
-    );
-
-    if (!garageExists) {
-      setGarageId("");
-      setIsOtherGarage(true);
-      setOtherGarage(editingTask.garageId);
-    }
-  }, [editingTask, garages, isOpen]);
+  const isEditingGarageOther =
+    Boolean(editingTask?.garageId) &&
+    garageId === editingTask?.garageId &&
+    garages.length > 0 &&
+    !garages.some((garage) => garage.id === editingTask?.garageId);
+  const garageIsOther = isOtherGarage || isEditingGarageOther;
+  const otherGarageValue =
+    isEditingGarageOther && !otherGarage
+      ? (editingTask?.garageId ?? "")
+      : otherGarage;
+  const requiredFieldValues = [
+    vehicleId,
+    odometerReading,
+    garageIsOther ? otherGarageValue : garageId,
+    accountType,
+    workOrderTemplate,
+    scheduledDate,
+    assignedMechanic,
+    ...(triggerType !== "TIME"
+      ? [intervalKm, bufferDistanceKm, startingReferenceReadingKm]
+      : []),
+    ...(triggerType !== "ODOMETER"
+      ? [intervalTypeState, startReferenceDate]
+      : []),
+  ];
+  const isFormComplete = requiredFieldValues.every(
+    (value) => value.trim().length > 0,
+  ) && [
+    odometerReading,
+    ...(triggerType !== "TIME"
+      ? [intervalKm, bufferDistanceKm, startingReferenceReadingKm]
+      : []),
+  ].every((value) => NON_NEGATIVE_NUMBER_PATTERN.test(value));
 
   const handleSaveSchedule = async () => {
+    if (!isFormComplete) return;
+
     setIsSaving(true);
     try {
-      const savedGarageId = isOtherGarage ? otherGarage.trim() : garageId;
+      const savedGarageId = garageIsOther
+        ? otherGarageValue.trim()
+        : garageId;
 
       if (editingTask) {
         const updated: MaintenanceTask = {
@@ -473,9 +507,14 @@ export default function CreateScheduleModal({
                   </label>
                   <input
                     type="text"
+                    inputMode="decimal"
                     placeholder="km"
                     value={odometerReading}
-                    onChange={(e) => setOdometerReading(e.target.value)}
+                    onChange={(e) =>
+                      setOdometerReading(
+                        sanitizeNonNegativeNumber(e.target.value),
+                      )
+                    }
                     className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
                   />
                 </div>
@@ -487,7 +526,7 @@ export default function CreateScheduleModal({
                 </label>
                 <div className="relative">
                   <select
-                    value={isOtherGarage ? OTHER_GARAGE_VALUE : garageId}
+                    value={garageIsOther ? OTHER_GARAGE_VALUE : garageId}
                     onChange={(e) => {
                       if (e.target.value === OTHER_GARAGE_VALUE) {
                         setGarageId("");
@@ -517,10 +556,10 @@ export default function CreateScheduleModal({
                     </svg>
                   </div>
                 </div>
-                {isOtherGarage ? (
+                {garageIsOther ? (
                   <input
                     type="text"
-                    value={otherGarage}
+                    value={otherGarageValue}
                     onChange={(e) => setOtherGarage(e.target.value)}
                     placeholder="Enter garage / cluster"
                     className="mt-2 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
@@ -590,9 +629,12 @@ export default function CreateScheduleModal({
                 </label>
                 <input
                   type="text"
+                  inputMode="decimal"
                   placeholder="km"
                   value={intervalKm}
-                  onChange={(e) => setIntervalKm(e.target.value)}
+                  onChange={(e) =>
+                    setIntervalKm(sanitizeNonNegativeNumber(e.target.value))
+                  }
                   disabled={triggerType === "TIME"}
                   className={`w-full rounded-md border px-3 py-2 text-sm placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 ${
                     triggerType === "TIME"
@@ -607,9 +649,14 @@ export default function CreateScheduleModal({
                 </label>
                 <input
                   type="text"
+                  inputMode="decimal"
                   placeholder="km"
                   value={bufferDistanceKm}
-                  onChange={(e) => setBufferDistanceKm(e.target.value)}
+                  onChange={(e) =>
+                    setBufferDistanceKm(
+                      sanitizeNonNegativeNumber(e.target.value),
+                    )
+                  }
                   disabled={triggerType === "TIME"}
                   className={`w-full rounded-md border px-3 py-2 text-sm placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 ${
                     triggerType === "TIME"
@@ -624,10 +671,13 @@ export default function CreateScheduleModal({
                 </label>
                 <input
                   type="text"
+                  inputMode="decimal"
                   placeholder="km"
                   value={startingReferenceReadingKm}
                   onChange={(e) =>
-                    setStartingReferenceReadingKm(e.target.value)
+                    setStartingReferenceReadingKm(
+                      sanitizeNonNegativeNumber(e.target.value),
+                    )
                   }
                   disabled={triggerType === "TIME"}
                   className={`w-full rounded-md border px-3 py-2 text-sm placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 ${
@@ -974,9 +1024,7 @@ export default function CreateScheduleModal({
           </button>
           <button
             onClick={handleSaveSchedule}
-            disabled={
-              isSaving || !vehicleId || !scheduledDate || !assignedMechanic
-            }
+            disabled={isSaving || !isFormComplete}
             className="btn-primary"
           >
             {isSaving ? "Saving…" : "Save Schedule"}

@@ -6,10 +6,6 @@ import {
   GripVertical,
   Edit,
   Save,
-  Wrench,
-  Droplets,
-  Disc,
-  Settings,
   X,
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
@@ -24,14 +20,6 @@ interface ChecklistItemTemplate {
   id: string;
   text: string;
 }
-
-const typeIcons: Record<string, React.ReactNode> = {
-  "Oil Change": <Droplets className="w-5 h-5" />,
-  "Brake Inspection": <Disc className="w-5 h-5" />,
-  "Tire Rotation": <Settings className="w-5 h-5" />,
-  "Engine Tune-up": <Wrench className="w-5 h-5" />,
-  "General Inspection": <ClipboardCheck className="w-5 h-5" />,
-};
 
 // Layout & interaction classes
 const containerClasses = 'space-y-6';
@@ -92,13 +80,6 @@ export default function WorkOrderTemplates() {
         setEditingItems([]);
       });
   }, []);
-
-  const getIconForType = (type: string) => {
-    if (Object.prototype.hasOwnProperty.call(typeIcons, type)) {
-      return typeIcons[type as keyof typeof typeIcons];
-    }
-    return <ClipboardCheck className="w-5 h-5" />;
-  };
 
   const handleAddItem = () => {
     if (!selectedType || !isEditingChecklist) return;
@@ -316,15 +297,6 @@ export default function WorkOrderTemplates() {
                         : templateButtonUnselectedClasses
                     }`}
                   >
-                    <span
-                      className={
-                        selectedType === type
-                          ? "text-[var(--color-brand-primary)] flex-shrink-0 dark:text-sky-100"
-                          : "text-[var(--color-text-secondary)] flex-shrink-0 dark:text-slate-300"
-                      }
-                    >
-                      {getIconForType(type)}
-                    </span>
                     {editingType === type ? (
                       <input
                         type="text"
@@ -443,16 +415,6 @@ export default function WorkOrderTemplates() {
           <div className={contentCardClasses}>
             <div className={headerSectionClasses}>
               <div>
-                <h2 className="text-xl font-bold text-[var(--color-text-primary)] flex items-center gap-2">
-                  {selectedType ? (
-                    getIconForType(selectedType)
-                  ) : (
-                    <ClipboardCheck className="w-5 h-5 text-[var(--color-text-secondary)]" />
-                  )}
-                  {selectedType
-                    ? `${selectedType} Template`
-                    : "No Template Selected"}
-                </h2>
                 <p className="text-sm text-[var(--color-text-secondary)] mt-1">
                   {"Configure the checklist items mechanics must complete."}
                 </p>

@@ -61,66 +61,6 @@ export const mockFuelFillUps: FuelFillUp[] = [
     efficiency: 9.2,
     trend: 'above'
   },
-  {
-    id: '5',
-    vehicleId: 'TRK-0033',
-    vehicleName: 'TRK-0033',
-    vehicleModel: 'Mitsubishi Fuso Center',
-    date: '2026-03-20',
-    liters: 78,
-    pricePerLiter: 66.7,
-    totalCost: 5203,
-    odometer: 108750,
-    station: 'Shell Alabang',
-    filledBy: 'Roberto Cruz',
-    efficiency: 6.8,
-    trend: 'below'
-  },
-  {
-    id: '6',
-    vehicleId: 'TRK-0044',
-    vehicleName: 'TRK-0044',
-    vehicleModel: 'Isuzu ELF 350',
-    date: '2026-03-22',
-    liters: 42,
-    pricePerLiter: 66.5,
-    totalCost: 2793,
-    odometer: 44200,
-    station: 'Petron BGC',
-    filledBy: 'Maria Garcia',
-    efficiency: 10.2,
-    trend: 'above'
-  },
-  {
-    id: '7',
-    vehicleId: 'TRK-0055',
-    vehicleName: 'TRK-0055',
-    vehicleModel: 'Ford Transit Van',
-    date: '2026-03-25',
-    liters: 32,
-    pricePerLiter: 65.8,
-    totalCost: 2106,
-    odometer: 142000,
-    station: 'Shell BGC',
-    filledBy: 'Maria Garcia',
-    efficiency: 11.5,
-    trend: 'above'
-  },
-  {
-    id: '8',
-    vehicleId: 'TRK-0066',
-    vehicleName: 'TRK-0066',
-    vehicleModel: 'Hino 500 Series',
-    date: '2026-03-18',
-    liters: 98,
-    pricePerLiter: 66.3,
-    totalCost: 6497,
-    odometer: 142000,
-    station: 'Caltex Valenzuela',
-    filledBy: 'Luis Mendez',
-    efficiency: 5.9,
-    trend: 'below'
-  }
 ];
 
 export const mockVehicleEfficiency: VehicleEfficiency[] = [

@@ -1,5 +1,5 @@
 export const SESSION_MAX_MS = 24 * 60 * 60 * 1000; // 24 hours
-export const INACTIVITY_MS = 10 * 1000; // 10 seconds
+export const INACTIVITY_MS = 10 * 60 * 1000; // 1 hour
 
 const LOGIN_KEY = 'sessionLoginTime';
 const LAST_KEY = 'sessionLastActivity';

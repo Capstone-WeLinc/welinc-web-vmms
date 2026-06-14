@@ -12,9 +12,9 @@ const pageContainerClasses = 'space-y-6';
 const centeredPaneClasses = 'flex min-h-100 items-center justify-center';
 const cardClasses = 'w-full max-w-xl rounded-[28px] border border-white/10 bg-white/5 p-12 text-center shadow-[0_30px_70px_rgba(0,0,0,0.12)]';
 const iconCircleClasses = 'mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-[20px] border border-white/10 bg-white/5 text-slate-300 shadow-[0_0_40px_rgba(255,255,255,0.05)] animate-pulse';
-const titleClasses = 'text-2xl font-semibold text-slate-100';
+const titleClasses = 'text-2xl font-semibold text-slate-400';
 const subtitleClasses = 'mt-4 text-sm leading-7 text-slate-400';
-const highlightedTextClasses = 'text-slate-100 font-semibold';
+const highlightedTextClasses = 'text-slate-400 font-semibold';
 const loaderRowClasses = 'mt-8 flex items-center justify-center gap-2';
 const loaderDotClasses = 'h-1.5 w-1.5 rounded-full bg-white/10 animate-bounce';
 
