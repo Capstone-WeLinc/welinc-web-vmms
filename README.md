@@ -1,5 +1,4 @@
-# WeLinc VMMS Web Admin
-
+# WeLinc VMMS Web
 A React + Vite frontend for the VMMS web admin.
 
 ## Setup
