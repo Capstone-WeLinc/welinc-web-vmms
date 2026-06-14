@@ -1,0 +1,75 @@
+import React from 'react';
+import { X } from 'lucide-react';
+
+interface AlertProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> {
+  variant?: 'info' | 'success' | 'warning' | 'danger';
+  title?: React.ReactNode;
+  icon?: React.ReactNode;
+  onDismiss?: () => void;
+  dismissible?: boolean;
+}
+
+const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
+  (
+    {
+      variant = 'info',
+      title,
+      icon,
+      onDismiss,
+      dismissible = true,
+      className = '',
+      children,
+      role = 'alert',
+      ...props
+    },
+    ref
+  ) => {
+    const variantStyles = {
+      info: 'bg-[#1a1f6e]/10 border-[#1a1f6e] text-[#1a1f6e] dark:text-blue-400',
+      success: 'bg-emerald-500/10 border-emerald-500 text-emerald-700 dark:text-emerald-400',
+      warning: 'bg-[#e8b800]/10 border-[#e8b800] text-[#e8b800]',
+      danger: 'bg-[#c0392b]/10 border-[#c0392b] text-[#c0392b]',
+    };
+
+    const baseStyles = 'rounded-xl border p-4 transition-colors';
+
+    const finalClassName = `
+      ${baseStyles}
+      ${variantStyles[variant]}
+      ${className}
+    `.trim();
+
+    return (
+      <div
+        ref={ref}
+        className={finalClassName}
+        role={role}
+        aria-live="polite"
+        aria-atomic="true"
+        {...props}
+      >
+        <div className="flex items-start gap-3">
+          {icon && <div className="flex-shrink-0 mt-0.5">{icon}</div>}
+          <div className="flex-1 min-w-0">
+            {title && <h4 className="font-semibold mb-1">{title}</h4>}
+            {children && <div className="text-sm">{children}</div>}
+          </div>
+          {dismissible && onDismiss && (
+            <button
+              onClick={onDismiss}
+              className="flex-shrink-0 ml-2 p-1 hover:opacity-70 transition-opacity focus:outline-none focus:ring-2 focus:ring-offset-2 rounded"
+              aria-label="Dismiss alert"
+              type="button"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+);
+
+Alert.displayName = 'Alert';
+
+export default Alert;
