@@ -17,7 +17,9 @@ import Modal from "../../components/ui/Modal";
 import {
   createUser,
   deleteUser,
+  getMaintenanceSchedules,
   getUsers,
+  updateMaintenanceSchedule,
   updateUser,
   updateUserRole,
   getCurrentUser,
@@ -25,6 +27,7 @@ import {
   type UserRecord,
   type UserRole,
 } from "../../api/fleetService";
+import type { MaintenanceTask } from "../../types/maintenance";
 
 const roleOptions: UserRole[] = ["ADMIN", "OPERATIONS", "MECHANIC"];
 
@@ -44,6 +47,10 @@ function normalizeRole(role?: string | null) {
   return (role ?? "").trim().toUpperCase();
 }
 
+function normalizeUserIdentity(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 function displayRole(role: string) {
   switch (normalizeRole(role)) {
     case "ADMIN":
@@ -56,6 +63,20 @@ function displayRole(role: string) {
     default:
       return role;
   }
+}
+
+function validateUserField(value: string, label: string) {
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue) {
+    return `${label} is required.`;
+  }
+
+  if (trimmedValue.length < 3 || trimmedValue.length > 16) {
+    return `${label} must be between 3 and 16 characters.`;
+  }
+
+  return "";
 }
 
 function validatePassword(password: string) {
@@ -114,6 +135,9 @@ export default function UserManagement() {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState<UserRecord | null>(null);
   const [users, setUsers] = useState<UserRecord[]>([]);
+  const [maintenanceSchedules, setMaintenanceSchedules] = useState<
+    MaintenanceTask[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
@@ -124,7 +148,10 @@ export default function UserManagement() {
   const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
   const [processingUserId, setProcessingUserId] = useState<string | null>(null);
   const [confirmDeleteUser, setConfirmDeleteUser] = useState<UserRecord | null>(null);
+  const [blockedDeleteUser, setBlockedDeleteUser] =
+    useState<UserRecord | null>(null);
   const [confirmCreateUser, setConfirmCreateUser] = useState(false);
+  const [duplicateUser, setDuplicateUser] = useState<UserRecord | null>(null);
   const [passwordError, setPasswordError] = useState("");
   const [newUserForm, setNewUserForm] = useState<{
     name: string;
@@ -137,6 +164,42 @@ export default function UserManagement() {
     password: "",
     role: "",
   });
+  const isCreateFormComplete =
+    newUserForm.name.trim().length > 0 &&
+    newUserForm.username.trim().length > 0 &&
+    newUserForm.password.trim().length > 0 &&
+    newUserForm.role !== "";
+  const nameValidationMessage = validateUserField(
+    newUserForm.name,
+    "Name",
+  );
+  const usernameValidationMessage = validateUserField(
+    newUserForm.username,
+    "Username",
+  );
+  const isCreatePasswordValid =
+    validatePassword(newUserForm.password) === "";
+  const isCreateFormValid =
+    isCreateFormComplete &&
+    !nameValidationMessage &&
+    !usernameValidationMessage &&
+    isCreatePasswordValid;
+  const userHasMaintenanceSchedule = (user: UserRecord) =>
+    maintenanceSchedules.some(
+      (schedule) =>
+        schedule.assignedDriver.trim().toLowerCase() ===
+        user.name.trim().toLowerCase(),
+    );
+  const findDuplicateUser = () => {
+    const normalizedName = normalizeUserIdentity(newUserForm.name);
+    const normalizedUsername = normalizeUserIdentity(newUserForm.username);
+
+    return users.find(
+      (user) =>
+        normalizeUserIdentity(user.name) === normalizedName ||
+        normalizeUserIdentity(user.username) === normalizedUsername,
+    );
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -152,13 +215,15 @@ export default function UserManagement() {
 
     const refreshUsers = async () => {
       try {
-        const [resultUsers, me] = await Promise.all([
+        const [resultUsers, me, schedules] = await Promise.all([
           getUsers(),
           getCurrentUser(),
+          getMaintenanceSchedules(),
         ]);
         if (!isMounted) return;
         setUsers(resultUsers);
         setCurrentUser(me);
+        setMaintenanceSchedules(schedules);
       } catch (error) {
         console.error("Failed to load users or current user", error);
       } finally {
@@ -238,10 +303,19 @@ export default function UserManagement() {
       alert("You do not have permission to delete users.");
       return;
     }
+    if (userHasMaintenanceSchedule(user)) {
+      setBlockedDeleteUser(user);
+      return;
+    }
     setConfirmDeleteUser(user);
   };
 
   const performDeleteUser = async (user: UserRecord) => {
+    if (userHasMaintenanceSchedule(user)) {
+      setConfirmDeleteUser(null);
+      return;
+    }
+
     setProcessingUserId(user.id);
     try {
       await deleteUser(user.id);
@@ -256,7 +330,50 @@ export default function UserManagement() {
     }
   };
 
-  const confirmCreateUserAccount = async () => {
+  const updateScheduledMechanicName = async (
+    previousName: string,
+    nextName: string,
+  ) => {
+    const normalizedPreviousName = previousName.trim().toLowerCase();
+    const matchingSchedules = maintenanceSchedules.filter(
+      (schedule) =>
+        schedule.assignedDriver.trim().toLowerCase() ===
+        normalizedPreviousName,
+    );
+
+    if (matchingSchedules.length === 0) return;
+
+    const updatedSchedules = await Promise.all(
+      matchingSchedules.map((schedule) =>
+        updateMaintenanceSchedule({
+          ...schedule,
+          assignedDriver: nextName.trim(),
+        }),
+      ),
+    );
+    const updatedSchedulesById = new Map(
+      updatedSchedules.map((schedule) => [schedule.id, schedule]),
+    );
+
+    setMaintenanceSchedules((currentSchedules) =>
+      currentSchedules.map(
+        (schedule) => updatedSchedulesById.get(schedule.id) ?? schedule,
+      ),
+    );
+  };
+
+  const confirmCreateUserAccount = async (userToReplace?: UserRecord) => {
+    if (!isCreateFormValid) return;
+
+    if (!userToReplace) {
+      const duplicate = findDuplicateUser();
+      if (duplicate) {
+        setConfirmCreateUser(false);
+        setDuplicateUser(duplicate);
+        return;
+      }
+    }
+
     setProcessingUserId("create");
 
     if (!currentUser) {
@@ -284,18 +401,54 @@ export default function UserManagement() {
     }
 
     setPasswordError("");
+    const selectedRole = newUserForm.role;
 
     try {
       const userInput: UserCreateInput = {
-        name: newUserForm.name,
-        username: newUserForm.username,
+        name: newUserForm.name.trim(),
+        username: newUserForm.username.trim(),
         passwordHash: newUserForm.password,
-        role: newUserForm.role,
+        role: selectedRole,
       };
-      const createdUser = await createUser(userInput);
-      setUsers((currentUsers) => [createdUser, ...currentUsers]);
+
+      if (userToReplace) {
+        if (userToReplace.id === currentUser.id) {
+          alert("You cannot replace your own account.");
+          return;
+        }
+
+        const updatedUser = await updateUser(userToReplace.id, {
+          name: userInput.name,
+          username: userInput.username,
+          passwordHash: userInput.passwordHash,
+        });
+        const userWithRole =
+          userToReplace.role === selectedRole
+            ? updatedUser
+            : await updateUserRole(userToReplace.id, selectedRole);
+
+        if (userToReplace.name !== userInput.name) {
+          await updateScheduledMechanicName(
+            userToReplace.name,
+            userInput.name,
+          );
+        }
+
+        setUsers((currentUsers) =>
+          currentUsers.map((user) =>
+            user.id === userToReplace.id
+              ? { ...user, ...updatedUser, role: userWithRole.role }
+              : user,
+          ),
+        );
+      } else {
+        const createdUser = await createUser(userInput);
+        setUsers((currentUsers) => [createdUser, ...currentUsers]);
+      }
+
       setIsCreateModalOpen(false);
       setConfirmCreateUser(false);
+      setDuplicateUser(null);
       setNewUserForm({
         name: "",
         username: "",
@@ -348,7 +501,9 @@ export default function UserManagement() {
 
       setProcessingUserId(editingUser.id);
       try {
-        await updateUser(editingUser.id, { name: newUserForm.name });
+        const nextName = newUserForm.name.trim();
+        await updateUser(editingUser.id, { name: nextName });
+        await updateScheduledMechanicName(editingUser.name, nextName);
         const fresh = await getUsers();
         setUsers(fresh);
         setIsCreateModalOpen(false);
@@ -370,10 +525,14 @@ export default function UserManagement() {
 
       // Persist name/username changes
       if (nameChanged || usernameChanged) {
+        const nextName = newUserForm.name.trim();
         await updateUser(editingUser.id, {
-          name: newUserForm.name,
-          username: newUserForm.username,
+          name: nextName,
+          username: newUserForm.username.trim(),
         });
+        if (nameChanged) {
+          await updateScheduledMechanicName(editingUser.name, nextName);
+        }
       }
 
       // Persist role change
@@ -651,7 +810,19 @@ export default function UserManagement() {
                               user.id === currentUser?.id ||
                               normalizeRole(currentUser?.role) !== "ADMIN"
                             }
-                            className={`table-delete-button ${processingUserId === user.id || user.id === currentUser?.id || currentUser?.role !== "ADMIN" ? "cursor-not-allowed opacity-50" : ""}`}
+                            className={`table-delete-button ${
+                              processingUserId === user.id ||
+                              user.id === currentUser?.id ||
+                              currentUser?.role !== "ADMIN" ||
+                              userHasMaintenanceSchedule(user)
+                                ? "cursor-not-allowed opacity-50"
+                                : ""
+                            }`}
+                            title={
+                              userHasMaintenanceSchedule(user)
+                                ? "Cannot delete a user assigned to a maintenance schedule"
+                                : "Delete user"
+                            }
                           >
                             Delete
                           </button>
@@ -708,9 +879,18 @@ export default function UserManagement() {
                     return;
                   }
                   setPasswordError("");
+
+                  const duplicate = findDuplicateUser();
+                  if (duplicate) {
+                    setDuplicateUser(duplicate);
+                    return;
+                  }
+
                   setConfirmCreateUser(true);
                 }}
-                disabled={processingUserId === "create"}
+                disabled={
+                  processingUserId === "create" || !isCreateFormValid
+                }
                 className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-70"
               >
                 {processingUserId === "create" ? "Creating..." : "Create User"}
@@ -731,6 +911,8 @@ export default function UserManagement() {
                 <input
                   type="text"
                   required
+                  minLength={3}
+                  maxLength={16}
                   value={newUserForm.name}
                   placeholder="Enter Name"
                   onChange={(event) =>
@@ -740,7 +922,15 @@ export default function UserManagement() {
                     }))
                   }
                   className={inputClasses}
+                  aria-invalid={!editingUser && Boolean(nameValidationMessage)}
                 />
+                {!editingUser &&
+                  newUserForm.name.trim().length > 0 &&
+                  nameValidationMessage && (
+                    <p className="mt-1 text-xs text-[var(--color-brand-danger)]">
+                      {nameValidationMessage}
+                    </p>
+                  )}
               </div>
 
               <div>
@@ -750,6 +940,8 @@ export default function UserManagement() {
                 <input
                   type="text"
                   required
+                  minLength={3}
+                  maxLength={16}
                   value={newUserForm.username}
                   placeholder="Enter username"
                   name="new-user-username"
@@ -763,7 +955,17 @@ export default function UserManagement() {
                   }
                   className={inputClasses}
                   disabled={editingUser?.id === currentUser?.id}
+                  aria-invalid={
+                    !editingUser && Boolean(usernameValidationMessage)
+                  }
                 />
+                {!editingUser &&
+                  newUserForm.username.trim().length > 0 &&
+                  usernameValidationMessage && (
+                    <p className="mt-1 text-xs text-[var(--color-brand-danger)]">
+                      {usernameValidationMessage}
+                    </p>
+                  )}
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
@@ -853,6 +1055,55 @@ export default function UserManagement() {
         onCancel={() => setConfirmCreateUser(false)}
       />
 
+      {duplicateUser && (
+        <div className={modalOverlayClasses}>
+          <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6">
+            <h3 className="mb-3 text-lg font-semibold text-[var(--color-text-primary)]">
+              Existing User Account
+            </h3>
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              An account already exists with a similar name or username:{" "}
+              <span className="font-semibold text-[var(--color-text-primary)]">
+                {duplicateUser.name} ({duplicateUser.username})
+              </span>
+              .
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDuplicateUser(null);
+                  setIsCreateModalOpen(false);
+                }}
+                disabled={processingUserId === "create"}
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => setDuplicateUser(null)}
+                disabled={processingUserId === "create"}
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-primary)] transition hover:bg-[var(--color-card-bg-hover)] disabled:opacity-50"
+              >
+                Continue Editing
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmCreateUserAccount(duplicateUser)}
+                disabled={
+                  processingUserId === "create" ||
+                  duplicateUser.id === currentUser?.id
+                }
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-50"
+              >
+                {processingUserId === "create" ? "Replacing..." : "Replace"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {confirmDeleteUser && (
         <div className={modalOverlayClasses}>
           <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6">
@@ -880,6 +1131,32 @@ export default function UserManagement() {
                 className="rounded-xl bg-[var(--color-brand-danger)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] hover:bg-[var(--color-brand-danger)]/90"
               >
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {blockedDeleteUser && (
+        <div className={modalOverlayClasses}>
+          <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6">
+            <h3 className="mb-3 text-lg font-semibold text-[var(--color-text-primary)]">
+              User Cannot Be Deleted
+            </h3>
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              <span className="font-semibold text-[var(--color-text-primary)]">
+                {blockedDeleteUser.name}
+              </span>{" "}
+              is assigned to an existing maintenance schedule. Remove or
+              reassign the schedule before deleting this user.
+            </p>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setBlockedDeleteUser(null)}
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90"
+              >
+                Close
               </button>
             </div>
           </div>

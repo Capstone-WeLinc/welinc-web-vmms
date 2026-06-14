@@ -11,8 +11,10 @@ import {
 import PageHeader from "../../components/PageHeader/PageHeader";
 import {
   getChecklistTemplates,
+  getMaintenanceSchedules,
   saveChecklistTemplates,
 } from "../../api/fleetService";
+import type { MaintenanceTask } from "../../types/maintenance";
 
 type WorkOrderTemplate = string;
 
@@ -52,6 +54,9 @@ export default function WorkOrderTemplates() {
   const [templates, setTemplates] = useState<
     Record<WorkOrderTemplate, ChecklistItemTemplate[]>
   >({});
+  const [maintenanceSchedules, setMaintenanceSchedules] = useState<
+    MaintenanceTask[]
+  >([]);
   const [selectedType, setSelectedType] = useState<WorkOrderTemplate>("");
   const [editingItems, setEditingItems] = useState<ChecklistItemTemplate[]>([]);
   const [isAddingType, setIsAddingType] = useState(false);
@@ -63,7 +68,19 @@ export default function WorkOrderTemplates() {
   const [isEditingChecklist, setIsEditingChecklist] = useState(false);
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [confirmDeleteType, setConfirmDeleteType] = useState<string | null>(null);
+  const [blockedDeleteType, setBlockedDeleteType] = useState<string | null>(
+    null,
+  );
   const [confirmDeleteItem, setConfirmDeleteItem] = useState<ChecklistItemTemplate | null>(null);
+  const [duplicateType, setDuplicateType] = useState<string | null>(null);
+  const [duplicateTypeSource, setDuplicateTypeSource] = useState<string | null>(
+    null,
+  );
+  const templateHasMaintenanceSchedule = (type: string) =>
+    maintenanceSchedules.some(
+      (schedule) =>
+        schedule.title.trim().toLowerCase() === type.trim().toLowerCase(),
+    );
 
   useEffect(() => {
     getChecklistTemplates()
@@ -79,6 +96,10 @@ export default function WorkOrderTemplates() {
         setSelectedType("");
         setEditingItems([]);
       });
+
+    getMaintenanceSchedules()
+      .then(setMaintenanceSchedules)
+      .catch(() => setMaintenanceSchedules([]));
   }, []);
 
   const handleAddItem = () => {
@@ -97,6 +118,17 @@ export default function WorkOrderTemplates() {
   };
 
   const handleDeleteItem = (item: ChecklistItemTemplate) => {
+    const isUnsavedItem = !(
+      templates[selectedType] ?? []
+    ).some((savedItem) => savedItem.id === item.id);
+
+    if (isUnsavedItem && item.text.trim() === "") {
+      setEditingItems((items) =>
+        items.filter((currentItem) => currentItem.id !== item.id),
+      );
+      return;
+    }
+
     setConfirmDeleteItem(item);
   };
 
@@ -128,10 +160,14 @@ export default function WorkOrderTemplates() {
   const handleSave = () => {
     if (!canSaveTemplate) return;
 
+    const saveableItems = editingItems.filter(
+      (item) => item.text.trim() !== "",
+    );
     const newTemplates = {
       ...templates,
-      [selectedType]: editingItems.filter((item) => item.text.trim() !== ""),
+      [selectedType]: saveableItems,
     };
+    setEditingItems(saveableItems);
     setTemplates(newTemplates);
     saveChecklistTemplates(newTemplates).catch((error) => {
       console.error("Failed to save templates", error);
@@ -141,25 +177,76 @@ export default function WorkOrderTemplates() {
 
   const handleAddType = () => {
     const trimmed = newTypeName.trim();
-    if (trimmed && !Object.prototype.hasOwnProperty.call(templates, trimmed)) {
-      const newTemplates = { ...templates, [trimmed]: [] };
-      setTemplates(newTemplates);
-      saveChecklistTemplates(newTemplates).catch((error) => {
-        console.error("Failed to save templates", error);
-      });
-      setNewTypeName("");
-      setIsAddingType(false);
-      setSelectedType(trimmed);
-      setEditingItems([]);
+    if (!trimmed) return;
+
+    const existingType = Object.keys(templates).find(
+      (type) => type.toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (existingType) {
+      setDuplicateType(existingType);
+      setDuplicateTypeSource(null);
+      return;
     }
+
+    const newTemplates = { ...templates, [trimmed]: [] };
+    setTemplates(newTemplates);
+    saveChecklistTemplates(newTemplates).catch((error) => {
+      console.error("Failed to save templates", error);
+    });
+    setNewTypeName("");
+    setIsAddingType(false);
+    setSelectedType(trimmed);
+    setEditingItems([]);
+  };
+
+  const replaceDuplicateType = () => {
+    if (!duplicateType) return;
+    if (
+      duplicateTypeSource &&
+      templateHasMaintenanceSchedule(duplicateTypeSource)
+    ) {
+      window.alert(
+        "This template cannot be replaced because it has a maintenance schedule.",
+      );
+      return;
+    }
+
+    const replacementItems = duplicateTypeSource
+      ? (templates[duplicateTypeSource] ?? [])
+      : [];
+    const newTemplates = { ...templates, [duplicateType]: replacementItems };
+    if (duplicateTypeSource && duplicateTypeSource !== duplicateType) {
+      delete newTemplates[duplicateTypeSource];
+    }
+    setTemplates(newTemplates);
+    setSelectedType(duplicateType);
+    setEditingItems([...replacementItems]);
+    setNewTypeName("");
+    setIsAddingType(false);
+    setEditingType(null);
+    setEditingTypeValue("");
+    setDuplicateType(null);
+    setDuplicateTypeSource(null);
+    saveChecklistTemplates(newTemplates).catch((error) => {
+      console.error("Failed to replace template", error);
+    });
   };
 
   const handleDeleteType = (typeToDelete: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (templateHasMaintenanceSchedule(typeToDelete)) {
+      setBlockedDeleteType(typeToDelete);
+      return;
+    }
     setConfirmDeleteType(typeToDelete);
   };
 
   const performDeleteType = (typeToDelete: string) => {
+    if (templateHasMaintenanceSchedule(typeToDelete)) {
+      setConfirmDeleteType(null);
+      return;
+    }
+
     const newTemplates = { ...templates };
     delete newTemplates[typeToDelete];
     setTemplates(newTemplates);
@@ -201,8 +288,19 @@ export default function WorkOrderTemplates() {
       handleCancelEditType();
       return;
     }
-    if (Object.prototype.hasOwnProperty.call(templates, trimmed)) {
-      window.alert("A template with that name already exists.");
+    if (templateHasMaintenanceSchedule(oldType)) {
+      window.alert(
+        "This template cannot be renamed because it has a maintenance schedule.",
+      );
+      return;
+    }
+    const existingType = Object.keys(templates).find(
+      (type) =>
+        type !== oldType && type.toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (existingType) {
+      setDuplicateType(existingType);
+      setDuplicateTypeSource(oldType);
       return;
     }
     const newTemplates: Record<WorkOrderTemplate, ChecklistItemTemplate[]> = {
@@ -225,8 +323,7 @@ export default function WorkOrderTemplates() {
   const hasSelectedTemplate =
     selectedType !== "" &&
     Object.prototype.hasOwnProperty.call(templates, selectedType);
-  const hasSaveableItems = editingItems.some((item) => item.text.trim() !== "");
-  const canSaveTemplate = hasSelectedTemplate && hasSaveableItems;
+  const canSaveTemplate = hasSelectedTemplate;
   const visibleTemplates = Object.keys(templates).filter((type) =>
     type.toLowerCase().includes(searchTerm.trim().toLowerCase()),
   );
@@ -352,8 +449,16 @@ export default function WorkOrderTemplates() {
                       )}
                       <div
                         onClick={(e) => handleDeleteType(type, e)}
-                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-[var(--color-brand-danger)]/20 hover:text-[var(--color-brand-danger)] rounded transition-all"
-                        title={"Delete Type"}
+                        className={`p-1 rounded transition-all ${
+                          templateHasMaintenanceSchedule(type)
+                            ? "cursor-not-allowed opacity-30"
+                            : "opacity-0 group-hover:opacity-100 hover:bg-[var(--color-brand-danger)]/20 hover:text-[var(--color-brand-danger)]"
+                        }`}
+                        title={
+                          templateHasMaintenanceSchedule(type)
+                            ? "Cannot delete a template used by a maintenance schedule"
+                            : "Delete Type"
+                        }
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </div>
@@ -572,6 +677,81 @@ export default function WorkOrderTemplates() {
                 className="rounded-xl bg-[var(--color-brand-danger)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--color-brand-danger)]/80"
               >
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {blockedDeleteType && (
+        <div className="modal-overlay z-[60] px-4 backdrop-blur-sm">
+          <div className="modal-content w-full max-w-md rounded-xl p-6">
+            <h3 className="mb-3 text-lg font-semibold text-[var(--color-text-primary)]">
+              Template Cannot Be Deleted
+            </h3>
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              <span className="font-semibold text-[var(--color-text-primary)]">
+                {blockedDeleteType}
+              </span>{" "}
+              is used by an existing maintenance schedule. Remove or update
+              the schedule before deleting this template.
+            </p>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setBlockedDeleteType(null)}
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {duplicateType && (
+        <div className="modal-overlay z-[60] px-4 backdrop-blur-sm">
+          <div className="modal-content w-full max-w-md rounded-xl p-6">
+            <h3 className="mb-3 text-lg font-semibold text-[var(--color-text-primary)]">
+              Existing Work Order Template
+            </h3>
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              A template named{" "}
+              <span className="font-semibold text-[var(--color-text-primary)]">
+                {duplicateType}
+              </span>{" "}
+              already exists.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDuplicateType(null);
+                  if (duplicateTypeSource) {
+                    handleCancelEditType();
+                  } else {
+                    setNewTypeName("");
+                    setIsAddingType(false);
+                  }
+                  setDuplicateTypeSource(null);
+                }}
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-input-bg)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => setDuplicateType(null)}
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-primary)] transition hover:bg-[var(--color-input-bg)]"
+              >
+                Continue Editing
+              </button>
+              <button
+                type="button"
+                onClick={replaceDuplicateType}
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90"
+              >
+                Replace
               </button>
             </div>
           </div>

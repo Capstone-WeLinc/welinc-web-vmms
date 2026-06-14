@@ -704,18 +704,21 @@ const MaintenanceSchedulingCombined = () => {
       <CreateSchedule
         isOpen={isModalOpen}
         editingTask={editingTask ?? undefined}
+        existingSchedules={tasks}
         onClose={() => {
           setIsModalOpen(false);
           setEditingTask(null);
         }}
         onSaved={(task) => {
-          if (editingTask) {
-            setTasks((current) =>
-              current.map((t) => (t.id === task.id ? { ...t, ...task } : t)),
-            );
-          } else {
-            setTasks((current) => [task, ...current]);
-          }
+          setTasks((current) =>
+            current.some((existingTask) => existingTask.id === task.id)
+              ? current.map((existingTask) =>
+                  existingTask.id === task.id
+                    ? { ...existingTask, ...task }
+                    : existingTask,
+                )
+              : [task, ...current],
+          );
           setIsModalOpen(false);
           setEditingTask(null);
         }}

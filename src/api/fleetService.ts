@@ -294,7 +294,7 @@ export async function updateUserRole(userId: string, role: UserRole) {
 
 export async function updateUser(
   userId: string,
-  data: { name?: string; username?: string },
+  data: { name?: string; username?: string; passwordHash?: string },
 ) {
   if (!useBackend) {
     const index = mockUsers.findIndex((u) => u.id === userId);

@@ -40,11 +40,13 @@ const sanitizeNonNegativeNumber = (value: string) => {
 export default function CreateScheduleModal({
   isOpen,
   editingTask,
+  existingSchedules,
   onClose,
   onSaved,
 }: {
   isOpen: boolean;
   editingTask?: MaintenanceTask;
+  existingSchedules: MaintenanceTask[];
   onClose: () => void;
   onSaved?: (task: MaintenanceTask) => void;
 }) {
@@ -91,6 +93,8 @@ export default function CreateScheduleModal({
   const startReferenceCalendarRef = useRef<HTMLDivElement | null>(null);
   const [notes, setNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [duplicateSchedule, setDuplicateSchedule] =
+    useState<MaintenanceTask | null>(null);
 
   useEffect(() => {
     getChecklistTemplates()
@@ -226,6 +230,11 @@ export default function CreateScheduleModal({
     isEditingGarageOther && !otherGarage
       ? (editingTask?.garageId ?? "")
       : otherGarage;
+  const selectableTemplateNames = Object.entries(templates)
+    .filter(([, items]) => items.some((item) => item.text.trim() !== ""))
+    .map(([templateName]) => templateName);
+  const isSelectedTemplateUsable =
+    selectableTemplateNames.includes(workOrderTemplate);
   const requiredFieldValues = [
     vehicleId,
     odometerReading,
@@ -243,25 +252,28 @@ export default function CreateScheduleModal({
   ];
   const isFormComplete = requiredFieldValues.every(
     (value) => value.trim().length > 0,
-  ) && [
-    odometerReading,
-    ...(triggerType !== "TIME"
-      ? [intervalKm, bufferDistanceKm, startingReferenceReadingKm]
-      : []),
-  ].every((value) => NON_NEGATIVE_NUMBER_PATTERN.test(value));
+  ) &&
+    isSelectedTemplateUsable &&
+    [
+      odometerReading,
+      ...(triggerType !== "TIME"
+        ? [intervalKm, bufferDistanceKm, startingReferenceReadingKm]
+        : []),
+    ].every((value) => NON_NEGATIVE_NUMBER_PATTERN.test(value));
 
-  const handleSaveSchedule = async () => {
-    if (!isFormComplete) return;
-
+  const saveSchedule = async (scheduleToReplace?: MaintenanceTask) => {
     setIsSaving(true);
     try {
       const savedGarageId = garageIsOther
         ? otherGarageValue.trim()
         : garageId;
 
-      if (editingTask) {
+      if (scheduleToReplace || editingTask) {
+        const targetSchedule = scheduleToReplace ?? editingTask;
+        if (!targetSchedule) return;
+
         const updated: MaintenanceTask = {
-          ...editingTask,
+          ...targetSchedule,
           vehicleId,
           title: workOrderTemplate,
           date: scheduledDate,
@@ -328,6 +340,7 @@ export default function CreateScheduleModal({
       setIntervalTypeState("");
       setIsScheduledCalendarOpen(false);
       setIsStartReferenceCalendarOpen(false);
+      setDuplicateSchedule(null);
 
       onClose();
     } catch (error) {
@@ -335,6 +348,27 @@ export default function CreateScheduleModal({
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleSaveSchedule = async () => {
+    if (!isFormComplete) return;
+
+    const duplicate = existingSchedules.find(
+      (schedule) =>
+        schedule.id !== editingTask?.id &&
+        schedule.vehicleId.trim().toLowerCase() ===
+          vehicleId.trim().toLowerCase() &&
+        schedule.title.trim().toLowerCase() ===
+          workOrderTemplate.trim().toLowerCase() &&
+        schedule.date === scheduledDate,
+    );
+
+    if (duplicate) {
+      setDuplicateSchedule(duplicate);
+      return;
+    }
+
+    await saveSchedule();
   };
 
   const formatCalendarLabel = (date: Date) =>
@@ -826,8 +860,8 @@ export default function CreateScheduleModal({
                     <option value="" disabled>
                       {isTemplatesLoading
                         ? "Loading templates..."
-                        : Object.keys(templates).length === 0
-                          ? "No templates available"
+                        : selectableTemplateNames.length === 0
+                          ? "No templates with checklist items available"
                           : "Select a work order template"}
                     </option>
                     {isTemplatesLoading ? (
@@ -847,18 +881,27 @@ export default function CreateScheduleModal({
                           </option>
                         ) : null}
                         {(Object.keys(templates) as WorkOrderTemplate[]).map(
-                          (type) => (
-                            <option
-                              key={type}
-                              value={type}
-                              style={{
-                                backgroundColor: "var(--color-input-bg)",
-                                color: "var(--color-text-primary)",
-                              }}
-                            >
-                              {type}
-                            </option>
-                          ),
+                          (type) => {
+                            const hasChecklistItems =
+                              selectableTemplateNames.includes(type);
+
+                            return (
+                              <option
+                                key={type}
+                                value={type}
+                                disabled={!hasChecklistItems}
+                                style={{
+                                  backgroundColor: "var(--color-input-bg)",
+                                  color: "var(--color-text-primary)",
+                                }}
+                              >
+                                {type}
+                                {hasChecklistItems
+                                  ? ""
+                                  : " (No checklist items)"}
+                              </option>
+                            );
+                          },
                         )}
                       </>
                     )}
@@ -1031,6 +1074,60 @@ export default function CreateScheduleModal({
           </button>
         </div>
       </div>
+
+      {duplicateSchedule ? (
+        <div className="modal-overlay z-[60] px-4 backdrop-blur-sm">
+          <div className="modal-content w-full max-w-lg rounded-xl p-6">
+            <h3 className="mb-3 text-lg font-semibold text-[var(--color-text-primary)]">
+              Existing Maintenance Schedule
+            </h3>
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              A schedule already exists for{" "}
+              <span className="font-semibold text-[var(--color-text-primary)]">
+                {duplicateSchedule.vehicleId}
+              </span>{" "}
+              using{" "}
+              <span className="font-semibold text-[var(--color-text-primary)]">
+                {duplicateSchedule.title}
+              </span>{" "}
+              on{" "}
+              <span className="font-semibold text-[var(--color-text-primary)]">
+                {duplicateSchedule.date}
+              </span>
+              .
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDuplicateSchedule(null);
+                  onClose();
+                }}
+                disabled={isSaving}
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => setDuplicateSchedule(null)}
+                disabled={isSaving}
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-primary)] transition hover:bg-[var(--color-card-bg-hover)] disabled:opacity-50"
+              >
+                Continue Editing
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveSchedule(duplicateSchedule)}
+                disabled={isSaving}
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-50"
+              >
+                {isSaving ? "Replacing..." : "Replace"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
