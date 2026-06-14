@@ -23,6 +23,7 @@ import {
 } from "../../data/ChecklistData";
 import {
   getCurrentUser,
+  getGarages,
   getWorkOrders,
   updateWorkOrder,
   type UserRecord,
@@ -125,13 +126,33 @@ export default function WorkOrders() {
     null,
   );
   const [currentUser, setCurrentUser] = useState<UserRecord | null>(null);
+  const [garages, setGarages] = useState<{ id: string; name: string }[]>([]);
 
   const initialProgress = loadWorkOrderProgress();
   const isMechanic = isMechanicRole(currentUser);
 
   useEffect(() => {
-    getWorkOrders().then(setTasks);
+    const loadWorkOrders = () => {
+      getWorkOrders()
+        .then((loadedTasks) => {
+          setTasks(loadedTasks);
+          setSelectedTask((current) =>
+            current
+              ? loadedTasks.find((task) => task.id === current.id) ?? null
+              : null,
+          );
+        })
+        .catch(() => {
+          // Keep the last successfully loaded work orders.
+        });
+    };
+
+    loadWorkOrders();
+    getGarages().then(setGarages).catch(() => setGarages([]));
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
+
+    window.addEventListener("focus", loadWorkOrders);
+    return () => window.removeEventListener("focus", loadWorkOrders);
   }, []);
 
   // State for checklists could be a Map keyed by task ID to prevent prototype pollution.
@@ -327,13 +348,18 @@ export default function WorkOrders() {
       : triggerType;
   };
 
+  const getGarageName = (garageId?: string) => {
+    if (!garageId) return "";
+    return garages.find((garage) => garage.id === garageId)?.name ?? garageId;
+  };
+
   const renderScheduleDetails = (task: MaintenanceTask) => {
     const details = [
       { label: "Vehicle", value: task.vehicleId },
       { label: "Work Order Template", value: task.title },
       { label: "Assigned Mechanic", value: task.assignedDriver },
       { label: "Scheduled Date", value: task.date },
-      { label: "Garage / Cluster", value: task.garageId },
+      { label: "Garage / Cluster", value: getGarageName(task.garageId) },
       { label: "Account Type", value: task.accountType },
       { label: "System Affected", value: task.systemAffected },
       { label: "Odometer Reading (km)", value: task.odometerReading },
@@ -448,7 +474,10 @@ export default function WorkOrders() {
       { label: "Work Order Template", value: selectedTask.title },
       { label: "Assigned Mechanic", value: selectedTask.assignedDriver },
       { label: "Scheduled Date", value: selectedTask.date },
-      { label: "Garage / Cluster", value: selectedTask.garageId },
+      {
+        label: "Garage / Cluster",
+        value: getGarageName(selectedTask.garageId),
+      },
       { label: "Account Type", value: selectedTask.accountType },
       { label: "System Affected", value: selectedTask.systemAffected },
       { label: "Odometer Reading (km)", value: selectedTask.odometerReading },

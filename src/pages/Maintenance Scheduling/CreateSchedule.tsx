@@ -25,6 +25,8 @@ interface ChecklistItemTemplate {
   text: string;
 }
 
+const OTHER_GARAGE_VALUE = "__other__";
+
 export default function CreateScheduleModal({
   isOpen,
   editingTask,
@@ -52,6 +54,9 @@ export default function CreateScheduleModal({
     [],
   );
   const [garageId, setGarageId] = useState("");
+  const [isOtherGarage, setIsOtherGarage] = useState(false);
+  const [otherGarage, setOtherGarage] = useState("");
+  const [accountType, setAccountType] = useState("");
   const [systemAffected, setSystemAffected] = useState("");
   const [odometerReading, setOdometerReading] = useState("");
   const [intervalKm, setIntervalKm] = useState("");
@@ -143,6 +148,9 @@ export default function CreateScheduleModal({
           setAssignedMechanic(editingTask.assignedDriver ?? "");
           setNotes(editingTask.notes ?? "");
           setGarageId(editingTask.garageId ?? "");
+          setIsOtherGarage(false);
+          setOtherGarage("");
+          setAccountType(editingTask.accountType ?? "");
           setSystemAffected(editingTask.systemAffected ?? "");
           setOdometerReading(editingTask.odometerReading ?? "");
           setTriggerType(editingTask.triggerType ?? "ODOMETER");
@@ -173,6 +181,9 @@ export default function CreateScheduleModal({
           setAssignedMechanic("");
           setNotes("");
           setGarageId("");
+          setIsOtherGarage(false);
+          setOtherGarage("");
+          setAccountType("");
           setSystemAffected("");
           setOdometerReading("");
           setTriggerType("ODOMETER");
@@ -195,9 +206,25 @@ export default function CreateScheduleModal({
     }
   }, [isOpen, editingTask]);
 
+  useEffect(() => {
+    if (!isOpen || !editingTask?.garageId || garages.length === 0) return;
+
+    const garageExists = garages.some(
+      (garage) => garage.id === editingTask.garageId,
+    );
+
+    if (!garageExists) {
+      setGarageId("");
+      setIsOtherGarage(true);
+      setOtherGarage(editingTask.garageId);
+    }
+  }, [editingTask, garages, isOpen]);
+
   const handleSaveSchedule = async () => {
     setIsSaving(true);
     try {
+      const savedGarageId = isOtherGarage ? otherGarage.trim() : garageId;
+
       if (editingTask) {
         const updated: MaintenanceTask = {
           ...editingTask,
@@ -206,7 +233,8 @@ export default function CreateScheduleModal({
           date: scheduledDate,
           assignedDriver: assignedMechanic,
           notes,
-          garageId,
+          garageId: savedGarageId,
+          accountType,
           systemAffected,
           odometerReading,
           triggerType,
@@ -232,7 +260,8 @@ export default function CreateScheduleModal({
           date: scheduledDate,
           assignedDriver: assignedMechanic,
           notes,
-          garageId,
+          garageId: savedGarageId,
+          accountType,
           systemAffected,
           odometerReading,
           triggerType,
@@ -252,6 +281,9 @@ export default function CreateScheduleModal({
       setAssignedMechanic("");
       setNotes("");
       setGarageId("");
+      setIsOtherGarage(false);
+      setOtherGarage("");
+      setAccountType("");
       setSystemAffected("");
       setOdometerReading("");
       setTriggerType("ODOMETER");
@@ -455,26 +487,29 @@ export default function CreateScheduleModal({
                 </label>
                 <div className="relative">
                   <select
-                    value={garageId}
-                    onChange={(e) => setGarageId(e.target.value)}
+                    value={isOtherGarage ? OTHER_GARAGE_VALUE : garageId}
+                    onChange={(e) => {
+                      if (e.target.value === OTHER_GARAGE_VALUE) {
+                        setGarageId("");
+                        setIsOtherGarage(true);
+                        return;
+                      }
+
+                      setGarageId(e.target.value);
+                      setIsOtherGarage(false);
+                      setOtherGarage("");
+                    }}
                     className="select-dark w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
                   >
-                    {garages.length > 0 ? (
-                      <>
-                        <option value="" disabled>
-                          Select garage
-                        </option>
-                        {garages.map((g) => (
-                          <option key={g.id} value={g.id}>
-                            {g.name}
-                          </option>
-                        ))}
-                      </>
-                    ) : (
-                      <option value="" disabled>
-                        No garages available
+                    <option value="" disabled>
+                      Select garage
+                    </option>
+                    {garages.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
                       </option>
-                    )}
+                    ))}
+                    <option value={OTHER_GARAGE_VALUE}>Other</option>
                   </select>
                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--color-text-secondary)]">
                     <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
@@ -482,6 +517,15 @@ export default function CreateScheduleModal({
                     </svg>
                   </div>
                 </div>
+                {isOtherGarage ? (
+                  <input
+                    type="text"
+                    value={otherGarage}
+                    onChange={(e) => setOtherGarage(e.target.value)}
+                    placeholder="Enter garage / cluster"
+                    className="mt-2 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
+                  />
+                ) : null}
               </div>
 
               <div>
@@ -490,9 +534,10 @@ export default function CreateScheduleModal({
                 </label>
                 <input
                   type="text"
-                  defaultValue="In-house Marikina"
-                  readOnly
-                  className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none opacity-80 cursor-not-allowed"
+                  value={accountType}
+                  onChange={(e) => setAccountType(e.target.value)}
+                  placeholder="Enter account type"
+                  className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
                 />
               </div>
 
