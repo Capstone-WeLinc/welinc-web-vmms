@@ -8,7 +8,7 @@ interface FuelStatusBadgeProps {
 }
 
 export default function FuelStatusBadge({ status, size = 'md' }: FuelStatusBadgeProps) {
-  const baseClasses = 'inline-flex items-center gap-1.5 font-semibold uppercase tracking-wider rounded-full border px-3 py-1.5';
+  const baseClasses = 'inline-flex items-center gap-1.5 font-medium uppercase tracking-wider rounded-full border px-3 py-1.5';
 
   const sizeClasses: Record<string, string> = {
     sm: 'text-xs',

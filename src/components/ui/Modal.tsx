@@ -90,7 +90,7 @@ const Modal: React.FC<ModalProps> = ({
           <div className="border-b border-[var(--color-divider)] px-6 py-4">
             <h2
               id="modal-title"
-              className="text-xl font-semibold text-[var(--color-text-primary)]"
+              className="text-lg font-bold text-[var(--color-text-primary)]"
             >
               {title}
             </h2>

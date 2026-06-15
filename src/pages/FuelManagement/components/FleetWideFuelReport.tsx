@@ -180,21 +180,21 @@ export default function FleetWideReport() {
       <div className="space-y-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-2xl font-semibold text-[var(--color-text-primary)]">Fleet-Wide Fuel Cost Report</h2>
+            <h2 className="text-2xl font-bold text-[var(--color-text-primary)]">Fleet-Wide Fuel Cost Report</h2>
             <p className="text-sm text-[var(--color-text-secondary)]">{formatLabel(formatDisplayDate(dateFrom), formatDisplayDate(dateTo))}</p>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={handleExportExcel}
-              className="rounded-xl bg-[var(--color-brand-success)]/15 border border-[var(--color-brand-success)]/20 px-4 h-10 text-sm font-semibold text-[var(--color-brand-success)] hover:bg-[var(--color-brand-success)]/25 transition active:scale-95 cursor-pointer flex items-center gap-2"
+              className="rounded-xl bg-[var(--color-brand-success)]/15 border border-[var(--color-brand-success)]/20 px-4 h-10 text-sm font-medium text-[var(--color-brand-success)] hover:bg-[var(--color-brand-success)]/25 transition active:scale-95 cursor-pointer flex items-center gap-2"
             >
               <Download size={16} />
               Export .xlsx
             </button>
             <button
               onClick={handleExportPDF}
-              className="rounded-xl bg-[var(--color-brand-primary)]/15 border border-[var(--color-brand-primary)]/20 px-4 h-10 text-sm font-semibold text-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary)]/25 transition active:scale-95 cursor-pointer flex items-center gap-2"
+              className="rounded-xl bg-[var(--color-brand-primary)]/15 border border-[var(--color-brand-primary)]/20 px-4 h-10 text-sm font-medium text-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary)]/25 transition active:scale-95 cursor-pointer flex items-center gap-2"
             >
               <Download size={16} />
               Export PDF
@@ -257,7 +257,7 @@ export default function FleetWideReport() {
                     </button>
 
                     <div>
-                      <h4 className="text-center text-sm font-semibold text-[var(--color-text-primary)] mb-4 capitalize">
+                      <h4 className="text-center text-sm font-medium text-[var(--color-text-primary)] mb-4 capitalize">
                         {currentLeftMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                       </h4>
                       <div className="grid grid-cols-7 text-center gap-y-1">
@@ -281,7 +281,7 @@ export default function FleetWideReport() {
                     </div>
 
                     <div>
-                      <h4 className="text-center text-sm font-semibold text-[var(--color-text-primary)] mb-4 capitalize">
+                      <h4 className="text-center text-sm font-medium text-[var(--color-text-primary)] mb-4 capitalize">
                         {rightMonthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                       </h4>
                       <div className="grid grid-cols-7 text-center gap-y-1">

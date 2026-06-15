@@ -31,7 +31,7 @@ export default function AnomalyDetailModal({ isOpen, onClose, anomaly, onAction 
     ? 'rounded-xl border border-[var(--color-brand-danger)]/20 bg-[var(--color-brand-danger)]/10 p-4 text-[var(--color-brand-danger)]'
     : 'rounded-xl border border-[var(--color-brand-warning)]/20 bg-[var(--color-brand-warning)]/10 p-4 text-[var(--color-brand-warning)]';
   const actionFooterClasses = 'flex items-center justify-end gap-3 px-6 py-4 shrink-0 border-t border-[var(--color-border)] bg-[var(--color-card-bg)]';
-  const btnBase = 'rounded-xl px-4 py-2.5 text-xs font-semibold transition cursor-pointer';
+  const btnBase = 'rounded-xl px-4 py-2.5 text-xs font-medium transition cursor-pointer';
 
   return (
     <div className={overlayClasses}>
@@ -60,9 +60,9 @@ export default function AnomalyDetailModal({ isOpen, onClose, anomaly, onAction 
               <AlertTriangle className="w-5 h-5" />
               <div className="text-sm leading-relaxed">
                 <strong>Telemetry Alert:</strong> This vehicle is operating at{' '}
-                <span className="font-mono font-semibold">{anomaly.efficiency.toFixed(1)} km/L</span>, which is{' '}
-                <span className="font-mono font-semibold">{diffPercent}% {isAbove ? 'above' : 'below'}</span> the fleet average of{' '}
-                <span className="font-mono font-semibold">{anomaly.fleetAvg.toFixed(1)} km/L</span>.
+                <span className="font-mono font-bold">{anomaly.efficiency.toFixed(1)} km/L</span>, which is{' '}
+                <span className="font-mono font-bold">{diffPercent}% {isAbove ? 'above' : 'below'}</span> the fleet average of{' '}
+                <span className="font-mono font-bold">{anomaly.fleetAvg.toFixed(1)} km/L</span>.
               </div>
             </div>
           </div>

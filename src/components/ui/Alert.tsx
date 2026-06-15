@@ -51,7 +51,7 @@ const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
         <div className="flex items-start gap-3">
           {icon && <div className="flex-shrink-0 mt-0.5">{icon}</div>}
           <div className="flex-1 min-w-0">
-            {title && <h4 className="font-semibold mb-1">{title}</h4>}
+            {title && <h4 className="text-sm font-bold mb-1">{title}</h4>}
             {children && <div className="text-sm">{children}</div>}
           </div>
           {dismissible && onDismiss && (

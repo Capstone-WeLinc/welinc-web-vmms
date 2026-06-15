@@ -140,13 +140,13 @@ export default function AnomalyDetectionLog({ logs = [] }: AnomalyDetectionLogPr
   const filtersPanelClasses = 'grid gap-3 grid-cols-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4';
   const tableWrapClasses = 'overflow-auto overscroll-contain rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card lg:max-h-[min(40rem,calc(100vh-12rem))]';
   const tableClasses = 'w-full text-left text-sm';
-  const tableHeaderRowClasses = 'sticky top-0 z-10 border-b border-[var(--color-divider)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]';
-  const tableHeaderCellClasses = 'px-4 py-3.5 font-semibold text-xs uppercase tracking-wider';
+  const tableHeaderRowClasses = 'border-b border-[var(--color-divider)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]';
+  const tableHeaderCellClasses = 'px-4 py-3.5 font-medium text-xs uppercase tracking-wider';
   const emptyStateClasses = 'px-4 py-12 text-center text-[var(--color-text-secondary)]';
   const tableRowClasses = 'hover:bg-[var(--color-input-bg-hover)] transition-colors border-b border-[var(--color-divider)]';
   const tableCellClasses = 'px-4 py-3';
   const pagerClasses = 'pt-2 flex items-center justify-between text-sm text-[var(--color-text-secondary)]';
-  const pagerCountClasses = 'text-[var(--color-text-primary)] font-semibold';
+  const pagerCountClasses = 'text-[var(--color-text-primary)] font-medium';
   const pagerButtonsClasses = 'flex items-center gap-4';
   const pageButtonClasses = (disabled: boolean) => `flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition ${disabled ? 'opacity-20 cursor-not-allowed' : 'cursor-pointer'}`;
   const pageNumberClasses = 'text-xs text-[var(--color-text-secondary)] select-none font-medium';
@@ -204,13 +204,13 @@ export default function AnomalyDetectionLog({ logs = [] }: AnomalyDetectionLogPr
                 <tr key={log.id} className={tableRowClasses}>
                   <td className={`${tableCellClasses} text-[var(--color-text-secondary)] font-mono text-xs`}>{log.timestamp}</td>
                   <td className={tableCellClasses}>
-                    <div className="font-semibold text-[var(--color-text-primary)]">{log.vehicleName}</div>
+                    <div className="font-bold text-[var(--color-text-primary)]">{log.vehicleName}</div>
                     <div className="text-xs text-[var(--color-text-secondary)] font-mono">{log.vehicleId} · {log.model}</div>
                   </td>
                   <td className={tableCellClasses}>
                     <FuelStatusBadge status={log.alertType === 'Anomaly' ? 'Anomaly' : 'Below Avg'} size="sm" />
                   </td>
-                  <td className={`${tableCellClasses} text-right font-semibold text-[var(--color-text-primary)] font-mono`}>{log.vehicleEfficiency} km/L</td>
+                  <td className={`${tableCellClasses} text-right font-bold text-[var(--color-text-primary)] font-mono`}>{log.vehicleEfficiency} km/L</td>
                   <td className={`${tableCellClasses} text-right text-[var(--color-text-secondary)] font-mono`}>{log.fleetAverage} km/L</td>
                   <td className={`${tableCellClasses} text-[var(--color-text-secondary)] text-xs`}>{log.detectedBy}</td>
                 </tr>

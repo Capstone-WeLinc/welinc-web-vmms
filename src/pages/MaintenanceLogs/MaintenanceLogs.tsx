@@ -81,7 +81,7 @@ const tableClasses = 'w-full border-collapse text-left text-sm text-[var(--color
 const tableHeadClasses = 'sticky top-0 z-10 bg-[var(--color-input-bg)] border-b border-[var(--color-border)]';
 const tableRowClasses = 'hover:bg-[var(--color-card-bg-hover)] transition-colors';
 const tableCellClasses = 'px-4 py-3';
-const tableHeaderCellClasses = 'px-4 py-3 font-semibold text-[var(--color-text-secondary)]';
+const tableHeaderCellClasses = 'px-4 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]';
 const footerRowClasses = 'mt-5 pt-4 border-t border-[var(--color-border)] flex items-center justify-between text-sm text-[var(--color-text-secondary)]';
 const paginationButtonClasses = 'flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] disabled:opacity-20 disabled:hover:bg-[var(--color-input-bg)] cursor-pointer disabled:cursor-not-allowed transition';
 const pageLabelClasses = 'text-xs text-[var(--color-text-secondary)] select-none font-medium px-1';
@@ -466,7 +466,7 @@ export default function MaintenanceLogs() {
             <div className={alertContentClasses}>
               <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm font-semibold text-rose-700 dark:text-rose-200">
+                <p className="text-sm font-medium text-rose-700 dark:text-rose-200">
                   Delete {selectedIds.length} selected record{selectedIds.length > 1 ? 's' : ''}? This cannot be undone.
                 </p>
               </div>

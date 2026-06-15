@@ -58,10 +58,10 @@ const KPIStatCard = ({
         {icon}
       </div>
     </div>
-    <div className="text-3xl font-semibold tracking-tight text-[var(--color-text-primary)]">
+    <div className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">
       {value}
     </div>
-    <div className="mt-2 text-sm text-[var(--color-text-secondary)]">{label}</div>
+    <div className="mt-2 text-xs font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">{label}</div>
     <div className="mt-3 text-sm font-medium" style={{ color: iconColor }}>
       {subtitle}
     </div>
@@ -531,7 +531,7 @@ const MaintenanceSchedulingCombined = () => {
                   type="button"
                   onClick={() => setViewMode("list")}
                   aria-pressed={viewMode === "list"}
-                  className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-warning)] ${
+                  className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-warning)] ${
                     viewMode === "list"
                       ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white shadow-md dark:border-[var(--color-brand-primary)]/40 dark:bg-[var(--color-brand-primary)]/20 dark:text-white"
                       : "border-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"
@@ -544,7 +544,7 @@ const MaintenanceSchedulingCombined = () => {
                   type="button"
                   onClick={() => setViewMode("calendar")}
                   aria-pressed={viewMode === "calendar"}
-                  className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-warning)] ${
+                  className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-warning)] ${
                     viewMode === "calendar"
                       ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white shadow-md dark:border-[var(--color-brand-primary)]/40 dark:bg-[var(--color-brand-primary)]/20 dark:text-white"
                       : "border-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"
@@ -1093,7 +1093,7 @@ const MaintenanceSchedulingCombined = () => {
               <button
                 type="button"
                 onClick={() => setConfirmDeleteTask(null)}
-                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
               >
                 Cancel
               </button>
@@ -1115,7 +1115,7 @@ const MaintenanceSchedulingCombined = () => {
                     setConfirmDeleteTask(null);
                   }
                 }}
-                className="rounded-xl bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-400"
+                className="rounded-xl bg-rose-500 px-4 py-2 text-sm font-medium text-white hover:bg-rose-400"
               >
                 Delete
               </button>

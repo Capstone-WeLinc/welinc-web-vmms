@@ -130,7 +130,7 @@ export default function LogFuelFillUp({ onClose, onAdd }: LogFuelFillUpProps) {
 
         {/* Header */}
         <div className={modalHeaderClasses}>
-          <h2 className="text-2xl font-semibold text-[var(--color-text-primary)]">Log Fuel Fill-up</h2>
+          <h2 className="text-xl font-bold text-[var(--color-text-primary)]">Log Fuel Fill-up</h2>
           <button
             type="button"
             onClick={onClose}
@@ -192,7 +192,7 @@ export default function LogFuelFillUp({ onClose, onAdd }: LogFuelFillUpProps) {
                     type="text"
                     value={totalCost}
                     readOnly
-                    className="ml-2 flex-1 bg-transparent text-[var(--color-text-primary)] focus:outline-none text-sm font-semibold"
+                    className="ml-2 flex-1 bg-transparent text-[var(--color-text-primary)] focus:outline-none text-sm font-medium"
                   />
                 </div>
                 <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Calculated: {formData.liters || '0'} L × ₱{formData.pricePerLiter}</p>
@@ -233,13 +233,13 @@ export default function LogFuelFillUp({ onClose, onAdd }: LogFuelFillUpProps) {
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-5 py-2.5 text-sm font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] transition active:scale-95"
+              className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-5 py-2.5 text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] transition active:scale-95"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="rounded-xl bg-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20 px-6 py-2.5 text-sm font-semibold text-white hover:bg-[var(--color-brand-primary-dark)] transition active:scale-95"
+              className="rounded-xl bg-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20 px-6 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-brand-primary-dark)] transition active:scale-95"
             >
               Save Entry
             </button>

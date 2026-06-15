@@ -25,26 +25,26 @@ interface ChecklistItemTemplate {
 
 // Layout & interaction classes
 const containerClasses = 'space-y-6';
-const layoutClasses = 'flex flex-col items-start gap-6 lg:flex-row lg:items-stretch';
-const sidebarContainerClasses = 'w-full lg:w-1/3 lg:sticky lg:top-6 xl:w-1/4';
-const sidebarCardClasses = 'flex h-full flex-col rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card';
-const sidebarHeadingClasses = 'text-sm font-semibold text-[var(--color-text-primary)] mb-4 px-2';
-const templateListClasses = 'space-y-1';
-const templateButtonBaseClasses = 'group w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200';
+const layoutClasses = 'flex flex-col lg:flex-row gap-6 items-start';
+const sidebarContainerClasses = 'w-full lg:w-1/3 xl:w-1/4 lg:sticky lg:top-6';
+const sidebarCardClasses = 'rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 h-full shadow-card';
+const sidebarHeadingClasses = 'text-sm font-bold text-[var(--color-text-primary)] mb-4 px-2';
+const templateListClasses = 'space-y-1 max-h-[420px] overflow-y-auto pr-1';
+const templateButtonBaseClasses = 'group w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200';
 const templateButtonSelectedClasses = 'bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20 shadow-[0_0_15px_rgba(26,31,110,0.1)] dark:bg-[var(--color-brand-primary)]/20 dark:text-white dark:border-[var(--color-brand-primary)]/40';
 const templateButtonUnselectedClasses = 'text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] border border-transparent dark:hover:text-white';
 const addTypeContainerClasses = 'mb-4 p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] flex flex-col gap-2';
 const addTypeInputClasses = 'w-full bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-lg px-3 py-1.5 text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-brand-primary)]';
 const addTypeButtonGroupClasses = 'flex justify-end gap-2';
 const addTypeCancelClasses = 'text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] px-2 py-1';
-const addTypeSubmitClasses = 'text-xs bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary)]/15 px-3 py-1 rounded-md font-semibold';
-const addNewTypeButtonClasses = 'mb-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] transition-all text-sm font-medium';
-const contentContainerClasses = 'w-full lg:flex lg:w-2/3 xl:w-3/4';
-const contentCardClasses = 'flex min-h-[360px] w-full flex-col rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card';
+const addTypeSubmitClasses = 'text-xs bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary)]/15 px-3 py-1 rounded-md font-medium';
+const addNewTypeButtonClasses = 'mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] transition-all text-sm font-medium';
+const contentContainerClasses = 'w-full lg:w-2/3 xl:w-3/4';
+const contentCardClasses = 'rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 flex flex-col min-h-[420px] lg:min-h-[540px] shadow-card';
 const headerSectionClasses = 'flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-[var(--color-border)]';
-const addItemButtonClasses = 'flex items-center gap-2 px-4 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-primary)] transition-colors text-sm font-semibold hover:bg-[var(--color-card-bg-hover)]';
-const saveButtonClasses = 'flex items-center gap-2 px-4 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] transition-colors text-sm font-semibold hover:bg-[var(--color-brand-primary)]/15';
-const itemsContainerClasses = 'space-y-3';
+const addItemButtonClasses = 'flex items-center gap-2 px-4 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-primary)] transition-colors text-sm font-medium hover:bg-[var(--color-card-bg-hover)]';
+const saveButtonClasses = 'flex items-center gap-2 px-4 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] transition-colors text-sm font-medium hover:bg-[var(--color-brand-primary)]/15';
+const itemsContainerClasses = 'flex-1 space-y-3 overflow-y-auto pr-1';
 const emptyStateClasses = 'flex flex-col items-center justify-center h-full min-h-[240px] text-[var(--color-text-secondary)] gap-4 py-12';
 const checklistItemClasses = 'flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2.5 group hover:border-[var(--color-brand-primary)] hover:bg-[var(--color-card-bg-hover)] transition-colors';
 const checklistInputClasses = 'flex-1 bg-transparent border-none text-[var(--color-text-primary)] text-sm focus:outline-none focus:ring-0 placeholder:text-[var(--color-text-secondary)]';
@@ -487,7 +487,7 @@ export default function WorkOrderTemplates() {
                       <span className="font-medium text-sm truncate flex-1 min-w-0">{type}</span>
                     )}
                     <div className="ml-auto flex items-center gap-2 flex-shrink-0">
-                      <span className="text-xs font-semibold bg-[var(--color-input-bg)] px-2 py-0.5 rounded-full text-[var(--color-text-primary)] border border-[var(--color-border)]">
+                      <span className="text-xs font-medium bg-[var(--color-input-bg)] px-2 py-0.5 rounded-full text-[var(--color-text-primary)] border border-[var(--color-border)]">
                         {Object.prototype.hasOwnProperty.call(templates, type)
                           ? templates[type].length
                           : 0}
@@ -608,7 +608,7 @@ export default function WorkOrderTemplates() {
                   <button
                     type="button"
                     onClick={handleCancelEditChecklist}
-                    className="flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-4 py-2 text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-card-bg-hover)]"
+                    className="flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-card-bg-hover)]"
                   >
                     Cancel Edit
                   </button>
@@ -796,13 +796,13 @@ export default function WorkOrderTemplates() {
       {confirmDeleteType && (
         <div className="modal-overlay px-4 backdrop-blur-sm">
           <div className="modal-content">
-            <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">
+            <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-4">
               Confirm Delete
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)] mb-6">
               Are you sure you want to delete this work order template?
               <br />
-              <span className="mt-2 block font-semibold text-[var(--color-text-primary)]">"{confirmDeleteType}"</span>
+              <span className="mt-2 block font-bold text-[var(--color-text-primary)]">"{confirmDeleteType}"</span>
               <br />
               This action cannot be undone.
             </p>
@@ -810,14 +810,14 @@ export default function WorkOrderTemplates() {
               <button
                 type="button"
                 onClick={() => setConfirmDeleteType(null)}
-                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-input-bg)]"
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-input-bg)]"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => performDeleteType(confirmDeleteType)}
-                className="rounded-xl bg-[var(--color-brand-danger)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--color-brand-danger)]/80"
+                className="rounded-xl bg-[var(--color-brand-danger)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-brand-danger)]/80"
               >
                 Delete
               </button>
@@ -829,7 +829,7 @@ export default function WorkOrderTemplates() {
       {blockedDeleteType && (
         <div className="modal-overlay z-[60] px-4 backdrop-blur-sm">
           <div className="modal-content w-full max-w-md rounded-xl p-6">
-            <h3 className="mb-3 text-lg font-semibold text-[var(--color-text-primary)]">
+            <h3 className="mb-3 text-lg font-bold text-[var(--color-text-primary)]">
               Template Cannot Be Deleted
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)]">
@@ -843,7 +843,7 @@ export default function WorkOrderTemplates() {
               <button
                 type="button"
                 onClick={() => setBlockedDeleteType(null)}
-                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90"
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90"
               >
                 Close
               </button>
@@ -855,7 +855,7 @@ export default function WorkOrderTemplates() {
       {duplicateType && (
         <div className="modal-overlay z-[60] px-4 backdrop-blur-sm">
           <div className="modal-content w-full max-w-md rounded-xl p-6">
-            <h3 className="mb-3 text-lg font-semibold text-[var(--color-text-primary)]">
+            <h3 className="mb-3 text-lg font-bold text-[var(--color-text-primary)]">
               Existing Work Order Template
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)]">
@@ -878,21 +878,21 @@ export default function WorkOrderTemplates() {
                   }
                   setDuplicateTypeSource(null);
                 }}
-                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-input-bg)]"
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-input-bg)]"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => setDuplicateType(null)}
-                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-primary)] transition hover:bg-[var(--color-input-bg)]"
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition hover:bg-[var(--color-input-bg)]"
               >
                 Continue Editing
               </button>
               <button
                 type="button"
                 onClick={replaceDuplicateType}
-                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90"
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90"
               >
                 Replace
               </button>
@@ -904,13 +904,13 @@ export default function WorkOrderTemplates() {
       {confirmDeleteItem && (
         <div className="modal-overlay px-4 backdrop-blur-sm">
           <div className="modal-content">
-            <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">
+            <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-4">
               Confirm Delete
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)] mb-6">
               Are you sure you want to delete this checklist item?
               <br />
-              <span className="mt-2 block font-semibold text-[var(--color-text-primary)]">"{confirmDeleteItem.text}"</span>
+              <span className="mt-2 block font-bold text-[var(--color-text-primary)]">"{confirmDeleteItem.text}"</span>
               <br />
               This action cannot be undone.
             </p>
@@ -918,7 +918,7 @@ export default function WorkOrderTemplates() {
               <button
                 type="button"
                 onClick={() => setConfirmDeleteItem(null)}
-                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-input-bg)]"
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-input-bg)]"
               >
                 Cancel
               </button>
@@ -942,7 +942,7 @@ export default function WorkOrderTemplates() {
 
                   setConfirmDeleteItem(null);
                 }}
-                className="rounded-xl bg-[var(--color-brand-danger)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--color-brand-danger)]/80"
+                className="rounded-xl bg-[var(--color-brand-danger)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-brand-danger)]/80"
               >
                 Delete
               </button>

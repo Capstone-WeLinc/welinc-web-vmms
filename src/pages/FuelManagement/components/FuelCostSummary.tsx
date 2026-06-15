@@ -169,7 +169,7 @@ export default function FuelCostSummary({ fillUps = [] }: FuelCostSummaryProps) 
 
           <div className="relative flex items-center h-11 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-4 hover:bg-[var(--color-card-bg-hover)] transition-all duration-200 cursor-pointer">
             <Filter size={16} className="text-[var(--color-text-secondary)] mr-2 shrink-0" strokeWidth={1.8} />
-            <span className="text-sm font-semibold text-[var(--color-text-primary)] tracking-wide select-none">
+            <span className="text-sm font-bold text-[var(--color-text-primary)] tracking-wide select-none">
               Filters
             </span>
             <select
@@ -222,7 +222,7 @@ export default function FuelCostSummary({ fillUps = [] }: FuelCostSummaryProps) 
                       <h4 className="text-xs font-bold text-[var(--color-text-primary)] tracking-wide">May 2026</h4>
                       <div className="w-7 h-7" />
                     </div>
-                    <div className="grid grid-cols-7 text-center text-[11px] font-semibold text-[var(--color-text-secondary)] gap-y-2">
+                    <div className="grid grid-cols-7 text-center text-xs font-medium text-[var(--color-text-secondary)] gap-y-2">
                       <span className="text-[var(--color-brand-danger)] font-bold">Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
                       {Array.from({ length: mayStartOffset }).map((_, i) => <div key={`empty-may-${i}`} />)}
                       {mayDays.map((day) => {
@@ -236,7 +236,7 @@ export default function FuelCostSummary({ fillUps = [] }: FuelCostSummaryProps) 
                             className={`h-8 w-8 text-xs font-medium relative mx-auto flex items-center justify-center transition-all ${state === 'endpoint'
                                   ? 'bg-[var(--color-brand-warning)] text-[var(--color-brand-black)] font-extrabold rounded-full shadow-md z-10 scale-105'
                                   : state === 'range'
-                                    ? 'bg-[var(--color-card-bg)] text-[var(--color-brand-primary)] w-full font-semibold'
+                                    ? 'bg-[var(--color-card-bg)] text-[var(--color-brand-primary)] w-full font-medium'
                                     : isSunday
                                       ? 'text-[var(--color-brand-danger)] hover:bg-[var(--color-card-bg-hover)] rounded-lg'
                                       : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] rounded-lg'
@@ -257,7 +257,7 @@ export default function FuelCostSummary({ fillUps = [] }: FuelCostSummaryProps) 
                         <ChevronRight size={14} />
                       </button>
                     </div>
-                    <div className="grid grid-cols-7 text-center text-[11px] font-semibold text-[var(--color-text-secondary)] gap-y-2">
+                    <div className="grid grid-cols-7 text-center text-xs font-medium text-[var(--color-text-secondary)] gap-y-2">
                       <span className="text-[var(--color-brand-danger)] font-bold">Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
                       {Array.from({ length: juneStartOffset }).map((_, i) => <div key={`empty-june-${i}`} />)}
                       {juneDays.map((day) => {
@@ -307,11 +307,11 @@ export default function FuelCostSummary({ fillUps = [] }: FuelCostSummaryProps) 
         </div>
 
         <div className="flex items-center gap-2.5">
-          <button className="rounded-xl bg-[var(--color-brand-success)]/15 border border-[var(--color-brand-success)]/20 px-4 h-11 text-sm font-semibold text-[var(--color-brand-success)] hover:bg-[var(--color-brand-success)]/25 transition active:scale-95 cursor-pointer flex items-center gap-2">
+          <button className="rounded-xl bg-[var(--color-brand-success)]/15 border border-[var(--color-brand-success)]/20 px-4 h-11 text-sm font-medium text-[var(--color-brand-success)] hover:bg-[var(--color-brand-success)]/25 transition active:scale-95 cursor-pointer flex items-center gap-2">
             <Download size={16} />
             Export .xlsx
           </button>
-          <button onClick={handleExportPDF} className="rounded-xl bg-[var(--color-brand-primary)]/15 border border-[var(--color-brand-primary)]/20 px-4 h-11 text-sm font-semibold text-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary)]/25 transition active:scale-95 cursor-pointer flex items-center gap-2">
+          <button onClick={handleExportPDF} className="rounded-xl bg-[var(--color-brand-primary)]/15 border border-[var(--color-brand-primary)]/20 px-4 h-11 text-sm font-medium text-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary)]/25 transition active:scale-95 cursor-pointer flex items-center gap-2">
             <Download size={16} />
             Export PDF
           </button>

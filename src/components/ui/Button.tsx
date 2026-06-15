@@ -25,11 +25,11 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref
   ) => {
-    const baseStyles = 'rounded-xl font-semibold transition-colors focus-ring disabled:opacity-50 disabled:cursor-not-allowed';
+    const baseStyles = 'rounded-md text-sm font-medium transition-colors focus-ring disabled:opacity-50 disabled:cursor-not-allowed';
     
     const sizeStyles = {
-      sm: 'py-2 px-3 text-sm',
-      md: 'py-3 px-4 text-sm',
+      sm: 'py-2 px-3',
+      md: 'py-3 px-4',
       lg: 'py-4 px-6 text-base',
     };
 
