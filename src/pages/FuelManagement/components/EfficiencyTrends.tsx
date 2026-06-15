@@ -13,14 +13,14 @@ export default function EfficiencyTrends({ vehicles, fleetAvg }: EfficiencyTrend
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2">
           <div className="h-2 w-4 rounded-full bg-[var(--color-brand-success)]" />
-          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Above average</span>
+          <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Above average</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="h-2 w-4 rounded-full bg-[var(--color-brand-danger)]" />
-          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Below average</span>
+          <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Below average</span>
         </div>
         <div className="ml-auto text-sm text-[var(--color-text-secondary)]">
-          Fleet avg: <span className="font-semibold text-[var(--color-text-primary)] font-mono">{fleetAvg.toFixed(1)} km/L</span>
+          Fleet avg: <span className="font-bold text-[var(--color-text-primary)] font-mono">{fleetAvg.toFixed(1)} km/L</span>
         </div>
       </div>
 
@@ -33,7 +33,7 @@ export default function EfficiencyTrends({ vehicles, fleetAvg }: EfficiencyTrend
             <div key={vehicle.vehicleId} className="space-y-2">
               <div className="flex items-end justify-between">
                 <div>
-                  <div className="font-semibold text-[var(--color-text-primary)]">{vehicle.vehicleName}</div>
+                  <div className="font-bold text-[var(--color-text-primary)]">{vehicle.vehicleName}</div>
                   <div className="text-xs text-[var(--color-text-secondary)] font-mono">{vehicle.vehicleId} · {vehicle.model}</div>
                 </div>
                 <div className="flex items-baseline gap-2 text-right">

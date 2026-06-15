@@ -66,7 +66,7 @@ function SelectField({ label, id, options, className, ...props }: SelectFieldPro
 const containerClasses = 'space-y-4';
 const searchRowClasses = 'flex flex-col gap-4 md:flex-row md:items-end md:justify-between';
 const actionsGroupClasses = 'flex flex-wrap gap-2 shrink-0';
-const actionButtonBase = 'flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 active:scale-95 cursor-pointer';
+const actionButtonBase = 'flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200 active:scale-95 cursor-pointer';
 const actionButtonFilter = `${actionButtonBase} rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]`;
 const actionButtonActiveFilter = `${actionButtonFilter} active-filter hover:bg-[var(--color-brand-primary)]/20`;
 const secondaryActionButton = `${actionButtonBase} rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]`;
@@ -277,20 +277,20 @@ export default function FuelLog({ fillUps = [], onEdit, onDelete, onLogFillUp }:
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-[var(--color-brand-danger)] shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="text-sm font-semibold text-[var(--color-brand-danger)]">
+              <p className="text-sm font-bold text-[var(--color-brand-danger)]">
                 Delete {selectedIds.length} selected record{selectedIds.length > 1 ? 's' : ''}? This cannot be undone.
               </p>
             </div>
             <div className="flex gap-2 shrink-0">
               <button
                 onClick={confirmDelete}
-                className="font-semibold rounded-lg transition-all duration-200 active:scale-95 focus:outline-none bg-[var(--color-brand-danger)] hover:bg-[var(--color-brand-danger)]/90 text-white border border-[var(--color-brand-danger)] px-3 py-1.5 text-xs cursor-pointer"
+                className="font-medium rounded-lg transition-all duration-200 active:scale-95 focus:outline-none bg-[var(--color-brand-danger)] hover:bg-[var(--color-brand-danger)]/90 text-white border border-[var(--color-brand-danger)] px-3 py-1.5 text-xs cursor-pointer"
               >
                 Yes, delete
               </button>
               <button
                 onClick={() => setSelectedIds([])}
-                className="font-semibold rounded-lg transition-all duration-200 active:scale-95 focus:outline-none bg-[var(--color-card-bg)] hover:bg-[var(--color-card-bg-hover)] text-[var(--color-text-secondary)] border border-[var(--color-border)] px-3 py-1.5 text-xs cursor-pointer"
+                className="font-medium rounded-lg transition-all duration-200 active:scale-95 focus:outline-none bg-[var(--color-card-bg)] hover:bg-[var(--color-card-bg-hover)] text-[var(--color-text-secondary)] border border-[var(--color-border)] px-3 py-1.5 text-xs cursor-pointer"
               >
                 Cancel
               </button>
@@ -356,15 +356,15 @@ export default function FuelLog({ fillUps = [], onEdit, onDelete, onLogFillUp }:
                     />
                   </td>
                     <td className={tableCellBase}>
-                      <div className="font-semibold text-[var(--color-text-primary)]">{fillUp.vehicleName ?? 'N/A'}</div>
+                      <div className="font-bold text-[var(--color-text-primary)]">{fillUp.vehicleName ?? 'N/A'}</div>
                       <div className="text-xs text-[var(--color-text-secondary)] font-mono">{fillUp.vehicleId} · {fillUp.vehicleModel}</div>
                     </td>
                     <td className={`${tableCellBase} text-[var(--color-text-secondary)]`}>{fillUp.date}</td>
                     <td className={`${tableCellBase} text-[var(--color-text-secondary)] font-medium font-mono`}>{fillUp.liters}L</td>
                     <td className={`${tableCellBase} text-[var(--color-text-secondary)] font-mono`}>₱{fillUp.pricePerLiter?.toFixed(2)}</td>
-                    <td className={`${tableCellBase} text-[var(--color-text-primary)] font-semibold font-mono`}>₱{fillUp.totalCost?.toLocaleString()}</td>
+                    <td className={`${tableCellBase} text-[var(--color-text-primary)] font-bold font-mono`}>₱{fillUp.totalCost?.toLocaleString()}</td>
                     <td className={`${tableCellBase} text-[var(--color-text-secondary)] font-mono`}>{fillUp.odometer?.toLocaleString()} km</td>
-                  <td className={`${tableCellBase} font-semibold font-mono ${fillUp.trend === 'above' ? 'text-[var(--color-brand-success)]' : 'text-[var(--color-brand-danger)]'}`}>
+                  <td className={`${tableCellBase} font-bold font-mono ${fillUp.trend === 'above' ? 'text-[var(--color-brand-success)]' : 'text-[var(--color-brand-danger)]'}`}>
                     {fillUp.efficiency} km/L
                   </td>
                     <td className={`${tableCellBase} text-[var(--color-text-secondary)]`}>{fillUp.station ?? 'N/A'}</td>

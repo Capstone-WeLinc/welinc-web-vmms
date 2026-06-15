@@ -51,8 +51,8 @@ const cardClasses = 'animate-pulse';
 const loadingIconContainerClasses = 'mb-4 flex items-center justify-between';
 const statCardClasses = 'group cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:border-[var(--color-brand-primary)] hover:bg-[var(--color-card-bg-hover)] hover:shadow-[0_8px_24px_rgba(14,165,233,0.06)]';
 const iconContainerClasses = 'flex h-10 w-10 items-center justify-center rounded-xl';
-const statValueClasses = 'text-3xl font-semibold tracking-tight text-[var(--color-text-primary)]';
-const statLabelClasses = 'mt-2 text-sm text-[var(--color-text-secondary)]';
+const statValueClasses = 'text-2xl font-bold tracking-tight text-[var(--color-text-primary)]';
+const statLabelClasses = 'mt-2 text-xs font-medium uppercase tracking-wide text-[var(--color-text-secondary)]';
 const statChangeClasses = 'mt-3 text-sm font-medium';
 
 export default function Dashboard() {

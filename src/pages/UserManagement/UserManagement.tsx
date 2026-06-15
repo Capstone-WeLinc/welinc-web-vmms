@@ -128,7 +128,7 @@ const theadClasses = 'bg-[var(--color-card-bg)] text-xs uppercase tracking-[0.16
 const tbodyClasses = 'divide-y divide-[var(--color-divider)]';
 const sortButtonClasses = 'inline-flex items-center gap-2 text-left uppercase tracking-[0.16em] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]';
 const actionButtonsGroupClasses = 'flex flex-wrap gap-2';
-const badgeClasses = 'rounded-full border px-2.5 py-1 text-xs font-semibold';
+const badgeClasses = 'rounded-full border px-2.5 py-1 text-xs font-medium';
 const modalOverlayClasses = 'fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.5)] px-4 backdrop-blur-sm';
 const formClasses = 'space-y-4';
 const inputClasses = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none';
@@ -665,7 +665,7 @@ export default function UserManagement() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-[var(--color-text-secondary)]">{stat.label}</p>
-                  <p className="mt-3 text-3xl font-semibold text-[var(--color-text-primary)]">
+                  <p className="mt-3 text-3xl font-bold text-[var(--color-text-primary)]">
                     {stat.value}
                   </p>
                 </div>
@@ -681,7 +681,7 @@ export default function UserManagement() {
       <div className={cardClasses}>
         <div className={headerSectionClasses}>
           <div>
-            <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
+            <h2 className="text-lg font-bold text-[var(--color-text-primary)]">
               System Users
             </h2>
             <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
@@ -842,7 +842,7 @@ export default function UserManagement() {
                               type="button"
                               onClick={() => setConfirmUnlockUser(user)}
                               disabled={processingUserId === user.id}
-                              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-200"
+                              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-200"
                             >
                               {processingUserId === user.id
                                 ? "Unlocking..."
@@ -863,7 +863,7 @@ export default function UserManagement() {
                                 });
                                 setIsCreateModalOpen(true);
                               }}
-                              className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-2 text-xs font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] ${processingUserId === user.id ? "cursor-not-allowed opacity-50" : ""}`}
+                              className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-2 text-xs font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] ${processingUserId === user.id ? "cursor-not-allowed opacity-50" : ""}`}
                             >
                               Edit
                             </button>
@@ -923,7 +923,7 @@ export default function UserManagement() {
                 setEditingUser(null);
                 setPasswordError("");
               }}
-              className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
+              className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
             >
               Cancel
             </button>
@@ -932,7 +932,7 @@ export default function UserManagement() {
                 type="submit"
                 form="edit-user-form"
                 disabled={processingUserId === editingUser.id}
-                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-70"
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-70"
               >
                 {processingUserId === editingUser.id ? "Saving..." : "Save Changes"}
               </button>
@@ -958,7 +958,7 @@ export default function UserManagement() {
                 disabled={
                   processingUserId === "create" || !isCreateFormValid
                 }
-                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-70"
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-70"
               >
                 {processingUserId === "create" ? "Creating..." : "Create User"}
               </button>
@@ -1141,12 +1141,12 @@ export default function UserManagement() {
       {duplicateUser && (
         <div className={modalOverlayClasses}>
           <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card">
-            <h3 className="mb-3 text-lg font-semibold text-[var(--color-text-primary)]">
+            <h3 className="mb-3 text-lg font-bold text-[var(--color-text-primary)]">
               Existing User Account
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)]">
               An account already exists with a similar name or username:{" "}
-              <span className="font-semibold text-[var(--color-text-primary)]">
+              <span className="font-bold text-[var(--color-text-primary)]">
                 {duplicateUser.name} ({duplicateUser.username})
               </span>
               .
@@ -1159,7 +1159,7 @@ export default function UserManagement() {
                   setIsCreateModalOpen(false);
                 }}
                 disabled={processingUserId === "create"}
-                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] disabled:opacity-50"
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -1167,7 +1167,7 @@ export default function UserManagement() {
                 type="button"
                 onClick={() => setDuplicateUser(null)}
                 disabled={processingUserId === "create"}
-                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-primary)] transition hover:bg-[var(--color-card-bg-hover)] disabled:opacity-50"
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition hover:bg-[var(--color-card-bg-hover)] disabled:opacity-50"
               >
                 Continue Editing
               </button>
@@ -1178,7 +1178,7 @@ export default function UserManagement() {
                   processingUserId === "create" ||
                   duplicateUser.id === currentUser?.id
                 }
-                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-50"
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-50"
               >
                 {processingUserId === "create" ? "Replacing..." : "Replace"}
               </button>
@@ -1190,13 +1190,13 @@ export default function UserManagement() {
       {confirmDeleteUser && (
         <div className={modalOverlayClasses}>
           <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card">
-            <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">
+            <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-4">
               Confirm Delete
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)] mb-6">
               Are you sure you want to delete the user
               <br />
-              <span className="mt-2 block font-semibold text-[var(--color-text-primary)]">{confirmDeleteUser.name} ({confirmDeleteUser.username})</span>
+              <span className="mt-2 block font-bold text-[var(--color-text-primary)]">{confirmDeleteUser.name} ({confirmDeleteUser.username})</span>
               <br />
               This action cannot be undone.
             </p>
@@ -1204,14 +1204,14 @@ export default function UserManagement() {
               <button
                 type="button"
                 onClick={() => setConfirmDeleteUser(null)}
-                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => performDeleteUser(confirmDeleteUser)}
-                className="rounded-xl bg-[var(--color-brand-danger)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] hover:bg-[var(--color-brand-danger)]/90"
+                className="rounded-xl bg-[var(--color-brand-danger)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] hover:bg-[var(--color-brand-danger)]/90"
               >
                 Delete
               </button>
@@ -1223,7 +1223,7 @@ export default function UserManagement() {
       {blockedDeleteUser && (
         <div className={modalOverlayClasses}>
           <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card">
-            <h3 className="mb-3 text-lg font-semibold text-[var(--color-text-primary)]">
+            <h3 className="mb-3 text-lg font-bold text-[var(--color-text-primary)]">
               User Cannot Be Deleted
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)]">
@@ -1237,7 +1237,7 @@ export default function UserManagement() {
               <button
                 type="button"
                 onClick={() => setBlockedDeleteUser(null)}
-                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90"
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90"
               >
                 Close
               </button>

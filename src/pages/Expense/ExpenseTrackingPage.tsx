@@ -27,8 +27,8 @@ function KPIStatCard({ icon, value, label, subtitle, iconBgColor, iconColor }: K
           {icon}
         </div>
       </div>
-      <div className="text-3xl font-semibold tracking-tight text-[var(--color-text-primary)]">{value}</div>
-      <div className="mt-2 text-sm text-[var(--color-text-secondary)]">{label}</div>
+      <div className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">{value}</div>
+      <div className="mt-2 text-xs font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">{label}</div>
       {subtitle && (
         <div className="mt-3 text-sm font-medium" style={{ color: iconColor }}>{subtitle}</div>
       )}
@@ -175,7 +175,7 @@ export default function ExpenseTrackingPage() {
               <button
                 key={t.id}
                 onClick={() => setActiveTab(t.id)}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${activeTab === t.id ? 'bg-[var(--color-input-bg)] text-[var(--color-text-primary)] shadow-[0_8px_24px_rgba(26,31,110,0.12)]' : 'bg-[var(--color-input-bg)]/50 text-[var(--color-text-secondary)] hover:bg-[var(--color-input-bg)]'}`}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition ${activeTab === t.id ? 'bg-[var(--color-input-bg)] text-[var(--color-text-primary)] shadow-[0_8px_24px_rgba(26,31,110,0.12)]' : 'bg-[var(--color-input-bg)]/50 text-[var(--color-text-secondary)] hover:bg-[var(--color-input-bg)]'}`}
               >
                 {t.label}
               </button>
@@ -200,10 +200,10 @@ export default function ExpenseTrackingPage() {
               <div key={v.id} className="rounded-2xl border border-amber-300/20 bg-[var(--color-card-bg)] px-4 py-5 transition hover:border-amber-300/40 hover:bg-[var(--color-input-bg-hover)]">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <div className="text-base font-semibold text-[var(--color-text-primary)]">{v.name}</div>
+            <div className="text-base font-bold text-[var(--color-text-primary)]">{v.name}</div>
                     <div className="mt-1 text-xs text-[var(--color-text-secondary)]">{v.plate} • {v.model}</div>
                   </div>
-                  <div className="text-sm font-semibold text-[#c41c3b] dark:text-[#fca5ac]">{v.netProfit}</div>
+                  <div className="text-sm font-bold text-[#c41c3b] dark:text-[#fca5ac]">{v.netProfit}</div>
                 </div>
                 <div className="mt-4 text-sm leading-6 text-[var(--color-text-secondary)]">{v.flagReason}</div>
               </div>
@@ -220,7 +220,7 @@ export default function ExpenseTrackingPage() {
                 key={type}
                 type="button"
                 onClick={() => setTransactionTypeFilter(type as 'All' | 'Income' | 'Expense')}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${transactionTypeFilter === type ? 'bg-[var(--color-card-bg)] text-[var(--color-text-primary)]' : 'bg-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-input-bg-hover)]'}`}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition ${transactionTypeFilter === type ? 'bg-[var(--color-card-bg)] text-[var(--color-text-primary)]' : 'bg-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-input-bg-hover)]'}`}
               >
                 {type}
               </button>
@@ -251,22 +251,22 @@ export default function ExpenseTrackingPage() {
       {/* Main content: tabs */}
       {activeTab === 'ranking' && (
         <section className="mx-3 mt-3 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card">
-          <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3">Vehicle Profitability Ranking</h3>
+          <h3 className="text-sm font-bold text-[var(--color-text-primary)] mb-3">Vehicle Profitability Ranking</h3>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-sm text-[var(--color-text-secondary)]">
               <thead className="bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
                 <tr>
-                  <th className="px-4 py-2 font-semibold">Rank</th>
-                  <th className="px-4 py-2 font-semibold">Vehicle</th>
-                  <th className="px-4 py-2 font-semibold">Plate</th>
-                  <th className="px-4 py-2 font-semibold">Total Income</th>
-                  <th className="px-4 py-2 font-semibold">Individual</th>
-                  <th className="px-4 py-2 font-semibold">Corporate</th>
-                  <th className="px-4 py-2 font-semibold">Fuel</th>
-                  <th className="px-4 py-2 font-semibold">Maint.</th>
-                  <th className="px-4 py-2 font-semibold">Repairs</th>
-                  <th className="px-4 py-2 font-semibold">Net Profit</th>
-                  <th className="px-4 py-2 font-semibold">Margin</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Rank</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Vehicle</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Plate</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Total Income</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Individual</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Corporate</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Fuel</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Maint.</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Repairs</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Net Profit</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Margin</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-divider)]">
@@ -282,7 +282,7 @@ export default function ExpenseTrackingPage() {
                     <td className="px-4 py-2">{r.maint}</td>
                     <td className="px-4 py-2">{r.repairs}</td>
                     <td className="px-4 py-2 text-green-400 font-semibold">{r.netProfit}</td>
-                    <td className="px-4 py-2"><span className="inline-block rounded-full bg-[var(--color-input-bg)] px-2 py-1 text-xs font-semibold text-[var(--color-text-secondary)]">{r.margin}%</span></td>
+                    <td className="px-4 py-2"><span className="inline-block rounded-full bg-[var(--color-input-bg)] px-2 py-1 text-xs font-medium text-[var(--color-text-secondary)]">{r.margin}%</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -296,9 +296,9 @@ export default function ExpenseTrackingPage() {
           <table className="w-full border-collapse text-left text-sm text-[var(--color-text-secondary)]">
             <thead className="bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
               <tr>
-                <th className="px-4 py-3 font-semibold">Date</th>
-                <th className="px-4 py-3 font-semibold">Type</th>
-                <th className="px-4 py-3 font-semibold">Vehicle</th>
+                <th className="px-4 py-3 text-xs font-semibold uppercase">Date</th>
+                <th className="px-4 py-3 text-xs font-semibold uppercase">Type</th>
+                <th className="px-4 py-3 text-xs font-semibold uppercase">Vehicle</th>
                 <th className="px-4 py-3 font-semibold">Reference / Description</th>
                 <th className="px-4 py-3 font-semibold">Client</th>
                 <th className="px-4 py-3 font-semibold text-right">Amount</th>
@@ -331,7 +331,7 @@ export default function ExpenseTrackingPage() {
 
       {activeTab === 'breakdown' && (
         <section className="mx-3 mt-3 overflow-hidden rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card">
-          <div className="bg-[var(--color-input-bg)] px-5 py-4 text-sm font-semibold text-[var(--color-text-primary)]">Expense Breakdown by Vehicle</div>
+          <div className="bg-[var(--color-input-bg)] px-5 py-4 text-sm font-medium text-[var(--color-text-primary)]">Expense Breakdown by Vehicle</div>
           <div className="flex flex-wrap items-center gap-4 border-b border-[var(--color-border)] bg-[var(--color-input-bg)] px-5 py-3 text-xs text-[var(--color-text-secondary)]">
             <div className="flex items-center gap-2">
               <span className="inline-flex h-2.5 w-2.5 rounded-full" style={{background: 'var(--color-status-info)'}} />
@@ -430,7 +430,7 @@ export default function ExpenseTrackingPage() {
                   <span className="font-medium text-sm text-[var(--color-text-primary)]">{v.name}</span>
                   <span className="text-xs text-[var(--color-text-secondary)]">{v.plate}</span>
                 </div>
-                <span className="text-sm font-semibold text-green-500">{v.netProfit}</span>
+                <span className="text-sm font-medium text-green-500">{v.netProfit}</span>
               </li>
             ))}
           </ul>

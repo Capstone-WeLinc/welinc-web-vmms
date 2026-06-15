@@ -34,7 +34,7 @@ const FormInput = React.forwardRef<HTMLInputElement, FormInputProps>(
     return (
       <div className="flex flex-col gap-2">
         {label && (
-          <label className="text-sm font-medium text-[var(--color-text-primary)]">
+          <label className="text-sm font-semibold text-[var(--color-text-primary)]">
             {label}
             {props.required && <span className="text-[var(--color-brand-danger)] ml-1">*</span>}
           </label>

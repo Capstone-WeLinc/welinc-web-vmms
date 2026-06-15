@@ -125,7 +125,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         <div className={headerClasses}>
           <div className={`${brandContainerClasses} h-16 w-16 rounded-xl bg-[var(--color-brand-primary)] text-white text-xl font-bold flex items-center justify-center shadow-[0_12px_40px_rgba(15,23,42,0.25)]`}>WL</div>
           <div>
-            <h1 className="text-2xl font-semibold text-[var(--color-text-primary)]">WeLinc Logistics</h1>
+            <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">WeLinc Logistics</h1>
             <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Vehicle Maintenance Management System</p>
           </div>
         </div>
@@ -133,7 +133,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         <form className={formClasses} onSubmit={handleSubmit}>
           <div className={formGroupClasses}>
             <div className={inputWrapperClasses}>
-              <label htmlFor="username" className="text-sm font-semibold text-[var(--color-text-primary)]">Username</label>
+              <label htmlFor="username" className="text-sm font-medium text-[var(--color-text-primary)]">Username</label>
               <input
                 className={inputClasses}
                 id="username"
@@ -150,7 +150,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             </div>
 
             <div className={inputWrapperClasses}>
-              <label htmlFor="password" className="text-sm font-semibold text-[var(--color-text-primary)]">Password</label>
+              <label htmlFor="password" className="text-sm font-medium text-[var(--color-text-primary)]">Password</label>
               <div className="relative">
                 <input
                   className={`${inputClasses} pr-10`}
@@ -181,7 +181,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             >
               {feedback.isLocked ? (
                 <>
-                  <p className="font-semibold">Account is locked</p>
+                  <p className="font-bold">Account is locked</p>
                   <p className="mt-1">
                     Contact an administrator to unlock your account.
                   </p>

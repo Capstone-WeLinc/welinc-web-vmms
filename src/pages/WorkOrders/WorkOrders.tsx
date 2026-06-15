@@ -115,10 +115,10 @@ const emptyStateClasses = 'col-span-full rounded-xl border border-[var(--color-b
 const detailViewClasses = 'rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-xl backdrop-blur-sm transition-all';
 const backButtonClasses = 'mb-6 flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-brand-primary)] dark:hover:text-[var(--color-brand-primary)]';
 const executionTableClasses = 'mb-6 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)]';
-const tableHeaderClasses = 'grid grid-cols-[1fr_80px_80px_100px_1.2fr_100px_100px_140px_100px] items-center gap-4 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-6 py-3 text-sm font-semibold text-[var(--color-text-secondary)]';
-const checklistHeaderClasses = 'grid grid-cols-[1fr_80px_80px_1fr_1fr_100px] items-center gap-4 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-6 py-3 text-sm font-semibold text-[var(--color-text-secondary)]';
+const tableHeaderClasses = 'grid grid-cols-[1fr_80px_80px_100px_1.2fr_100px_100px_140px_100px] items-center gap-4 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-6 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]';
+const checklistHeaderClasses = 'grid grid-cols-[1fr_80px_80px_1fr_1fr_100px] items-center gap-4 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-6 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]';
 const warningBannerClasses = 'mt-6 flex items-start gap-3 rounded-lg border border-[var(--color-status-error)]/20 bg-[var(--color-status-error)]/10 px-5 py-4 shadow-[0_0_15px_rgba(239,68,68,0.06)]';
-const actionButtonClasses = 'no-print flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-5 py-2.5 text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-brand-primary)] dark:hover:bg-[var(--color-card-bg-hover)] dark:hover:text-[var(--color-text-primary)] dark:hover:border-[var(--color-brand-primary)]';
+const actionButtonClasses = 'no-print flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-5 py-2.5 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-brand-primary)] dark:hover:bg-[var(--color-card-bg-hover)] dark:hover:text-[var(--color-text-primary)] dark:hover:border-[var(--color-brand-primary)]';
 const completeButtonClasses = 'no-print flex items-center gap-2 rounded-lg px-6 py-2.5 text-sm font-bold transition-all duration-300';
 
 export default function WorkOrders() {
@@ -383,7 +383,7 @@ export default function WorkOrders() {
     return (
       <div className="mb-6 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-[0_25px_50px_rgba(0,0,0,0.08)]">
         <div className="px-6 py-4 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)]">
-          <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
+          <h3 className="text-sm font-bold text-[var(--color-text-primary)]">
             Maintenance Schedule Details
           </h3>
           <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
@@ -846,7 +846,7 @@ export default function WorkOrders() {
         <Card padding="none" className={listViewClasses}>
           <div className={headerSectionClasses}>
             <div>
-              <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
+              <h2 className="text-lg font-bold text-[var(--color-text-primary)]">
                 {"Assigned Work Orders"}
               </h2>
               <p className="text-sm text-[var(--color-text-secondary)]">
@@ -1024,7 +1024,7 @@ export default function WorkOrders() {
                     : "border border-[var(--color-status-success)]/30 bg-[var(--color-status-success)]/10 shadow-card"
                 }`}
               >
-                <h3 className="text-lg font-semibold text-[var(--color-text-primary)]">
+                <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
                   <div className="flex items-center">
                     <span>Execution Checklist</span>
                     <span
@@ -1309,7 +1309,7 @@ export default function WorkOrders() {
                   {!currentExecution.done ? (
                     <div className="mt-4 border-t border-[var(--color-divider)] px-6 py-4">
                       <button
-                        className={`no-print w-full rounded-lg px-4 py-3 text-sm font-semibold transition ${
+                        className={`no-print w-full rounded-lg px-4 py-3 text-sm font-medium transition ${
                           canCompleteExecution
                             ? "bg-[var(--color-brand-primary)] text-white hover:bg-[var(--color-brand-dark)]"
                             : "bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] cursor-not-allowed"
@@ -1338,7 +1338,7 @@ export default function WorkOrders() {
                 : "border border-amber-500/30 bg-amber-500/10 shadow-card"
             }`}
           >
-            <h3 className="text-lg font-semibold text-[var(--color-text-primary)]">
+            <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
               <div className="flex items-center">
                 <span>Inspection Checklist</span>
                 <span

@@ -245,14 +245,14 @@ export default function AddIncomeModal({
                   <button
                     type="button"
                     onClick={() => setClientType("Individual")}
-                    className={`rounded-lg px-3 py-2 text-sm font-semibold ${clientType === "Individual" ? "bg-[var(--color-input-bg)] text-[var(--color-text-primary)]" : "bg-transparent text-[var(--color-text-secondary)] border border-[var(--color-border)]"}`}
+                    className={`rounded-lg px-3 py-2 text-sm font-medium ${clientType === "Individual" ? "bg-[var(--color-input-bg)] text-[var(--color-text-primary)]" : "bg-transparent text-[var(--color-text-secondary)] border border-[var(--color-border)]"}`}
                   >
                     Individual
                   </button>
                   <button
                     type="button"
                     onClick={() => setClientType("Corporate")}
-                    className={`rounded-lg px-3 py-2 text-sm font-semibold ${clientType === "Corporate" ? "bg-[var(--color-input-bg)] text-[var(--color-text-primary)]" : "bg-transparent text-[var(--color-text-secondary)] border border-[var(--color-border)]"}`}
+                    className={`rounded-lg px-3 py-2 text-sm font-medium ${clientType === "Corporate" ? "bg-[var(--color-input-bg)] text-[var(--color-text-primary)]" : "bg-transparent text-[var(--color-text-secondary)] border border-[var(--color-border)]"}`}
                   >
                     Corporate
                   </button>
@@ -271,7 +271,7 @@ export default function AddIncomeModal({
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[var(--color-border)] bg-[var(--color-card-bg)] shrink-0">
           <button
             onClick={onClose}
-            className="rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-input-bg-hover)] hover:text-[var(--color-text-primary)] transition"
+            className="rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-input-bg-hover)] hover:text-[var(--color-text-primary)] transition"
           >
             Cancel
           </button>

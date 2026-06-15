@@ -117,14 +117,14 @@ export default function EfficiencyTrendsWithFilters({
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2">
           <div className="h-2 w-4 rounded-full bg-[var(--color-brand-success)]" />
-          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Above average</span>
+          <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Above average</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="h-2 w-4 rounded-full bg-[var(--color-brand-danger)]" />
-          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Below average</span>
+          <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Below average</span>
         </div>
         <div className="ml-auto text-sm text-[var(--color-text-secondary)]">
-          Fleet avg: <span className="font-semibold text-[var(--color-text-primary)] font-mono">{fleetAvg.toFixed(1)} km/L</span>
+          Fleet avg: <span className="font-bold text-[var(--color-text-primary)] font-mono">{fleetAvg.toFixed(1)} km/L</span>
         </div>
       </div>
 
@@ -141,7 +141,7 @@ export default function EfficiencyTrendsWithFilters({
         <div className="flex flex-col gap-1 justify-end">
           <button
             onClick={() => setShowFilters(!showFilters)}
-              className={`flex h-10.5 items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all duration-200 ${showFilters
+              className={`flex h-10.5 items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-all duration-200 ${showFilters
                 ? 'active-filter'
                 : 'border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)]'
                 }`}
@@ -178,7 +178,7 @@ export default function EfficiencyTrendsWithFilters({
               <div key={vehicle.vehicleId} className="space-y-2">
                 <div className="flex items-end justify-between">
                   <div>
-                        <div className="font-semibold text-[var(--color-text-primary)]">{vehicle.vehicleName}</div>
+                        <div className="font-bold text-[var(--color-text-primary)]">{vehicle.vehicleName}</div>
                         <div className="text-xs text-[var(--color-text-secondary)] font-mono">{vehicle.vehicleId} • {vehicle.model}</div>
                   </div>
                   <div className="flex items-baseline gap-2 text-right">
@@ -215,8 +215,8 @@ export default function EfficiencyTrendsWithFilters({
 
         {/* Results Count Summary */}
         <div className="text-sm text-[var(--color-text-secondary)]">
-          Showing <span className="font-semibold text-[var(--color-text-primary)]">{visibleVehicles.length}</span> of{' '}
-          <span className="font-semibold text-[var(--color-text-primary)]">{filtered.length}</span> matching vehicles
+          Showing <span className="font-bold text-[var(--color-text-primary)]">{visibleVehicles.length}</span> of{' '}
+          <span className="font-bold text-[var(--color-text-primary)]">{filtered.length}</span> matching vehicles
           {filtered.length !== vehicles.length && ` (filtered from ${vehicles.length} total)`}
         </div>
 
