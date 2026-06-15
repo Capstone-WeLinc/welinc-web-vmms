@@ -319,10 +319,10 @@ export default function FuelCostSummary({ fillUps = [] }: FuelCostSummaryProps) 
 
       </div>
 
-      <div id="fuel-cost-summary-table" className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card overflow-x-auto">
+      <div id="fuel-cost-summary-table" className="overflow-auto overscroll-contain rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card lg:max-h-[min(40rem,calc(100vh-12rem))]">
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]">
+            <tr className="sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]">
               <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider">Vehicle</th>
               <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider">Model</th>
               <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider text-center">Total Fill-Ups</th>

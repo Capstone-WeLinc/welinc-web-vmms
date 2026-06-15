@@ -72,9 +72,9 @@ const actionButtonActiveFilter = `${actionButtonFilter} active-filter hover:bg-[
 const secondaryActionButton = `${actionButtonBase} rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]`;
 const successActionButton = `${actionButtonBase} rounded-xl border border-[var(--color-brand-primary)]/20 bg-[var(--color-brand-primary)]/15 text-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary)]/25`;
 const filtersPanelClasses = 'grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card';
-const tableWrapperClasses = 'overflow-x-auto rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card';
+const tableWrapperClasses = 'overflow-auto overscroll-contain rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card lg:max-h-[min(40rem,calc(100vh-12rem))]';
 const tableClasses = 'w-full text-left text-sm';
-const tableHeadRowClasses = 'border-b border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]';
+const tableHeadRowClasses = 'sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]';
 const tableCellBase = 'px-4 py-3';
 
 interface FuelLogProps {

@@ -76,9 +76,9 @@ const filterGridClasses = 'grid gap-3 mb-6 grid-cols-1 md:grid-cols-5';
 const alertBannerClasses = 'mb-6 rounded-lg border border-rose-500/30 bg-rose-500/10 p-4';
 const alertContentClasses = 'flex items-start gap-3';
 const alertActionsClasses = 'flex gap-2 shrink-0';
-const tableWrapperClasses = 'overflow-x-auto rounded-xl border border-[var(--color-border)] shadow-card';
+const tableWrapperClasses = 'overflow-auto overscroll-contain rounded-xl border border-[var(--color-border)] shadow-card lg:max-h-[min(40rem,calc(100vh-12rem))]';
 const tableClasses = 'w-full border-collapse text-left text-sm text-[var(--color-text-secondary)]';
-const tableHeadClasses = 'bg-[var(--color-input-bg)] border-b border-[var(--color-border)]';
+const tableHeadClasses = 'sticky top-0 z-10 bg-[var(--color-input-bg)] border-b border-[var(--color-border)]';
 const tableRowClasses = 'hover:bg-[var(--color-card-bg-hover)] transition-colors';
 const tableCellClasses = 'px-4 py-3';
 const tableHeaderCellClasses = 'px-4 py-3 font-semibold text-[var(--color-text-secondary)]';
@@ -515,7 +515,22 @@ export default function MaintenanceLogs() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--color-divider)]">
-              {paginatedLogs.map(log => (
+              {paginatedLogs.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={isMechanic ? 10 : 11}
+                    className="px-6 py-10 text-center"
+                  >
+                    <FileText className="mx-auto mb-3 h-9 w-9 text-[var(--color-text-secondary)] opacity-50" />
+                    <p className="font-semibold text-[var(--color-text-primary)]">
+                      No maintenance logs found
+                    </p>
+                    <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                      Try adjusting the current search or filters.
+                    </p>
+                  </td>
+                </tr>
+              ) : paginatedLogs.map(log => (
                 <tr key={log.id} className={`${tableRowClasses} hover:bg-[var(--color-input-bg-hover)] transition-colors`}>
                   {!isMechanic && (
                     <td className={tableCellClasses}>

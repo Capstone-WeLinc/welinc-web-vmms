@@ -250,11 +250,11 @@ export default function ExpenseTrackingPage() {
 
       {/* Main content: tabs */}
       {activeTab === 'ranking' && (
-        <section className="mx-3 mt-3 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card">
+        <section className="mx-3 mt-3 flex flex-col rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card lg:max-h-[min(40rem,calc(100vh-12rem))]">
           <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3">Vehicle Profitability Ranking</h3>
-          <div className="overflow-x-auto">
+          <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
             <table className="w-full border-collapse text-left text-sm text-[var(--color-text-secondary)]">
-              <thead className="bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
+              <thead className="sticky top-0 z-10 bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
                 <tr>
                   <th className="px-4 py-2 font-semibold">Rank</th>
                   <th className="px-4 py-2 font-semibold">Vehicle</th>
@@ -292,9 +292,9 @@ export default function ExpenseTrackingPage() {
       )}
 
       {activeTab === 'history' && (
-        <section className="mx-3 mt-3 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card overflow-x-auto">
+        <section className="mx-3 mt-3 overflow-auto overscroll-contain rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card lg:max-h-[min(40rem,calc(100vh-12rem))]">
           <table className="w-full border-collapse text-left text-sm text-[var(--color-text-secondary)]">
-            <thead className="bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
+            <thead className="sticky top-0 z-10 bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
               <tr>
                 <th className="px-4 py-3 font-semibold">Date</th>
                 <th className="px-4 py-3 font-semibold">Type</th>
@@ -330,7 +330,7 @@ export default function ExpenseTrackingPage() {
       )}
 
       {activeTab === 'breakdown' && (
-        <section className="mx-3 mt-3 overflow-hidden rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card">
+        <section className="mx-3 mt-3 flex flex-col overflow-hidden rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card lg:max-h-[min(40rem,calc(100vh-12rem))]">
           <div className="bg-[var(--color-input-bg)] px-5 py-4 text-sm font-semibold text-[var(--color-text-primary)]">Expense Breakdown by Vehicle</div>
           <div className="flex flex-wrap items-center gap-4 border-b border-[var(--color-border)] bg-[var(--color-input-bg)] px-5 py-3 text-xs text-[var(--color-text-secondary)]">
             <div className="flex items-center gap-2">
@@ -346,9 +346,9 @@ export default function ExpenseTrackingPage() {
               Repair %
             </div>
           </div>
-          <div className="overflow-x-auto">
+          <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
             <table className="w-full border-collapse text-left text-sm text-[var(--color-text-secondary)]">
-              <thead className="bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
+              <thead className="sticky top-0 z-10 bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
                 <tr>
                   <th className="px-4 py-4 font-semibold">Vehicle</th>
                   <th className="px-4 py-4 font-semibold">Fuel Cost</th>

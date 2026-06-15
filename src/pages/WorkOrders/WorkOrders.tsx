@@ -9,8 +9,6 @@ import {
   Truck,
   Search,
   Filter,
-  ArrowUp,
-  ArrowDown,
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import { Card } from "../../components/ui";
@@ -105,23 +103,23 @@ const getTemplates = () => {
 const containerClasses = 'space-y-6';
 const listViewClasses = 'overflow-hidden';
 const headerSectionClasses = 'flex flex-col gap-4 border-b border-[var(--color-divider)] px-6 py-5 sm:flex-row sm:items-center sm:justify-between';
-const filtersGridClasses = 'grid gap-4 border-b border-[var(--color-divider)] px-6 py-5 md:grid-cols-5';
+const filtersGridClasses = 'grid gap-4 border-b border-[var(--color-divider)] px-6 py-5 md:grid-cols-4';
 const searchInputClasses = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-hidden';
 const selectInputClasses = 'w-full appearance-none rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-hidden';
-const sortButtonClasses = 'flex items-center justify-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-4 py-2.5 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-input-bg-hover)] hover:text-[var(--color-text-primary)] dark:hover:bg-[var(--color-input-bg-hover)] dark:hover:text-white';
-const taskGridClasses = 'grid gap-4 p-6 md:grid-cols-2 lg:grid-cols-3';
+const taskGridClasses = 'grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-4';
 const taskCardClasses = 'group cursor-pointer rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card transition-all hover:-translate-y-1 hover:border-[var(--color-brand-primary)] hover:bg-[var(--color-card-bg-hover)] hover:shadow-[0_10px_28px_rgba(15,23,42,0.12)] dark:hover:border-[var(--color-brand-primary)] dark:hover:bg-[var(--color-card-bg-hover)] dark:hover:shadow-[0_14px_32px_rgba(26,31,110,0.18)]';
 const emptyStateClasses = 'col-span-full rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-8 text-center shadow-card';
 const detailViewClasses = 'rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-xl backdrop-blur-sm transition-all';
 const backButtonClasses = 'mb-6 flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-brand-primary)] dark:hover:text-[var(--color-brand-primary)]';
-const executionTableClasses = 'mb-6 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)]';
-const tableHeaderClasses = 'grid grid-cols-[1fr_80px_80px_100px_1.2fr_100px_100px_140px_100px] items-center gap-4 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-6 py-3 text-sm font-semibold text-[var(--color-text-secondary)]';
-const checklistHeaderClasses = 'grid grid-cols-[1fr_80px_80px_1fr_1fr_100px] items-center gap-4 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-6 py-3 text-sm font-semibold text-[var(--color-text-secondary)]';
+const executionTableClasses = 'mb-6 overflow-auto overscroll-contain rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] lg:max-h-[min(40rem,calc(100vh-12rem))]';
+const tableHeaderClasses = 'sticky top-0 z-10 grid grid-cols-[1fr_80px_80px_100px_1.2fr_100px_100px_140px_100px] items-center gap-4 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-6 py-3 text-sm font-semibold text-[var(--color-text-secondary)]';
+const checklistHeaderClasses = 'sticky top-0 z-10 grid grid-cols-[1fr_80px_80px_1fr_1fr_100px] items-center gap-4 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-6 py-3 text-sm font-semibold text-[var(--color-text-secondary)]';
 const warningBannerClasses = 'mt-6 flex items-start gap-3 rounded-lg border border-[var(--color-status-error)]/20 bg-[var(--color-status-error)]/10 px-5 py-4 shadow-[0_0_15px_rgba(239,68,68,0.06)]';
 const actionButtonClasses = 'no-print flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-5 py-2.5 text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-brand-primary)] dark:hover:bg-[var(--color-card-bg-hover)] dark:hover:text-[var(--color-text-primary)] dark:hover:border-[var(--color-brand-primary)]';
 const completeButtonClasses = 'no-print flex items-center gap-2 rounded-lg px-6 py-2.5 text-sm font-bold transition-all duration-300';
 
 export default function WorkOrders() {
+  const workOrdersPerPage = 8;
   const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
   const [selectedTask, setSelectedTask] = useState<MaintenanceTask | null>(
     null,
@@ -164,7 +162,8 @@ export default function WorkOrders() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [sortField, setSortField] = useState<"date" | "workOrderId">("date");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const normalizeText = (value?: string | null) =>
     value?.trim().toLowerCase() ?? "";
@@ -223,6 +222,15 @@ export default function WorkOrders() {
     const dateB = new Date(b.date).getTime();
     return sortDirection === "asc" ? dateA - dateB : dateB - dateA;
   });
+  const totalPages = Math.max(
+    1,
+    Math.ceil(activeTasks.length / workOrdersPerPage),
+  );
+  const activePage = Math.min(currentPage, totalPages);
+  const paginatedTasks = activeTasks.slice(
+    (activePage - 1) * workOrdersPerPage,
+    activePage * workOrdersPerPage,
+  );
 
   const handleSelectTask = (task: MaintenanceTask) => {
     setSelectedTask(task);
@@ -862,7 +870,10 @@ export default function WorkOrders() {
                 type="text"
                 placeholder="Search vehicle, task, or mechanic..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className={searchInputClasses}
               />
             </div>
@@ -871,7 +882,10 @@ export default function WorkOrders() {
               <Filter className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" />
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className={selectInputClasses}
               >
                 <option value="All" className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]">
@@ -898,36 +912,36 @@ export default function WorkOrders() {
             <div className="relative">
               <Filter className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" />
               <select
-                value={sortField}
-                onChange={(e) => setSortField(e.target.value as "date" | "workOrderId")}
+                value={`${sortField}-${sortDirection}`}
+                onChange={(e) => {
+                  const [field, direction] = e.target.value.split("-") as [
+                    "date" | "workOrderId",
+                    "asc" | "desc",
+                  ];
+                  setSortField(field);
+                  setSortDirection(direction);
+                  setCurrentPage(1);
+                }}
                 className={selectInputClasses}
               >
-                <option value="date" className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]">
-                  {"Sort by Date"}
+                <option value="date-asc" className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]">
+                  {"Date - Ascending"}
                 </option>
-                <option value="workOrderId" className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]">
-                  {"Sort by Work Order ID"}
+                <option value="date-desc" className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]">
+                  {"Date - Descending"}
+                </option>
+                <option value="workOrderId-asc" className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]">
+                  {"Work Order ID - Ascending"}
+                </option>
+                <option value="workOrderId-desc" className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]">
+                  {"Work Order ID - Descending"}
                 </option>
               </select>
             </div>
-
-            <button
-              onClick={() =>
-                setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"))
-              }
-              className={sortButtonClasses}
-            >
-              {sortDirection === "asc" ? (
-                <ArrowUp size={16} />
-              ) : (
-                <ArrowDown size={16} />
-              )}
-              {sortField === "workOrderId" ? "Work Order ID" : "Date"} {sortDirection === "asc" ? "Ascending" : "Descending"}
-            </button>
           </div>
 
           <div className={taskGridClasses}>
-            {activeTasks.map((task) => (
+            {paginatedTasks.map((task) => (
               <div
                 key={task.id}
                 onClick={() => handleSelectTask(task)}
@@ -997,6 +1011,55 @@ export default function WorkOrders() {
               </div>
             )}
           </div>
+          {activeTasks.length > 0 ? (
+            <div className="flex flex-col gap-3 border-t border-[var(--color-border)] px-6 py-3 text-sm text-[var(--color-text-secondary)] sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                Showing {paginatedTasks.length} of {activeTasks.length} work orders
+              </span>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(Math.max(1, activePage - 1))}
+                  disabled={activePage === 1}
+                  className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <span>Page {activePage} of {totalPages}</span>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(Math.min(totalPages, activePage + 1))}
+                  disabled={activePage === totalPages}
+                  className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next
+                </button>
+                {totalPages >= 20 ? (
+                  <label className="flex items-center gap-2">
+                    <span>Go to</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={totalPages}
+                      placeholder={String(activePage)}
+                      aria-label="Go to work orders page"
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        if (!event.currentTarget.value.trim()) return;
+                        const requestedPage = Number(event.currentTarget.value);
+                        if (!Number.isFinite(requestedPage)) return;
+                        setCurrentPage(
+                          Math.min(totalPages, Math.max(1, Math.trunc(requestedPage))),
+                        );
+                        event.currentTarget.value = "";
+                      }}
+                      className="w-16 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2 py-1.5 text-center text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
+                    />
+                  </label>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </Card>
       ) : (
         <div
@@ -1357,7 +1420,7 @@ export default function WorkOrders() {
             </p>
           </div>
           <div
-            className={`overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] ${!currentExecution.done ? "opacity-60 pointer-events-none" : ""}`}
+            className={`overflow-auto overscroll-contain rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] lg:max-h-[min(40rem,calc(100vh-12rem))] ${!currentExecution.done ? "opacity-60 pointer-events-none" : ""}`}
           >
             <div className={checklistHeaderClasses}>
               <div>{"Checklist Item"}</div>

@@ -12,6 +12,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   AlertCircle,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import { Card, Modal } from "../../components/ui";
@@ -255,6 +257,7 @@ const getTaskStyle = (status: MaintenanceStatus) => {
 };
 
 const MaintenanceSchedulingCombined = () => {
+  const schedulesPerPage = 8;
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -267,6 +270,10 @@ const MaintenanceSchedulingCombined = () => {
   const [workOrderTemplateFilter, setWorkOrderTemplateFilter] =
     useState<string>("All");
   const [dateRangeFilter, setDateRangeFilter] = useState<string>("All");
+  const [dateSortDirection, setDateSortDirection] = useState<"asc" | "desc">(
+    "desc",
+  );
+  const [currentPage, setCurrentPage] = useState(1);
   const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
   const [vehicles, setVehicles] = useState<{ value: string; label: string }[]>(
     [],
@@ -343,27 +350,44 @@ const MaintenanceSchedulingCombined = () => {
 
   const vehicleOptions = [{ value: "All", label: "All Vehicles" }, ...vehicles];
 
-  const filteredTasks = tasks.filter((task) => {
-    const statusMatches =
-      statusFilter === "All" || task.status === statusFilter;
-    const vehicleMatches =
-      vehicleFilter === "All" || task.vehicleId === vehicleFilter;
-    const templateMatches =
-      workOrderTemplateFilter === "All" ||
-      task.title === workOrderTemplateFilter;
-    const dateMatches = dateFilter(new Date(task.date));
-    const searchMatches =
-      task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.vehicleId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.assignedDriver.toLowerCase().includes(searchQuery.toLowerCase());
-    return (
-      statusMatches &&
-      vehicleMatches &&
-      templateMatches &&
-      dateMatches &&
-      searchMatches
-    );
-  });
+  const filteredTasks = tasks
+    .filter((task) => {
+      const statusMatches =
+        statusFilter === "All" || task.status === statusFilter;
+      const vehicleMatches =
+        vehicleFilter === "All" || task.vehicleId === vehicleFilter;
+      const templateMatches =
+        workOrderTemplateFilter === "All" ||
+        task.title === workOrderTemplateFilter;
+      const dateMatches = dateFilter(new Date(task.date));
+      const searchMatches =
+        task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        task.vehicleId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        task.assignedDriver.toLowerCase().includes(searchQuery.toLowerCase());
+      return (
+        statusMatches &&
+        vehicleMatches &&
+        templateMatches &&
+        dateMatches &&
+        searchMatches
+      );
+    })
+    .sort((left, right) => {
+      const dateComparison = left.date.localeCompare(right.date);
+      if (dateComparison !== 0) {
+        return dateSortDirection === "asc" ? dateComparison : -dateComparison;
+      }
+      return right.id.localeCompare(left.id);
+    });
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredTasks.length / schedulesPerPage),
+  );
+  const activePage = Math.min(currentPage, totalPages);
+  const paginatedTasks = filteredTasks.slice(
+    (activePage - 1) * schedulesPerPage,
+    activePage * schedulesPerPage,
+  );
 
   const noTasks = tasks.length === 0;
 
@@ -539,21 +563,30 @@ const MaintenanceSchedulingCombined = () => {
               id="searchF"
               placeholder="Search tasks..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
             />
             <SelectField
               label="Vehicle"
               id="vehicleF"
               options={vehicleOptions}
               value={vehicleFilter}
-              onChange={(e) => setVehicleFilter(e.target.value)}
+              onChange={(e) => {
+                setVehicleFilter(e.target.value);
+                setCurrentPage(1);
+              }}
             />
             <SelectField
               label="Work Order Template"
               id="typeF"
               options={workOrderTemplateOptions}
               value={workOrderTemplateFilter}
-              onChange={(e) => setWorkOrderTemplateFilter(e.target.value)}
+              onChange={(e) => {
+                setWorkOrderTemplateFilter(e.target.value);
+                setCurrentPage(1);
+              }}
             />
             <SelectField
               label="Status"
@@ -567,7 +600,10 @@ const MaintenanceSchedulingCombined = () => {
                 { value: "Completed", label: "Completed" },
               ]}
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
             />
             <SelectField
               label="Date Range"
@@ -579,50 +615,70 @@ const MaintenanceSchedulingCombined = () => {
                 { value: "This Month", label: "This Month" },
               ]}
               value={dateRangeFilter}
-              onChange={(e) => setDateRangeFilter(e.target.value)}
+              onChange={(e) => {
+                setDateRangeFilter(e.target.value);
+                setCurrentPage(1);
+              }}
             />
           </div>
 
           {viewMode === "list" ? (
             <Card
               padding="none"
-              className="overflow-x-auto"
+              className="overflow-hidden"
             >
-              <table className="w-full border-collapse text-left text-sm text-[var(--color-text-secondary)]">
-                <thead className="bg-[var(--color-card-bg)] border-b border-[var(--color-border)] text-[var(--color-text-secondary)]">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left text-sm text-[var(--color-text-secondary)]">
+                <thead className="sticky top-0 z-10 bg-[var(--color-card-bg)] border-b border-[var(--color-border)] text-[var(--color-text-secondary)]">
                   <tr>
-                    <th className="px-6 py-4 font-semibold">
+                    <th className="px-5 py-3 font-semibold">
                       {"Work Order No."}
                     </th>
-                    <th className="px-6 py-4 font-semibold">{"Plate No."}</th>
-                    <th className="px-6 py-4 font-semibold">
+                    <th className="px-5 py-3 font-semibold">{"Plate No."}</th>
+                    <th className="px-5 py-3 font-semibold">
                       {"Work Order Template"}
                     </th>
-                    <th className="px-6 py-4 font-semibold">{"Trigger"}</th>
-                    <th className="px-6 py-4 font-semibold">
-                      {"Scheduled Date"}
+                    <th className="px-5 py-3 font-semibold">{"Trigger"}</th>
+                    <th className="px-5 py-3 font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDateSortDirection((direction) =>
+                            direction === "desc" ? "asc" : "desc",
+                          );
+                          setCurrentPage(1);
+                        }}
+                        className="inline-flex items-center gap-2 hover:text-[var(--color-text-primary)]"
+                      >
+                        <span>Scheduled Date</span>
+                        {dateSortDirection === "asc" ? (
+                          <ArrowUp className="h-3.5 w-3.5" />
+                        ) : (
+                          <ArrowDown className="h-3.5 w-3.5" />
+                        )}
+                      </button>
                     </th>
-                    <th className="px-6 py-4 font-semibold">{"Mechanic"}</th>
-                    <th className="px-6 py-4 font-semibold">{"Status"}</th>
-                    <th className="px-6 py-4 font-semibold">{"Actions"}</th>
+                    <th className="px-5 py-3 font-semibold">{"Mechanic"}</th>
+                    <th className="px-5 py-3 font-semibold">{"Status"}</th>
+                    <th className="px-5 py-3 font-semibold">{"Actions"}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--color-divider)]">
                   {filteredTasks.length > 0 ? (
-                    filteredTasks.map((task) => (
+                    paginatedTasks.map((task) => (
                       <tr
                         key={task.id}
                         onClick={() => openScheduleDetails([task])}
                         className="cursor-pointer hover:bg-[var(--color-card-bg-hover)] transition-colors"
                       >
-                        <td className="px-6 py-4 font-medium text-[var(--color-text-primary)]">
+                        <td className="px-5 py-3 font-medium text-[var(--color-text-primary)]">
                           {formatWorkOrderNumber(task.id)}
                         </td>
-                        <td className="px-6 py-4 font-medium text-[var(--color-text-primary)]">
+                        <td className="px-5 py-3 font-medium text-[var(--color-text-primary)]">
                           {task.vehicleId}
                         </td>
-                        <td className="px-6 py-4">{task.title}</td>
-                        <td className="px-6 py-4">
+                        <td className="px-5 py-3">{task.title}</td>
+                        <td className="px-5 py-3">
                           <span className="inline-block rounded-full bg-[var(--color-card-bg)] px-2.5 py-1 text-xs font-medium text-[var(--color-text-secondary)]">
                             {task.triggerType === "TIME"
                               ? "Time-Based"
@@ -631,12 +687,12 @@ const MaintenanceSchedulingCombined = () => {
                                 : "Odometer"}
                           </span>
                         </td>
-                        <td className="px-6 py-4">{task.date}</td>
-                        <td className="px-6 py-4">{task.assignedDriver}</td>
-                        <td className="px-6 py-4">
+                        <td className="px-5 py-3">{task.date}</td>
+                        <td className="px-5 py-3">{task.assignedDriver}</td>
+                        <td className="px-5 py-3">
                           <StatusBadge status={task.status} />
                         </td>
-                        <td className="px-6 py-4 flex gap-2">
+                        <td className="flex gap-2 px-5 py-3">
                           <button
                             type="button"
                             onClick={(event) => {
@@ -679,7 +735,57 @@ const MaintenanceSchedulingCombined = () => {
                     </tr>
                   )}
                 </tbody>
-              </table>
+                </table>
+              </div>
+              {filteredTasks.length > 0 ? (
+                <div className="flex flex-col gap-3 border-t border-[var(--color-border)] px-6 py-3 text-sm text-[var(--color-text-secondary)] sm:flex-row sm:items-center sm:justify-between">
+                  <span>
+                    Showing {paginatedTasks.length} of {filteredTasks.length} schedules
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage(Math.max(1, activePage - 1))}
+                      disabled={activePage === 1}
+                      className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Previous
+                    </button>
+                    <span>Page {activePage} of {totalPages}</span>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage(Math.min(totalPages, activePage + 1))}
+                      disabled={activePage === totalPages}
+                      className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Next
+                    </button>
+                    {totalPages >= 20 ? (
+                      <label className="flex items-center gap-2">
+                        <span>Go to</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={totalPages}
+                          placeholder={String(activePage)}
+                          aria-label="Go to maintenance schedule page"
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter") return;
+                            if (!event.currentTarget.value.trim()) return;
+                            const requestedPage = Number(event.currentTarget.value);
+                            if (!Number.isFinite(requestedPage)) return;
+                            setCurrentPage(
+                              Math.min(totalPages, Math.max(1, Math.trunc(requestedPage))),
+                            );
+                            event.currentTarget.value = "";
+                          }}
+                          className="w-16 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2 py-1.5 text-center text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
+                        />
+                      </label>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
             </Card>
           ) : (
             <Card padding="none" className="p-6">

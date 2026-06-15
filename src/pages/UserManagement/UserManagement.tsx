@@ -8,7 +8,8 @@ import {
   Shield,
   UserCheck,
   Plus,
-  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import Button from "../../components/ui/Button";
@@ -124,7 +125,7 @@ const loadingStateClasses = 'rounded-2xl border border-[var(--color-border)] bg-
 const emptyStateClasses = 'rounded-2xl border border-dashed border-[var(--color-border)] px-4 py-10 text-center text-sm text-[var(--color-text-secondary)]';
 const tableWrapperClasses = 'overflow-hidden rounded-2xl border border-[var(--color-border)] shadow-card';
 const tableClasses = 'min-w-full text-left text-sm text-[var(--color-text-primary)]';
-const theadClasses = 'bg-[var(--color-card-bg)] text-xs uppercase tracking-[0.16em] text-[var(--color-text-secondary)]';
+const theadClasses = 'sticky top-0 z-10 bg-[var(--color-card-bg)] text-xs uppercase tracking-[0.16em] text-[var(--color-text-secondary)]';
 const tbodyClasses = 'divide-y divide-[var(--color-divider)]';
 const sortButtonClasses = 'inline-flex items-center gap-2 text-left uppercase tracking-[0.16em] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]';
 const actionButtonsGroupClasses = 'flex flex-wrap gap-2';
@@ -135,6 +136,7 @@ const inputClasses = 'w-full rounded-xl border border-[var(--color-border)] bg-[
 const buttonGroupClasses = 'flex justify-end gap-2 pt-2';
 
 export default function UserManagement() {
+  const usersPerPage = 8;
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState<UserRecord | null>(null);
   const [users, setUsers] = useState<UserRecord[]>([]);
@@ -145,6 +147,7 @@ export default function UserManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [roleFilter, setRoleFilter] = useState<string>("All");
+  const [currentPage, setCurrentPage] = useState(1);
   const [sortField, setSortField] = useState<"name" | "role">("name");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -303,6 +306,12 @@ export default function UserManagement() {
         return 0;
       });
   }, [users, searchQuery, statusFilter, roleFilter, sortField, sortDirection]);
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / usersPerPage));
+  const activePage = Math.min(currentPage, totalPages);
+  const paginatedUsers = filteredUsers.slice(
+    (activePage - 1) * usersPerPage,
+    activePage * usersPerPage,
+  );
 
   const stats = useMemo(() => {
     const totalUsers = users.length;
@@ -613,6 +622,7 @@ export default function UserManagement() {
   };
 
   const handleSort = (field: "name" | "role") => {
+    setCurrentPage(1);
     if (sortField === field) {
       setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
     } else {
@@ -715,7 +725,10 @@ export default function UserManagement() {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
               placeholder="Search name, username, role..."
               className={searchInputClasses}
             />
@@ -725,7 +738,10 @@ export default function UserManagement() {
             <Filter className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" />
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
               className={selectInputClasses}
             >
               <option value="All">All Statuses</option>
@@ -739,7 +755,10 @@ export default function UserManagement() {
             <Filter className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" />
             <select
               value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
+              onChange={(e) => {
+                setRoleFilter(e.target.value);
+                setCurrentPage(1);
+              }}
               className={selectInputClasses}
             >
               <option value="All">All Roles</option>
@@ -762,46 +781,52 @@ export default function UserManagement() {
           </div>
         ) : (
           <div className={tableWrapperClasses}>
-            <div className="overflow-x-auto">
+            <div className="min-h-full overflow-x-auto">
               <table className={tableClasses}>
                 <thead className={theadClasses}>
                   <tr>
-                    <th className="px-4 py-3 font-medium">
+                    <th className="px-4 py-2.5 font-medium">
                       <button
                         type="button"
                         onClick={() => handleSort("name")}
                         className={sortButtonClasses}
                       >
                         <span>User</span>
-                        <ArrowUpDown className="h-3.5 w-3.5 opacity-60" />
                         {sortField === "name" ? (
-                          <span>{sortDirection === "asc" ? "↑" : "↓"}</span>
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          ) : (
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          )
                         ) : null}
                       </button>
                     </th>
-                    <th className="px-4 py-3 font-medium">
+                    <th className="px-4 py-2.5 font-medium">
                       <button
                         type="button"
                         onClick={() => handleSort("role")}
                         className={sortButtonClasses}
                       >
                         <span>Role</span>
-                        <ArrowUpDown className="h-3.5 w-3.5 opacity-60" />
                         {sortField === "role" ? (
-                          <span>{sortDirection === "asc" ? "↑" : "↓"}</span>
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          ) : (
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          )
                         ) : null}
                       </button>
                     </th>
-                    <th className="px-4 py-3 font-medium">Status</th>
-                    <th className="px-4 py-3 font-medium">Last Active</th>
-                    <th className="px-4 py-3 font-medium">Actions</th>
+                    <th className="px-4 py-2.5 font-medium">Status</th>
+                    <th className="px-4 py-2.5 font-medium">Last Active</th>
+                    <th className="px-4 py-2.5 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody className={tbodyClasses}>
-                  {filteredUsers.map((user) => (
+                  {paginatedUsers.map((user) => (
                     <tr key={user.id} className="bg-transparent align-top">
-                      <td className="px-4 py-3">
-                        <div className="space-y-1">
+                      <td className="px-4 py-2.5">
+                        <div className="space-y-0.5">
                           <p className="font-medium text-[var(--color-text-primary)]">
                             {user.name}
                           </p>
@@ -810,14 +835,14 @@ export default function UserManagement() {
                           </p>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-2.5">
                         <span
                           className={`${badgeClasses} ${roleStyles[user.role] ?? "border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]"}`}
                         >
                           {displayRole(user.role)}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-2.5">
                         <span
                           className={`${badgeClasses} ${
                             user.isLocked
@@ -829,12 +854,12 @@ export default function UserManagement() {
                           {user.isLocked ? "Locked" : user.status ?? "Unknown"}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-[var(--color-text-secondary)]">
+                      <td className="px-4 py-2.5 text-[var(--color-text-secondary)]">
                         {user.lastActive
                           ? new Date(user.lastActive).toLocaleString()
                           : "—"}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-2.5">
                         <div className={actionButtonsGroupClasses}>
                           {normalizeRole(currentUser?.role) === "ADMIN" &&
                           user.isLocked ? (
@@ -899,6 +924,53 @@ export default function UserManagement() {
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="flex flex-col gap-3 border-t border-[var(--color-border)] px-4 py-3 text-sm text-[var(--color-text-secondary)] sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                Showing {paginatedUsers.length} of {filteredUsers.length} users
+              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(Math.max(1, activePage - 1))}
+                  disabled={activePage === 1}
+                  className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <span>Page {activePage} of {totalPages}</span>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(Math.min(totalPages, activePage + 1))}
+                  disabled={activePage === totalPages}
+                  className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next
+                </button>
+                {totalPages >= 20 ? (
+                  <label className="flex items-center gap-2">
+                    <span>Go to</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={totalPages}
+                      placeholder={String(activePage)}
+                      aria-label="Go to user page"
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        if (!event.currentTarget.value.trim()) return;
+                        const requestedPage = Number(event.currentTarget.value);
+                        if (!Number.isFinite(requestedPage)) return;
+                        setCurrentPage(
+                          Math.min(totalPages, Math.max(1, Math.trunc(requestedPage))),
+                        );
+                        event.currentTarget.value = "";
+                      }}
+                      className="w-16 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2 py-1.5 text-center text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
+                    />
+                  </label>
+                ) : null}
+              </div>
             </div>
           </div>
         )}

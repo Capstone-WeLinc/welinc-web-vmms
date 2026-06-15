@@ -138,9 +138,9 @@ export default function AnomalyDetectionLog({ logs = [] }: AnomalyDetectionLogPr
   const headerRightClasses = 'flex gap-3 items-center';
   const filterButtonClasses = (active: boolean) => `flex items-center gap-2 px-3 py-2 rounded-lg border transition ${active ? 'active-filter' : 'border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)]'} cursor-pointer`;
   const filtersPanelClasses = 'grid gap-3 grid-cols-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4';
-  const tableWrapClasses = 'overflow-x-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card';
+  const tableWrapClasses = 'overflow-auto overscroll-contain rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card lg:max-h-[min(40rem,calc(100vh-12rem))]';
   const tableClasses = 'w-full text-left text-sm';
-  const tableHeaderRowClasses = 'border-b border-[var(--color-divider)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]';
+  const tableHeaderRowClasses = 'sticky top-0 z-10 border-b border-[var(--color-divider)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]';
   const tableHeaderCellClasses = 'px-4 py-3.5 font-semibold text-xs uppercase tracking-wider';
   const emptyStateClasses = 'px-4 py-12 text-center text-[var(--color-text-secondary)]';
   const tableRowClasses = 'hover:bg-[var(--color-input-bg-hover)] transition-colors border-b border-[var(--color-divider)]';
