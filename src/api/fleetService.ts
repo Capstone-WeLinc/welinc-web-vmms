@@ -239,6 +239,14 @@ export async function getUsers() {
   );
 }
 
+export async function getManagedUsers() {
+  if (!useBackend) return mockUsers.map((user) => normalizeUserRecord(user));
+
+  return fetchJSON<UserRecord[]>("/auth/users?system=VMMS").then((users) =>
+    users.map((user) => normalizeUserRecord(user)),
+  );
+}
+
 export async function getGarages() {
   if (!useBackend) return mockGarages.map((g) => ({ ...g }));
 
@@ -331,6 +339,25 @@ export async function updateUserStatus(userId: string, status: UserStatus) {
     method: "PATCH",
     body: JSON.stringify({ status }),
   });
+}
+
+export async function unlockUser(userId: string) {
+  if (!useBackend) {
+    const index = mockUsers.findIndex((user) => user.id === userId);
+    if (index < 0) throw new Error("User not found");
+
+    mockUsers[index] = {
+      ...mockUsers[index],
+      isLocked: false,
+      lockedAt: null,
+    };
+    return normalizeUserRecord(mockUsers[index]);
+  }
+
+  return fetchJSON<UserRecord>(
+    `/auth/users/${encodeURIComponent(userId)}/unlock`,
+    { method: "PATCH" },
+  ).then((user) => normalizeUserRecord(user));
 }
 
 export async function deleteUser(userId: string) {

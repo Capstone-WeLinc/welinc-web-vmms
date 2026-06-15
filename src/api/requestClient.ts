@@ -23,6 +23,18 @@ const defaultHeaders = {
   Accept: "application/json",
 };
 
+export class ApiError extends Error {
+  readonly status: number;
+  readonly data: unknown;
+
+  constructor(message: string, status: number, data: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.data = data;
+  }
+}
+
 function dispatchUnauthorizedEvent(status: number) {
   window.localStorage.removeItem("accessToken");
   window.dispatchEvent(
@@ -48,7 +60,6 @@ export async function apiRequest<T>(
   }
 
   const response = await fetch(buildUrl(path), {
-    credentials: "include",
     headers: {
       ...defaultHeaders,
       ...Object.fromEntries(headers.entries()),
@@ -61,10 +72,24 @@ export async function apiRequest<T>(
       dispatchUnauthorizedEvent(response.status);
     }
     const responseText = await response.text().catch(() => "");
-    throw new Error(
-      responseText ||
-        `Request failed ${response.status} ${response.statusText}`,
-    );
+    let responseData: unknown = responseText;
+
+    try {
+      responseData = responseText ? JSON.parse(responseText) : null;
+    } catch {
+      // Keep non-JSON responses as text.
+    }
+
+    const message =
+      typeof responseData === "object" &&
+      responseData !== null &&
+      "message" in responseData &&
+      typeof responseData.message === "string"
+        ? responseData.message
+        : responseText ||
+          `Request failed ${response.status} ${response.statusText}`;
+
+    throw new ApiError(message, response.status, responseData);
   }
 
   if (response.status === 204) {

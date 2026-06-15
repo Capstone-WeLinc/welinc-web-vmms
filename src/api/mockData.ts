@@ -91,6 +91,8 @@ export type UserRecord = {
   role: "ADMIN" | "MECHANIC" | "OPERATIONS";
   status: UserStatus;
   lastActive: string;
+  isLocked?: boolean;
+  lockedAt?: string | null;
 };
 
 export type UserRole = UserRecord["role"];

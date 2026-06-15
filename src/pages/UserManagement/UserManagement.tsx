@@ -17,7 +17,9 @@ import {
   createUser,
   deleteUser,
   getMaintenanceSchedules,
+  getManagedUsers,
   getUsers,
+  unlockUser,
   updateMaintenanceSchedule,
   updateUser,
   updateUserRole,
@@ -71,8 +73,8 @@ function validateUserField(value: string, label: string) {
     return `${label} is required.`;
   }
 
-  if (trimmedValue.length < 3 || trimmedValue.length > 16) {
-    return `${label} must be between 3 and 16 characters.`;
+  if (trimmedValue.length < 3) {
+    return `${label} must be 3 characters minimum.`;
   }
 
   return "";
@@ -147,6 +149,8 @@ export default function UserManagement() {
   const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
   const [processingUserId, setProcessingUserId] = useState<string | null>(null);
   const [confirmDeleteUser, setConfirmDeleteUser] = useState<UserRecord | null>(null);
+  const [confirmUnlockUser, setConfirmUnlockUser] =
+    useState<UserRecord | null>(null);
   const [blockedDeleteUser, setBlockedDeleteUser] =
     useState<UserRecord | null>(null);
   const [confirmCreateUser, setConfirmCreateUser] = useState(false);
@@ -220,7 +224,27 @@ export default function UserManagement() {
           getMaintenanceSchedules(),
         ]);
         if (!isMounted) return;
-        setUsers(resultUsers);
+
+        let usersWithLockState = resultUsers;
+        if (normalizeRole(me.role) === "ADMIN") {
+          const managedUsers = await getManagedUsers();
+          const managedUsersById = new Map(
+            managedUsers.map((user) => [user.id, user]),
+          );
+          usersWithLockState = resultUsers.map((user) => {
+            const managedUser = managedUsersById.get(user.id);
+            return managedUser
+              ? {
+                  ...user,
+                  isLocked: managedUser.isLocked,
+                  lockedAt: managedUser.lockedAt,
+                }
+              : user;
+          });
+        }
+
+        if (!isMounted) return;
+        setUsers(usersWithLockState);
         setCurrentUser(me);
         setMaintenanceSchedules(schedules);
       } catch (error) {
@@ -326,6 +350,29 @@ export default function UserManagement() {
     } finally {
       setProcessingUserId(null);
       setConfirmDeleteUser(null);
+    }
+  };
+
+  const performUnlockUser = async (user: UserRecord) => {
+    setProcessingUserId(user.id);
+    try {
+      const unlockedUser = await unlockUser(user.id);
+      setUsers((currentUsers) =>
+        currentUsers.map((currentUser) =>
+          currentUser.id === user.id
+            ? {
+                ...currentUser,
+                isLocked: unlockedUser.isLocked,
+                lockedAt: unlockedUser.lockedAt,
+              }
+            : currentUser,
+        ),
+      );
+    } catch (error) {
+      console.error("Failed to unlock user", error);
+    } finally {
+      setProcessingUserId(null);
+      setConfirmUnlockUser(null);
     }
   };
 
@@ -770,9 +817,14 @@ export default function UserManagement() {
                       </td>
                       <td className="px-4 py-3">
                         <span
-                          className={`${badgeClasses} ${statusStyles[user.status] ?? "border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]"}`}
+                          className={`${badgeClasses} ${
+                            user.isLocked
+                              ? "border border-rose-500/30 bg-rose-500/15 text-rose-700 dark:text-rose-200"
+                              : statusStyles[user.status] ??
+                                "border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]"
+                          }`}
                         >
-                          {user.status ?? "Unknown"}
+                          {user.isLocked ? "Locked" : user.status ?? "Unknown"}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-[var(--color-text-secondary)]">
@@ -782,6 +834,20 @@ export default function UserManagement() {
                       </td>
                       <td className="px-4 py-3">
                         <div className={actionButtonsGroupClasses}>
+                          {normalizeRole(currentUser?.role) === "ADMIN" &&
+                          user.isLocked ? (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmUnlockUser(user)}
+                              disabled={processingUserId === user.id}
+                              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-200"
+                            >
+                              {processingUserId === user.id
+                                ? "Unlocking..."
+                                : "Unlock"}
+                            </button>
+                          ) : null}
+
                           {normalizeRole(currentUser?.role) === "ADMIN" ? (
                             <button
                               type="button"
@@ -911,7 +977,6 @@ export default function UserManagement() {
                   type="text"
                   required
                   minLength={3}
-                  maxLength={16}
                   value={newUserForm.name}
                   placeholder="Enter Name"
                   onChange={(event) =>
@@ -940,7 +1005,6 @@ export default function UserManagement() {
                   type="text"
                   required
                   minLength={3}
-                  maxLength={16}
                   value={newUserForm.username}
                   placeholder="Enter username"
                   name="new-user-username"
@@ -1040,6 +1104,24 @@ export default function UserManagement() {
               </div>
             </form>
       </Modal>
+
+      <Modal
+        isOpen={Boolean(confirmUnlockUser)}
+        title="Unlock user account"
+        message={
+          confirmUnlockUser
+            ? `Unlock ${confirmUnlockUser.name} (${confirmUnlockUser.username})? Their failed login attempts will be reset.`
+            : ""
+        }
+        confirmLabel="Unlock Account"
+        cancelLabel="Cancel"
+        onConfirm={() => {
+          if (confirmUnlockUser) {
+            void performUnlockUser(confirmUnlockUser);
+          }
+        }}
+        onClose={() => setConfirmUnlockUser(null)}
+      />
 
       <Modal
         isOpen={confirmCreateUser}
