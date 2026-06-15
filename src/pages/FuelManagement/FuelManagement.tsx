@@ -282,8 +282,8 @@ export default function FuelManagement() {
           value={`${totalLiters.toLocaleString()}L`}
           label="Total Liters"
           subtitle="Filtered range metrics"
-          iconBgColor="rgba(20, 184, 166, 0.12)"
-          iconColor="#14b8a6"
+          iconBgColor="rgba(16, 185, 129, 0.12)"
+          iconColor="#10b981"
         />
         <KPIStatCard
           icon={<AlertTriangle size={20} strokeWidth={1.8} />}
@@ -298,8 +298,8 @@ export default function FuelManagement() {
           value={`${avgEfficiency} km/L`}
           label="Avg Efficiency"
           subtitle="Filtered range avg"
-          iconBgColor="rgba(34, 197, 94, 0.12)"
-          iconColor="#22c55e"
+          iconBgColor="rgba(16, 185, 129, 0.12)"
+          iconColor="#10b981"
         />
       </div>
 

@@ -142,7 +142,7 @@ function SearchableSelect({ id, label, options, placeholder = 'Select...', value
                     setOpen(false);
                     setQuery('');
                   }}
-                  className={`cursor-pointer px-4 py-3 text-sm ${highlight === idx ? 'bg-sky-700 text-white' : 'text-[var(--color-text-primary)]'}`}
+                  className={`cursor-pointer px-4 py-3 text-sm ${highlight === idx ? 'bg-[var(--color-brand-primary)] text-white' : 'text-[var(--color-text-primary)]'}`}
                 >
                   {opt.label}
                 </li>
@@ -221,7 +221,7 @@ export default function AddIncomeModal({
               <select
                 value={workOrderTemplate}
                 onChange={(e) => setWorkOrderTemplate(e.target.value)}
-                className="w-full appearance-none rounded-lg border border-[var(--color-input-border)] bg-[var(--color-input-bg)] px-4 py-2.5 text-sm text-[var(--color-text-primary)] focus:border-sky-500/50 focus:outline-hidden"
+                className="w-full appearance-none rounded-lg border border-[var(--color-input-border)] bg-[var(--color-input-bg)] px-4 py-2.5 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
               >
                 {workOrderTemplates.map((type) => (
                   <option

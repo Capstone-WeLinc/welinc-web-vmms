@@ -340,7 +340,7 @@ export default function MaintenanceLogs() {
               <tr>${headers.map(header => `<th>${header}</th>`).join('')}</tr>
             </thead>
             <tbody>
-              ${rows || '<tr><td colspan="9" style="text-align:center;padding:16px;color:#6b7280;">No logs to export</td></tr>'}
+              ${rows || '<tr><td colspan="9" style="text-align:center;padding:16px;color:#64748b;">No logs to export</td></tr>'}
             </tbody>
           </table>
           <script>

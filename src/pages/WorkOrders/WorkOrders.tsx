@@ -108,7 +108,7 @@ const headerSectionClasses = 'flex flex-col gap-4 border-b border-[var(--color-d
 const filtersGridClasses = 'grid gap-4 border-b border-[var(--color-divider)] px-6 py-5 md:grid-cols-5';
 const searchInputClasses = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-hidden';
 const selectInputClasses = 'w-full appearance-none rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-hidden';
-const sortButtonClasses = 'flex items-center justify-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-4 py-2.5 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-input-bg-hover)] hover:text-[var(--color-text-primary)] dark:hover:bg-slate-700 dark:hover:text-white';
+const sortButtonClasses = 'flex items-center justify-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-4 py-2.5 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-input-bg-hover)] hover:text-[var(--color-text-primary)] dark:hover:bg-[var(--color-input-bg-hover)] dark:hover:text-white';
 const taskGridClasses = 'grid gap-4 p-6 md:grid-cols-2 lg:grid-cols-3';
 const taskCardClasses = 'group cursor-pointer rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card transition-all hover:-translate-y-1 hover:border-[var(--color-brand-primary)] hover:bg-[var(--color-card-bg-hover)] hover:shadow-[0_10px_28px_rgba(15,23,42,0.12)] dark:hover:border-[var(--color-brand-primary)] dark:hover:bg-[var(--color-card-bg-hover)] dark:hover:shadow-[0_14px_32px_rgba(26,31,110,0.18)]';
 const emptyStateClasses = 'col-span-full rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-8 text-center shadow-card';
@@ -117,7 +117,7 @@ const backButtonClasses = 'mb-6 flex items-center gap-2 text-sm font-medium text
 const executionTableClasses = 'mb-6 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)]';
 const tableHeaderClasses = 'grid grid-cols-[1fr_80px_80px_100px_1.2fr_100px_100px_140px_100px] items-center gap-4 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-6 py-3 text-sm font-semibold text-[var(--color-text-secondary)]';
 const checklistHeaderClasses = 'grid grid-cols-[1fr_80px_80px_1fr_1fr_100px] items-center gap-4 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-6 py-3 text-sm font-semibold text-[var(--color-text-secondary)]';
-const warningBannerClasses = 'mt-6 flex items-start gap-3 rounded-lg border border-rose-500/20 bg-rose-500/10 px-5 py-4 shadow-[0_0_15px_rgba(244,63,94,0.06)]';
+const warningBannerClasses = 'mt-6 flex items-start gap-3 rounded-lg border border-[var(--color-status-error)]/20 bg-[var(--color-status-error)]/10 px-5 py-4 shadow-[0_0_15px_rgba(239,68,68,0.06)]';
 const actionButtonClasses = 'no-print flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-5 py-2.5 text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-brand-primary)] dark:hover:bg-[var(--color-card-bg-hover)] dark:hover:text-[var(--color-text-primary)] dark:hover:border-[var(--color-brand-primary)]';
 const completeButtonClasses = 'no-print flex items-center gap-2 rounded-lg px-6 py-2.5 text-sm font-bold transition-all duration-300';
 
@@ -433,19 +433,19 @@ export default function WorkOrders() {
       .map((it) => {
         const statusLabel =
           it.status === "checked"
-            ? `<span style="color:#166534;font-weight:700">Checked</span>`
+            ? `<span style="color:#10b981;font-weight:700">Checked</span>`
             : it.status === "changed"
-              ? `<span style="color:#075985;font-weight:700">Changed</span>`
+              ? `<span style="color:#3b82f6;font-weight:700">Changed</span>`
               : it.status === "notChecked"
-                ? `<span style="color:#92400e;font-weight:700">Not Checked</span>`
-                : `<span style="color:#374151;font-weight:700">Pending</span>`;
+                ? `<span style="color:#f59e0b;font-weight:700">Not Checked</span>`
+                : `<span style="color:#64748b;font-weight:700">Pending</span>`;
         return `
           <tr>
-            <td style="padding:8px;border:1px solid #e6e9ef">${it.text}</td>
-            <td style="padding:8px;border:1px solid #e6e9ef">${statusLabel}</td>
-            <td style="padding:8px;border:1px solid #e6e9ef">${(it.note || "").replace(/</g, "&lt;")}</td>
-            <td style="padding:8px;border:1px solid #e6e9ef">${it.partsUsed || ""}</td>
-            <td style="padding:8px;border:1px solid #e6e9ef;text-align:right">${it.partsCost || ""}</td>
+            <td style="padding:8px;border:1px solid #e2e8f0">${it.text}</td>
+            <td style="padding:8px;border:1px solid #e2e8f0">${statusLabel}</td>
+            <td style="padding:8px;border:1px solid #e2e8f0">${(it.note || "").replace(/</g, "&lt;")}</td>
+            <td style="padding:8px;border:1px solid #e2e8f0">${it.partsUsed || ""}</td>
+            <td style="padding:8px;border:1px solid #e2e8f0;text-align:right">${it.partsCost || ""}</td>
           </tr>`;
       })
       .join("");
@@ -454,15 +454,15 @@ export default function WorkOrders() {
       .map((it) => {
         const label =
           it.status === "pass"
-            ? `<span style="background:#16a34a;color:#fff;padding:4px 8px;border-radius:999px;font-weight:700">Pass</span>`
+            ? `<span style="background:#10b981;color:#fff;padding:4px 8px;border-radius:999px;font-weight:700">Pass</span>`
             : it.status === "fail"
               ? `<span style="background:#ef4444;color:#fff;padding:4px 8px;border-radius:999px;font-weight:700">Fail</span>`
-              : `<span style="background:#6b7280;color:#fff;padding:4px 8px;border-radius:999px;font-weight:700">Pending</span>`;
+              : `<span style="background:#64748b;color:#fff;padding:4px 8px;border-radius:999px;font-weight:700">Pending</span>`;
         return `
           <tr>
-            <td style="padding:8px;border:1px solid #e6e9ef">${it.text}</td>
-            <td style="padding:8px;border:1px solid #e6e9ef;text-align:center">${label}</td>
-            <td style="padding:8px;border:1px solid #e6e9ef">${(it.note || "").replace(/</g, "&lt;")}</td>
+            <td style="padding:8px;border:1px solid #e2e8f0">${it.text}</td>
+            <td style="padding:8px;border:1px solid #e2e8f0;text-align:center">${label}</td>
+            <td style="padding:8px;border:1px solid #e2e8f0">${(it.note || "").replace(/</g, "&lt;")}</td>
           </tr>`;
       })
       .join("");
@@ -525,12 +525,12 @@ export default function WorkOrders() {
           <meta charset="utf-8" />
           <title>Work Order - ${selectedTask.title}</title>
           <style>
-            body{font-family:Arial,Helvetica,sans-serif;color:#111;background:#fff;padding:24px}
+            body{font-family:Arial,Helvetica,sans-serif;color:#0d0d0d;background:#ffffff;padding:24px}
             h1,h2{margin:0 0 8px 0}
-            .muted{color:#6b7280}
+            .muted{color:#64748b}
             table{border-collapse:collapse;width:100%;margin-top:12px}
-            th{background:#f3f4f6;text-align:left;padding:8px;border:1px solid #e6e9ef}
-            td{padding:8px;border:1px solid #e6e9ef}
+            th{background:#f1f5f9;text-align:left;padding:8px;border:1px solid #e2e8f0}
+            td{padding:8px;border:1px solid #e2e8f0}
             .section{margin-top:18px}
           </style>
         </head>
@@ -552,7 +552,7 @@ export default function WorkOrders() {
                 </tr>
               </thead>
               <tbody>
-                ${execRows || `<tr><td colspan=5 style="padding:12px;text-align:center;color:#6b7280">No execution items</td></tr>`}
+                ${execRows || `<tr><td colspan=5 style="padding:12px;text-align:center;color:#64748b">No execution items</td></tr>`}
               </tbody>
             </table>
           </div>
@@ -568,7 +568,7 @@ export default function WorkOrders() {
                 </tr>
               </thead>
               <tbody>
-                ${checklistRows || `<tr><td colspan=3 style="padding:12px;text-align:center;color:#6b7280">No checklist items</td></tr>`}
+                ${checklistRows || `<tr><td colspan=3 style="padding:12px;text-align:center;color:#64748b">No checklist items</td></tr>`}
               </tbody>
             </table>
           </div>
@@ -946,12 +946,12 @@ export default function WorkOrders() {
                   <span
                     className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
                       task.status === "Overdue"
-                        ? "bg-rose-500/10 text-rose-700 border border-rose-500/30 dark:text-rose-200"
+                        ? "bg-[var(--color-status-error)]/10 text-[#c41c3b] border border-[var(--color-status-error)]/30 dark:text-[#fca5ac]"
                         : task.status === "Flagged"
-                          ? "bg-amber-500/10 text-amber-800 border border-amber-500/30 dark:text-amber-200"
+                          ? "bg-[var(--color-status-warning)]/10 text-[#92400e] border border-[var(--color-status-warning)]/30 dark:text-[#fed7aa]"
                           : task.status === "In-Progress"
-                            ? "bg-emerald-500/10 text-emerald-700 border border-emerald-500/30 dark:text-emerald-200"
-                            : "bg-sky-500/10 text-sky-700 border border-sky-500/30 dark:text-sky-200"
+                            ? "bg-[var(--color-status-success)]/10 text-[#047857] border border-[var(--color-status-success)]/30 dark:text-[#a7f3d0]"
+                            : "bg-[var(--color-status-info)]/10 text-[#0369a1] border border-[var(--color-status-info)]/30 dark:text-[#7dd3fc]"
                     }`}
                   >
                     {task.status}
@@ -1021,7 +1021,7 @@ export default function WorkOrders() {
                 className={`mb-4 overflow-hidden rounded-xl px-6 py-4 ${
                   !currentExecution.done
                     ? "border border-[var(--color-brand-primary)]/20 bg-[var(--color-brand-primary)]/10 shadow-card"
-                    : "border border-emerald-500/30 bg-emerald-500/10 shadow-card"
+                    : "border border-[var(--color-status-success)]/30 bg-[var(--color-status-success)]/10 shadow-card"
                 }`}
               >
                 <h3 className="text-lg font-semibold text-[var(--color-text-primary)]">
@@ -1030,8 +1030,8 @@ export default function WorkOrders() {
                     <span
                       className={`ml-3 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
                         !currentExecution.done
-                          ? "border border-[var(--color-brand-primary)]/20 bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] dark:text-sky-100"
-                          : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
+                          ? "border border-[var(--color-brand-primary)]/20 bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] dark:text-white"
+                          : "border border-[var(--color-status-success)]/30 bg-[var(--color-status-success)]/10 text-[#047857] dark:text-[#a7f3d0]"
                       }`}
                     >
                       {!currentExecution.done ? "Enabled" : "Completed"}

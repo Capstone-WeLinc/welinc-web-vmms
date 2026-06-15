@@ -72,7 +72,7 @@ const baseButtonClasses = 'w-full flex items-center gap-3 rounded-xl px-3 py-2 t
 const getNavLinkClass = (isActive: boolean, collapsed: boolean) => {
   const base = `${collapsed ? 'p-2 justify-center' : 'px-3 py-2 justify-start'} flex items-center gap-3 rounded-xl text-sm font-medium transition-colors`;
   if (isActive) {
-    return `${base} bg-[var(--color-brand-primary)] text-white border border-[rgba(26,31,110,0.3)] hover:bg-[var(--color-brand-dark)] hover:text-white dark:hover:bg-[var(--color-brand-dark)] dark:hover:text-white`;
+    return `${base} bg-[var(--color-brand-primary)] text-white border border-[var(--color-brand-primary)]/30 hover:bg-[var(--color-brand-dark)] hover:text-white dark:hover:bg-[var(--color-brand-dark)] dark:hover:text-white`;
   }
   return `${base} text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]`;
 };

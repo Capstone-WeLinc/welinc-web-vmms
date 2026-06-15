@@ -16,7 +16,7 @@ export default function PageHeader({
   return (
     <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[var(--color-divider)] pb-6">
       <div className="flex items-center gap-4">
-        <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-[#1a1f6e]/10 text-[#1a1f6e] dark:text-blue-400">
+        <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] dark:text-blue-400">
           <Icon size={24} strokeWidth={1.8} />
         </div>
         <div className="min-w-0">

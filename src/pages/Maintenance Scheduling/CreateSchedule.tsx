@@ -494,7 +494,7 @@ export default function CreateScheduleModal({
           {/* Vehicle Information */}
           <section className="card-base">
             <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-2xl border border-sky-400/30 bg-sky-400/10 p-2 text-sky-700 dark:text-sky-200">
+              <div className="rounded-2xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 p-2 text-[#0369a1] dark:text-[#7dd3fc]">
                 <Wrench className="h-4 w-4" />
               </div>
               <div>
@@ -645,7 +645,7 @@ export default function CreateScheduleModal({
                   key={option.value}
                   className={`flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition ${
                     triggerType === option.value
-                      ? "border-[var(--color-brand-primary)]/30 bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] shadow-[0_10px_30px_rgba(56,189,248,0.12)] dark:text-sky-100"
+                      ? "border-[var(--color-brand-primary)]/30 bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] shadow-[0_10px_30px_rgba(56,189,248,0.12)] dark:text-white"
                       : "border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:bg-[var(--color-card-bg-hover)]"
                   }`}
                 >
@@ -655,7 +655,7 @@ export default function CreateScheduleModal({
                     value={option.value}
                     checked={triggerType === option.value}
                     onChange={() => setTriggerType(option.value)}
-                    className="h-3.5 w-3.5 accent-sky-400"
+                    className="h-3.5 w-3.5 accent-[var(--color-brand-primary)]"
                   />
                   {option.label}
                 </label>
@@ -1023,7 +1023,7 @@ export default function CreateScheduleModal({
           {/* Work Order Checklist Preview */}
           <section className="card-base">
             <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-2xl border border-sky-400/30 bg-sky-400/10 p-2 text-sky-700 dark:text-sky-200">
+              <div className="rounded-2xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 p-2 text-[#0369a1] dark:text-[#7dd3fc]">
                 <ClipboardCheck className="h-4 w-4" />
               </div>
               <div>

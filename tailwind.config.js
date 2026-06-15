@@ -10,25 +10,37 @@ export default {
       colors: {
         // Brand Colors - Primary Color System
         'brand': {
-          'primary': '#1a1f6e',      // Navy Blue - primary buttons, active states, focus rings
+          'primary': '#1a1f6e',      // Deep Indigo/Blue - primary buttons, active states, focus rings
           'dark': '#151b4f',         // Dark Blue - hover states for primary
           'black': '#0d0d0d',        // Black - text primary, dark contexts
-          'danger': '#c0392b',       // Red - danger buttons, error states, critical alerts
-          'warning': '#e8b800',      // Yellow Gold - warning states, highlights
+          'danger': '#ef4444',       // Red - danger buttons, error states, critical alerts
+          'warning': '#f59e0b',      // Amber - warning states
           'success': '#10b981',      // Emerald - success states, completed actions
           'surface': '#ffffff',      // White - light mode backgrounds, cards
         },
+        // Status Colors
+        'status': {
+          'success': '#10b981',      // Emerald - Success/Active
+          'info': '#3b82f6',         // Blue - Info/Scheduled
+          'secondary': '#6366f1',    // Indigo - Secondary info
+          'warning': '#f59e0b',      // Amber - Warning
+          'caution': '#f97316',      // Orange - Caution
+          'error': '#ef4444',        // Red - Error/Critical
+          'pending': '#eab308',      // Yellow - Pending
+          'special': '#a855f7',      // Purple - Special states (On Leave)
+          'neutral': '#64748b',      // Slate - Neutral/Inactive
+        },
         // Semantic Colors
         'semantic': {
-          'error': '#c0392b',
-          'alert': '#e8b800',
+          'error': '#ef4444',
+          'alert': '#f59e0b',
           'success': '#10b981',
           'info': '#1a1f6e',
         },
         // Light Mode Surface Palette
         'surface': {
           'light': {
-            'bg': 'var(--color-surface-light-bg, #f8fafc)',
+            'bg': 'var(--color-surface-light-bg, #f1f5f9)',
             'card': 'var(--color-surface-light-card, #ffffff)',
             'border': 'var(--color-surface-light-border, #e2e8f0)',
             'input-bg': 'var(--color-surface-light-input-bg, #ffffff)',
@@ -46,7 +58,7 @@ export default {
         },
       },
       backgroundColor: {
-        'page': 'var(--color-page-bg, #f8fafc)',
+        'page': 'var(--color-page-bg, #f1f5f9)',
         'card': 'var(--color-card-bg, #ffffff)',
       },
       textColor: {

@@ -25,10 +25,10 @@ const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
     ref
   ) => {
     const variantStyles = {
-      info: 'bg-[#1a1f6e]/10 border-[#1a1f6e] text-[#1a1f6e] dark:text-blue-400',
-      success: 'bg-emerald-500/10 border-emerald-500 text-emerald-700 dark:text-emerald-400',
-      warning: 'bg-[#e8b800]/10 border-[#e8b800] text-[#e8b800]',
-      danger: 'bg-[#c0392b]/10 border-[#c0392b] text-[#c0392b]',
+      info: 'bg-[var(--color-brand-primary)]/10 border-[var(--color-brand-primary)] text-[var(--color-brand-primary)] dark:text-blue-400',
+      success: 'bg-[var(--color-brand-success)]/10 border-[var(--color-brand-success)] text-[var(--color-brand-success)] dark:text-emerald-400',
+      warning: 'bg-[var(--color-brand-warning)]/10 border-[var(--color-brand-warning)] text-[var(--color-brand-warning)]',
+      danger: 'bg-[var(--color-brand-danger)]/10 border-[var(--color-brand-danger)] text-[var(--color-brand-danger)]',
     };
 
     const baseStyles = 'rounded-xl border p-4 transition-colors';

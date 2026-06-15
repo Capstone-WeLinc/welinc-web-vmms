@@ -35,15 +35,15 @@ import type { MaintenanceTask } from "../../types/maintenance";
 const roleOptions: UserRole[] = ["ADMIN", "OPERATIONS", "MECHANIC"];
 
 const statusStyles: Record<UserRecord["status"], string> = {
-  Active: "text-emerald-700 bg-emerald-500/15 border border-emerald-500/30 dark:text-emerald-200",
-  Inactive: "text-amber-800 bg-amber-500/15 border border-amber-500/30 dark:text-amber-200",
-  Suspended: "text-rose-700 bg-rose-500/15 border border-rose-500/30 dark:text-rose-200",
+  Active: "text-[#047857] bg-[var(--color-status-success)]/15 border border-[var(--color-status-success)]/30 dark:text-[#a7f3d0]",
+  Inactive: "text-[#92400e] bg-[var(--color-status-warning)]/15 border border-[var(--color-status-warning)]/30 dark:text-[#fed7aa]",
+  Suspended: "text-[#c41c3b] bg-[var(--color-status-error)]/15 border border-[var(--color-status-error)]/30 dark:text-[#fca5ac]",
 };
 
 const roleStyles: Record<string, string> = {
-  ADMIN: "text-sky-700 bg-sky-500/15 border border-sky-500/30 dark:text-sky-200",
-  OPERATIONS: "text-amber-800 bg-amber-500/15 border border-amber-500/30 dark:text-amber-200",
-  MECHANIC: "text-emerald-700 bg-emerald-500/15 border border-emerald-500/30 dark:text-emerald-200",
+  ADMIN: "text-[#0369a1] bg-[var(--color-status-info)]/15 border border-[var(--color-status-info)]/30 dark:text-[#7dd3fc]",
+  OPERATIONS: "text-[#92400e] bg-[var(--color-status-warning)]/15 border border-[var(--color-status-warning)]/30 dark:text-[#fed7aa]",
+  MECHANIC: "text-[#047857] bg-[var(--color-status-success)]/15 border border-[var(--color-status-success)]/30 dark:text-[#a7f3d0]",
 };
 
 function normalizeRole(role?: string | null) {
