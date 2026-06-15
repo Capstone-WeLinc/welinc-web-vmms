@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AlertCircle, Loader2 } from "lucide-react";
-import { recordLoginActivity } from "../../api/fleetService";
-import { setLoginTime, setLastActivity } from "../../utils/session";
+import { recordLoginActivity } from "../../lib/api/authService";
+import { setLoginTime, setLastActivity } from "../../lib/utils/session";
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -30,7 +30,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       setLastActivity(new Date());
       
       // Async notify activity (non-blocking)
-      recordLoginActivity().catch((err) => console.error("Failed to record activity", err));
+      recordLoginActivity().catch((err: any) => console.error("Failed to record activity", err));
 
       onLogin();
       navigate("/dashboard", { replace: true });
