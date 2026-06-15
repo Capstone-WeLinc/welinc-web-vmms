@@ -12,6 +12,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   AlertCircle,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import { Card, Modal } from "../../components/ui";
@@ -23,9 +25,10 @@ import {
 import {
   getMaintenanceSchedules,
   deleteMaintenanceSchedule,
-  getVehicles,
-} from "../../api/fleetService";
-import { formatWorkOrderNumber } from "../../utils/workOrders";
+} from "../../lib/api/maintenanceService";
+import { getVehicles } from "../../lib/api/vehicleService";
+import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
+import { formatWorkOrderNumber } from "../../lib/utils/workOrders";
 
 interface KPIStatCardProps {
   icon: ReactNode;
@@ -48,20 +51,22 @@ const KPIStatCard = ({
     padding="none"
     className="p-5 transition duration-200 hover:-translate-y-0.5"
   >
-    <div className="mb-4 flex items-center justify-between">
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <p className="text-sm text-[var(--color-text-secondary)]">{label}</p>
+        <p className="mt-3 text-3xl font-bold text-[var(--color-text-primary)]">
+          {value}
+        </p>
+        <p className="mt-2 text-sm font-medium" style={{ color: iconColor }}>
+          {subtitle}
+        </p>
+      </div>
       <div
-        className="flex h-10 w-10 items-center justify-center rounded-xl"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[var(--color-border)]"
         style={{ background: iconBgColor, color: iconColor }}
       >
         {icon}
       </div>
-    </div>
-    <div className="text-3xl font-semibold tracking-tight text-[var(--color-text-primary)]">
-      {value}
-    </div>
-    <div className="mt-2 text-sm text-[var(--color-text-secondary)]">{label}</div>
-    <div className="mt-3 text-sm font-medium" style={{ color: iconColor }}>
-      {subtitle}
     </div>
   </Card>
 );
@@ -81,7 +86,7 @@ const Button = ({
   switch (variant) {
     case "primary":
       variantClass =
-        "bg-[#1a1f6e] hover:bg-[#151b4f] text-white border border-[#1a1f6e]";
+        "bg-[var(--color-brand-primary)] hover:bg-[var(--color-brand-dark)] text-white border border-[var(--color-brand-primary)]";
       break;
     case "secondary":
       variantClass =
@@ -89,11 +94,11 @@ const Button = ({
       break;
     case "danger":
       variantClass =
-        "bg-rose-500/15 text-rose-700 hover:bg-rose-500/25 border border-rose-500/30 dark:text-rose-200";
+        "bg-[var(--color-status-error)]/15 text-[#c41c3b] hover:bg-[var(--color-status-error)]/25 border border-[var(--color-status-error)]/30 dark:text-[#fca5ac]";
       break;
     case "warning":
       variantClass =
-        "bg-amber-500/15 text-amber-800 hover:bg-amber-500/25 border border-amber-500/30 dark:text-amber-200";
+        "bg-[var(--color-status-warning)]/15 text-[#92400e] hover:bg-[var(--color-status-warning)]/25 border border-[var(--color-status-warning)]/30 dark:text-[#fed7aa]";
       break;
   }
 
@@ -127,22 +132,22 @@ const StatusBadge = ({ status }: { status: MaintenanceStatus }) => {
   const getStatusDetails = () => {
     switch (status) {
       case "Overdue":
-        return "text-rose-700 bg-rose-500/15 border-rose-500/30 dark:text-rose-200";
+        return "text-[#c41c3b] bg-[var(--color-status-error)]/15 border-[var(--color-status-error)]/30 dark:text-[#fca5ac]";
       case "Flagged":
-        return "text-amber-800 bg-amber-500/15 border-amber-500/30 dark:text-amber-200";
+        return "text-[#92400e] bg-[var(--color-status-warning)]/15 border-[var(--color-status-warning)]/30 dark:text-[#fed7aa]";
       case "In-Progress":
-        return "text-emerald-700 bg-emerald-500/15 border-emerald-500/30 dark:text-emerald-200";
+        return "text-[#047857] bg-[var(--color-status-success)]/15 border-[var(--color-status-success)]/30 dark:text-[#a7f3d0]";
       case "Completed":
         return "text-[var(--color-text-secondary)] bg-[var(--color-card-bg)] border-[var(--color-border)]";
       case "Pending":
       default:
-        return "text-sky-700 bg-sky-500/15 border-sky-500/30 dark:text-sky-200";
+        return "text-[#0369a1] bg-[var(--color-status-info)]/15 border-[var(--color-status-info)]/30 dark:text-[#7dd3fc]";
     }
   };
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 font-medium rounded-full border px-2.5 py-0.5 text-[11px] uppercase tracking-wider ${getStatusDetails()}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${getStatusDetails()}`}
     >
       {status}
     </span>
@@ -248,13 +253,14 @@ const getTaskStyle = (status: MaintenanceStatus) => {
     case "In-Progress":
       return "border border-emerald-500/40 bg-emerald-500/15 text-emerald-700 shadow-sm dark:border-emerald-500/30 dark:bg-emerald-500/20 dark:text-emerald-200";
     case "Pending":
-      return "border border-sky-500/40 bg-sky-500/15 text-sky-700 shadow-sm dark:border-sky-500/30 dark:bg-sky-500/20 dark:text-sky-200";
+      return "border border-[var(--color-status-info)]/40 bg-[var(--color-status-info)]/15 text-[#0369a1] shadow-sm dark:border-[var(--color-status-info)]/30 dark:bg-[var(--color-status-info)]/20 dark:text-[#7dd3fc]";
     default:
       return "border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-primary)] shadow-sm";
   }
 };
 
 const MaintenanceSchedulingCombined = () => {
+  const schedulesPerPage = 8;
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -267,6 +273,10 @@ const MaintenanceSchedulingCombined = () => {
   const [workOrderTemplateFilter, setWorkOrderTemplateFilter] =
     useState<string>("All");
   const [dateRangeFilter, setDateRangeFilter] = useState<string>("All");
+  const [dateSortDirection, setDateSortDirection] = useState<"asc" | "desc">(
+    "desc",
+  );
+  const [currentPage, setCurrentPage] = useState(1);
   const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
   const [vehicles, setVehicles] = useState<{ value: string; label: string }[]>(
     [],
@@ -279,6 +289,8 @@ const MaintenanceSchedulingCombined = () => {
   const [selectedSchedulePage, setSelectedSchedulePage] = useState(0);
   const [confirmDeleteTask, setConfirmDeleteTask] =
     useState<MaintenanceTask | null>(null);
+
+  useBodyScrollLock(Boolean(confirmDeleteTask));
 
   const loadMaintenanceSchedules = () => {
     getMaintenanceSchedules().then(setTasks).catch(console.error);
@@ -343,27 +355,44 @@ const MaintenanceSchedulingCombined = () => {
 
   const vehicleOptions = [{ value: "All", label: "All Vehicles" }, ...vehicles];
 
-  const filteredTasks = tasks.filter((task) => {
-    const statusMatches =
-      statusFilter === "All" || task.status === statusFilter;
-    const vehicleMatches =
-      vehicleFilter === "All" || task.vehicleId === vehicleFilter;
-    const templateMatches =
-      workOrderTemplateFilter === "All" ||
-      task.title === workOrderTemplateFilter;
-    const dateMatches = dateFilter(new Date(task.date));
-    const searchMatches =
-      task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.vehicleId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.assignedDriver.toLowerCase().includes(searchQuery.toLowerCase());
-    return (
-      statusMatches &&
-      vehicleMatches &&
-      templateMatches &&
-      dateMatches &&
-      searchMatches
-    );
-  });
+  const filteredTasks = tasks
+    .filter((task) => {
+      const statusMatches =
+        statusFilter === "All" || task.status === statusFilter;
+      const vehicleMatches =
+        vehicleFilter === "All" || task.vehicleId === vehicleFilter;
+      const templateMatches =
+        workOrderTemplateFilter === "All" ||
+        task.title === workOrderTemplateFilter;
+      const dateMatches = dateFilter(new Date(task.date));
+      const searchMatches =
+        task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        task.vehicleId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        task.assignedDriver.toLowerCase().includes(searchQuery.toLowerCase());
+      return (
+        statusMatches &&
+        vehicleMatches &&
+        templateMatches &&
+        dateMatches &&
+        searchMatches
+      );
+    })
+    .sort((left, right) => {
+      const dateComparison = left.date.localeCompare(right.date);
+      if (dateComparison !== 0) {
+        return dateSortDirection === "asc" ? dateComparison : -dateComparison;
+      }
+      return right.id.localeCompare(left.id);
+    });
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredTasks.length / schedulesPerPage),
+  );
+  const activePage = Math.min(currentPage, totalPages);
+  const paginatedTasks = filteredTasks.slice(
+    (activePage - 1) * schedulesPerPage,
+    activePage * schedulesPerPage,
+  );
 
   const noTasks = tasks.length === 0;
 
@@ -494,10 +523,10 @@ const MaintenanceSchedulingCombined = () => {
         <div className="card-base p-6 transition duration-200 hover:-translate-y-0.5">
           <div className="mb-5 flex flex-col gap-5 border-b border-[var(--color-border)] pb-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
+              <h2 className="text-lg font-bold text-[var(--color-text-primary)]">
                 Maintenance Schedules
               </h2>
-              <p className="text-sm text-[var(--color-text-secondary)]">
+              <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
                 Current and completed scheduled items for the fleet.
               </p>
             </div>
@@ -507,9 +536,9 @@ const MaintenanceSchedulingCombined = () => {
                   type="button"
                   onClick={() => setViewMode("list")}
                   aria-pressed={viewMode === "list"}
-                  className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-warning)] ${
+                  className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-warning)] ${
                     viewMode === "list"
-                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white shadow-md dark:border-sky-400/50 dark:bg-[#2a317d] dark:text-white"
+                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white shadow-md dark:border-[var(--color-brand-primary)]/40 dark:bg-[var(--color-brand-primary)]/20 dark:text-white"
                       : "border-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"
                   }`}
                 >
@@ -520,9 +549,9 @@ const MaintenanceSchedulingCombined = () => {
                   type="button"
                   onClick={() => setViewMode("calendar")}
                   aria-pressed={viewMode === "calendar"}
-                  className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-warning)] ${
+                  className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-warning)] ${
                     viewMode === "calendar"
-                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white shadow-md dark:border-sky-400/50 dark:bg-[#2a317d] dark:text-white"
+                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white shadow-md dark:border-[var(--color-brand-primary)]/40 dark:bg-[var(--color-brand-primary)]/20 dark:text-white"
                       : "border-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"
                   }`}
                 >
@@ -539,21 +568,30 @@ const MaintenanceSchedulingCombined = () => {
               id="searchF"
               placeholder="Search tasks..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
             />
             <SelectField
               label="Vehicle"
               id="vehicleF"
               options={vehicleOptions}
               value={vehicleFilter}
-              onChange={(e) => setVehicleFilter(e.target.value)}
+              onChange={(e) => {
+                setVehicleFilter(e.target.value);
+                setCurrentPage(1);
+              }}
             />
             <SelectField
               label="Work Order Template"
               id="typeF"
               options={workOrderTemplateOptions}
               value={workOrderTemplateFilter}
-              onChange={(e) => setWorkOrderTemplateFilter(e.target.value)}
+              onChange={(e) => {
+                setWorkOrderTemplateFilter(e.target.value);
+                setCurrentPage(1);
+              }}
             />
             <SelectField
               label="Status"
@@ -567,7 +605,10 @@ const MaintenanceSchedulingCombined = () => {
                 { value: "Completed", label: "Completed" },
               ]}
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
             />
             <SelectField
               label="Date Range"
@@ -579,50 +620,70 @@ const MaintenanceSchedulingCombined = () => {
                 { value: "This Month", label: "This Month" },
               ]}
               value={dateRangeFilter}
-              onChange={(e) => setDateRangeFilter(e.target.value)}
+              onChange={(e) => {
+                setDateRangeFilter(e.target.value);
+                setCurrentPage(1);
+              }}
             />
           </div>
 
           {viewMode === "list" ? (
             <Card
               padding="none"
-              className="overflow-x-auto"
+              className="overflow-hidden"
             >
-              <table className="w-full border-collapse text-left text-sm text-[var(--color-text-secondary)]">
-                <thead className="bg-[var(--color-card-bg)] border-b border-[var(--color-border)] text-[var(--color-text-secondary)]">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left text-sm text-[var(--color-text-primary)]">
+                <thead className="sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-card-bg)] text-xs uppercase tracking-[0.16em] text-[var(--color-text-secondary)]">
                   <tr>
-                    <th className="px-6 py-4 font-semibold">
+                    <th className="px-5 py-3 font-medium">
                       {"Work Order No."}
                     </th>
-                    <th className="px-6 py-4 font-semibold">{"Plate No."}</th>
-                    <th className="px-6 py-4 font-semibold">
+                    <th className="px-5 py-3 font-medium">{"Plate No."}</th>
+                    <th className="px-5 py-3 font-medium">
                       {"Work Order Template"}
                     </th>
-                    <th className="px-6 py-4 font-semibold">{"Trigger"}</th>
-                    <th className="px-6 py-4 font-semibold">
-                      {"Scheduled Date"}
+                    <th className="px-5 py-3 font-medium">{"Trigger"}</th>
+                    <th className="px-5 py-3 font-medium">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDateSortDirection((direction) =>
+                            direction === "desc" ? "asc" : "desc",
+                          );
+                          setCurrentPage(1);
+                        }}
+                        className="inline-flex items-center gap-2 uppercase tracking-[0.16em] hover:text-[var(--color-text-primary)]"
+                      >
+                        <span>Scheduled Date</span>
+                        {dateSortDirection === "asc" ? (
+                          <ArrowUp className="h-3.5 w-3.5" />
+                        ) : (
+                          <ArrowDown className="h-3.5 w-3.5" />
+                        )}
+                      </button>
                     </th>
-                    <th className="px-6 py-4 font-semibold">{"Mechanic"}</th>
-                    <th className="px-6 py-4 font-semibold">{"Status"}</th>
-                    <th className="px-6 py-4 font-semibold">{"Actions"}</th>
+                    <th className="px-5 py-3 font-medium">{"Mechanic"}</th>
+                    <th className="px-5 py-3 font-medium">{"Status"}</th>
+                    <th className="px-5 py-3 font-medium">{"Actions"}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--color-divider)]">
                   {filteredTasks.length > 0 ? (
-                    filteredTasks.map((task) => (
+                    paginatedTasks.map((task) => (
                       <tr
                         key={task.id}
                         onClick={() => openScheduleDetails([task])}
                         className="cursor-pointer hover:bg-[var(--color-card-bg-hover)] transition-colors"
                       >
-                        <td className="px-6 py-4 font-medium text-[var(--color-text-primary)]">
+                        <td className="px-5 py-3 font-medium text-[var(--color-text-primary)]">
                           {formatWorkOrderNumber(task.id)}
                         </td>
-                        <td className="px-6 py-4 font-medium text-[var(--color-text-primary)]">
+                        <td className="px-5 py-3 font-medium text-[var(--color-text-primary)]">
                           {task.vehicleId}
                         </td>
-                        <td className="px-6 py-4">{task.title}</td>
-                        <td className="px-6 py-4">
+                        <td className="px-5 py-3 text-[var(--color-text-secondary)]">{task.title}</td>
+                        <td className="px-5 py-3">
                           <span className="inline-block rounded-full bg-[var(--color-card-bg)] px-2.5 py-1 text-xs font-medium text-[var(--color-text-secondary)]">
                             {task.triggerType === "TIME"
                               ? "Time-Based"
@@ -631,12 +692,12 @@ const MaintenanceSchedulingCombined = () => {
                                 : "Odometer"}
                           </span>
                         </td>
-                        <td className="px-6 py-4">{task.date}</td>
-                        <td className="px-6 py-4">{task.assignedDriver}</td>
-                        <td className="px-6 py-4">
+                        <td className="px-5 py-3 text-[var(--color-text-secondary)]">{task.date}</td>
+                        <td className="px-5 py-3 text-[var(--color-text-secondary)]">{task.assignedDriver}</td>
+                        <td className="px-5 py-3">
                           <StatusBadge status={task.status} />
                         </td>
-                        <td className="px-6 py-4 flex gap-2">
+                        <td className="flex gap-2 px-5 py-3">
                           <button
                             type="button"
                             onClick={(event) => {
@@ -679,7 +740,57 @@ const MaintenanceSchedulingCombined = () => {
                     </tr>
                   )}
                 </tbody>
-              </table>
+                </table>
+              </div>
+              {filteredTasks.length > 0 ? (
+                <div className="flex flex-col gap-3 border-t border-[var(--color-border)] px-6 py-3 text-sm text-[var(--color-text-secondary)] sm:flex-row sm:items-center sm:justify-between">
+                  <span>
+                    Showing {paginatedTasks.length} of {filteredTasks.length} schedules
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage(Math.max(1, activePage - 1))}
+                      disabled={activePage === 1}
+                      className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Previous
+                    </button>
+                    <span>Page {activePage} of {totalPages}</span>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage(Math.min(totalPages, activePage + 1))}
+                      disabled={activePage === totalPages}
+                      className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Next
+                    </button>
+                    {totalPages >= 20 ? (
+                      <label className="flex items-center gap-2">
+                        <span>Go to</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={totalPages}
+                          placeholder={String(activePage)}
+                          aria-label="Go to maintenance schedule page"
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter") return;
+                            if (!event.currentTarget.value.trim()) return;
+                            const requestedPage = Number(event.currentTarget.value);
+                            if (!Number.isFinite(requestedPage)) return;
+                            setCurrentPage(
+                              Math.min(totalPages, Math.max(1, Math.trunc(requestedPage))),
+                            );
+                            event.currentTarget.value = "";
+                          }}
+                          className="w-16 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2 py-1.5 text-center text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
+                        />
+                      </label>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
             </Card>
           ) : (
             <Card padding="none" className="p-6">
@@ -691,7 +802,7 @@ const MaintenanceSchedulingCombined = () => {
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
-                <h2 className="text-xl font-bold tracking-tight text-[var(--color-text-primary)]">
+                <h2 className="text-lg font-bold text-[var(--color-text-primary)]">
                   {monthName} {yearName}
                 </h2>
                 <button
@@ -702,10 +813,10 @@ const MaintenanceSchedulingCombined = () => {
                   <ChevronRight className="w-5 h-5" />
                 </button>
               </div>
-              <div className="grid grid-cols-7 gap-2 text-center text-sm text-[var(--color-text-secondary)] mb-2">
+              <div className="mb-2 grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
                   (day) => (
-                    <div key={day} className="py-2 font-medium">
+                    <div key={day} className="py-2">
                       {day}
                     </div>
                   ),
@@ -754,13 +865,13 @@ const MaintenanceSchedulingCombined = () => {
                                 key={task.id}
                                 className={`block w-full rounded-lg px-2.5 py-2 text-left transition hover:brightness-110 ${getTaskStyle(task.status)}`}
                               >
-                                <span className="block truncate text-[10px] font-bold">
+                                <span className="block truncate text-xs font-semibold">
                                   {formatWorkOrderNumber(task.id)}
                                 </span>
-                                <span className="block truncate text-[10px] font-medium">
+                                <span className="block truncate text-xs">
                                   Plate No.: {task.vehicleId}
                                 </span>
-                                <span className="block truncate text-[10px] font-medium">
+                                <span className="block truncate text-xs">
                                   Work Order: {task.title}
                                 </span>
                               </button>
@@ -836,7 +947,7 @@ const MaintenanceSchedulingCombined = () => {
             >
               <div className="flex items-center justify-between gap-4 border-b border-[var(--color-divider)] px-4 py-3">
                 <div>
-                  <h3 className="text-base font-semibold text-[var(--color-text-primary)]">
+                  <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
                     {selectedSchedule.title}
                   </h3>
                   <p className="text-sm text-[var(--color-text-secondary)]">
@@ -973,13 +1084,13 @@ const MaintenanceSchedulingCombined = () => {
       {confirmDeleteTask && (
         <div className="modal-overlay px-4 backdrop-blur-sm">
           <div className="modal-content w-full max-w-md rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">
+            <h3 className="mb-4 text-lg font-bold text-[var(--color-text-primary)]">
               Confirm Delete
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)] mb-6">
               Are you sure you want to delete this schedule?
               <br />
-              <span className="mt-2 block font-semibold text-[var(--color-text-primary)]">{confirmDeleteTask.title} - {confirmDeleteTask.vehicleId}</span>
+              <span className="mt-2 block font-bold text-[var(--color-text-primary)]">{confirmDeleteTask.title} - {confirmDeleteTask.vehicleId}</span>
               <br />
               This action cannot be undone.
             </p>
@@ -987,7 +1098,7 @@ const MaintenanceSchedulingCombined = () => {
               <button
                 type="button"
                 onClick={() => setConfirmDeleteTask(null)}
-                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
               >
                 Cancel
               </button>
@@ -1009,7 +1120,7 @@ const MaintenanceSchedulingCombined = () => {
                     setConfirmDeleteTask(null);
                   }
                 }}
-                className="rounded-xl bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-400"
+                className="rounded-xl bg-rose-500 px-4 py-2 text-sm font-medium text-white hover:bg-rose-400"
               >
                 Delete
               </button>

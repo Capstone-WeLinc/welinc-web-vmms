@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useBackend } from "../../api/requestClient";
+import { useBackend } from "../../lib/api/httpClient";
 import {
   ShieldCheck,
   Search,
@@ -8,7 +8,8 @@ import {
   Shield,
   UserCheck,
   Plus,
-  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import Button from "../../components/ui/Button";
@@ -16,32 +17,35 @@ import Modal from "../../components/ui/Modal";
 import {
   createUser,
   deleteUser,
-  getMaintenanceSchedules,
   getManagedUsers,
   getUsers,
   unlockUser,
-  updateMaintenanceSchedule,
   updateUser,
   updateUserRole,
-  getCurrentUser,
   type UserCreateInput,
   type UserRecord,
   type UserRole,
-} from "../../api/fleetService";
+} from "../../lib/api/userService";
+import { getCurrentUser } from "../../lib/api/authService";
+import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
+import {
+  getMaintenanceSchedules,
+  updateMaintenanceSchedule,
+} from "../../lib/api/maintenanceService";
 import type { MaintenanceTask } from "../../types/maintenance";
 
 const roleOptions: UserRole[] = ["ADMIN", "OPERATIONS", "MECHANIC"];
 
 const statusStyles: Record<UserRecord["status"], string> = {
-  Active: "text-emerald-700 bg-emerald-500/15 border border-emerald-500/30 dark:text-emerald-200",
-  Inactive: "text-amber-800 bg-amber-500/15 border border-amber-500/30 dark:text-amber-200",
-  Suspended: "text-rose-700 bg-rose-500/15 border border-rose-500/30 dark:text-rose-200",
+  Active: "text-[#047857] bg-[var(--color-status-success)]/15 border border-[var(--color-status-success)]/30 dark:text-[#a7f3d0]",
+  Inactive: "text-[#92400e] bg-[var(--color-status-warning)]/15 border border-[var(--color-status-warning)]/30 dark:text-[#fed7aa]",
+  Suspended: "text-[#c41c3b] bg-[var(--color-status-error)]/15 border border-[var(--color-status-error)]/30 dark:text-[#fca5ac]",
 };
 
 const roleStyles: Record<string, string> = {
-  ADMIN: "text-sky-700 bg-sky-500/15 border border-sky-500/30 dark:text-sky-200",
-  OPERATIONS: "text-amber-800 bg-amber-500/15 border border-amber-500/30 dark:text-amber-200",
-  MECHANIC: "text-emerald-700 bg-emerald-500/15 border border-emerald-500/30 dark:text-emerald-200",
+  ADMIN: "text-[#0369a1] bg-[var(--color-status-info)]/15 border border-[var(--color-status-info)]/30 dark:text-[#7dd3fc]",
+  OPERATIONS: "text-[#92400e] bg-[var(--color-status-warning)]/15 border border-[var(--color-status-warning)]/30 dark:text-[#fed7aa]",
+  MECHANIC: "text-[#047857] bg-[var(--color-status-success)]/15 border border-[var(--color-status-success)]/30 dark:text-[#a7f3d0]",
 };
 
 function normalizeRole(role?: string | null) {
@@ -113,26 +117,27 @@ function validatePassword(password: string) {
 // Layout & interaction classes
 const containerClasses = 'space-y-6';
 const statsGridClasses = 'grid gap-4 md:grid-cols-3';
-const cardClasses = 'rounded-[26px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card';
+const cardClasses = 'rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card';
 const headerSectionClasses = 'mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between';
 const filtersGridClasses = 'grid gap-3 md:grid-cols-[1.8fr_1fr_1fr] mb-6';
 const searchInputClasses = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none';
 const selectInputClasses = 'w-full appearance-none rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none';
 const loadingStateClasses = 'rounded-2xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-4 py-8 text-center text-sm text-[var(--color-text-secondary)]';
 const emptyStateClasses = 'rounded-2xl border border-dashed border-[var(--color-border)] px-4 py-10 text-center text-sm text-[var(--color-text-secondary)]';
-const tableWrapperClasses = 'overflow-hidden rounded-2xl border border-[var(--color-border)] shadow-card';
+const tableWrapperClasses = 'overflow-hidden rounded-xl border border-[var(--color-border)] shadow-card';
 const tableClasses = 'min-w-full text-left text-sm text-[var(--color-text-primary)]';
-const theadClasses = 'bg-[var(--color-card-bg)] text-xs uppercase tracking-[0.16em] text-[var(--color-text-secondary)]';
+const theadClasses = 'sticky top-0 z-10 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]';
 const tbodyClasses = 'divide-y divide-[var(--color-divider)]';
-const sortButtonClasses = 'inline-flex items-center gap-2 text-left uppercase tracking-[0.16em] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]';
+const sortButtonClasses = 'inline-flex items-center gap-2 text-left uppercase tracking-wider text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]';
 const actionButtonsGroupClasses = 'flex flex-wrap gap-2';
-const badgeClasses = 'rounded-full border px-2.5 py-1 text-xs font-semibold';
+const badgeClasses = 'inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-wider';
 const modalOverlayClasses = 'fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.5)] px-4 backdrop-blur-sm';
 const formClasses = 'space-y-4';
 const inputClasses = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none';
 const buttonGroupClasses = 'flex justify-end gap-2 pt-2';
 
 export default function UserManagement() {
+  const usersPerPage = 8;
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState<UserRecord | null>(null);
   const [users, setUsers] = useState<UserRecord[]>([]);
@@ -143,6 +148,7 @@ export default function UserManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [roleFilter, setRoleFilter] = useState<string>("All");
+  const [currentPage, setCurrentPage] = useState(1);
   const [sortField, setSortField] = useState<"name" | "role">("name");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -155,6 +161,11 @@ export default function UserManagement() {
     useState<UserRecord | null>(null);
   const [confirmCreateUser, setConfirmCreateUser] = useState(false);
   const [duplicateUser, setDuplicateUser] = useState<UserRecord | null>(null);
+
+  useBodyScrollLock(
+    Boolean(duplicateUser || confirmDeleteUser || blockedDeleteUser),
+  );
+
   const [passwordError, setPasswordError] = useState("");
   const [newUserForm, setNewUserForm] = useState<{
     name: string;
@@ -301,6 +312,12 @@ export default function UserManagement() {
         return 0;
       });
   }, [users, searchQuery, statusFilter, roleFilter, sortField, sortDirection]);
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / usersPerPage));
+  const activePage = Math.min(currentPage, totalPages);
+  const paginatedUsers = filteredUsers.slice(
+    (activePage - 1) * usersPerPage,
+    activePage * usersPerPage,
+  );
 
   const stats = useMemo(() => {
     const totalUsers = users.length;
@@ -453,7 +470,7 @@ export default function UserManagement() {
       const userInput: UserCreateInput = {
         name: newUserForm.name.trim(),
         username: newUserForm.username.trim(),
-        passwordHash: newUserForm.password,
+        password: newUserForm.password,
         role: selectedRole,
       };
 
@@ -466,7 +483,7 @@ export default function UserManagement() {
         const updatedUser = await updateUser(userToReplace.id, {
           name: userInput.name,
           username: userInput.username,
-          passwordHash: userInput.passwordHash,
+          password: userInput.password,
         });
         const userWithRole =
           userToReplace.role === selectedRole
@@ -611,6 +628,7 @@ export default function UserManagement() {
   };
 
   const handleSort = (field: "name" | "role") => {
+    setCurrentPage(1);
     if (sortField === field) {
       setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
     } else {
@@ -663,7 +681,7 @@ export default function UserManagement() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-[var(--color-text-secondary)]">{stat.label}</p>
-                  <p className="mt-3 text-3xl font-semibold text-[var(--color-text-primary)]">
+                  <p className="mt-3 text-3xl font-bold text-[var(--color-text-primary)]">
                     {stat.value}
                   </p>
                 </div>
@@ -679,7 +697,7 @@ export default function UserManagement() {
       <div className={cardClasses}>
         <div className={headerSectionClasses}>
           <div>
-            <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
+            <h2 className="text-lg font-bold text-[var(--color-text-primary)]">
               System Users
             </h2>
             <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
@@ -713,7 +731,10 @@ export default function UserManagement() {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
               placeholder="Search name, username, role..."
               className={searchInputClasses}
             />
@@ -723,7 +744,10 @@ export default function UserManagement() {
             <Filter className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" />
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
               className={selectInputClasses}
             >
               <option value="All">All Statuses</option>
@@ -737,7 +761,10 @@ export default function UserManagement() {
             <Filter className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" />
             <select
               value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
+              onChange={(e) => {
+                setRoleFilter(e.target.value);
+                setCurrentPage(1);
+              }}
               className={selectInputClasses}
             >
               <option value="All">All Roles</option>
@@ -760,50 +787,56 @@ export default function UserManagement() {
           </div>
         ) : (
           <div className={tableWrapperClasses}>
-            <div className="overflow-x-auto">
+            <div className="min-h-full overflow-x-auto">
               <table className={tableClasses}>
                 <thead className={theadClasses}>
                   <tr>
-                    <th className="px-4 py-3 font-medium">
+                    <th className="px-4 py-3">
                       <button
                         type="button"
                         onClick={() => handleSort("name")}
                         className={sortButtonClasses}
                       >
                         <span>User</span>
-                        <ArrowUpDown className="h-3.5 w-3.5 opacity-60" />
                         {sortField === "name" ? (
-                          <span>{sortDirection === "asc" ? "↑" : "↓"}</span>
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          ) : (
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          )
                         ) : null}
                       </button>
                     </th>
-                    <th className="px-4 py-3 font-medium">
+                    <th className="px-4 py-3">
                       <button
                         type="button"
                         onClick={() => handleSort("role")}
                         className={sortButtonClasses}
                       >
                         <span>Role</span>
-                        <ArrowUpDown className="h-3.5 w-3.5 opacity-60" />
                         {sortField === "role" ? (
-                          <span>{sortDirection === "asc" ? "↑" : "↓"}</span>
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          ) : (
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          )
                         ) : null}
                       </button>
                     </th>
-                    <th className="px-4 py-3 font-medium">Status</th>
-                    <th className="px-4 py-3 font-medium">Last Active</th>
-                    <th className="px-4 py-3 font-medium">Actions</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Last Active</th>
+                    <th className="px-4 py-3">Actions</th>
                   </tr>
                 </thead>
                 <tbody className={tbodyClasses}>
-                  {filteredUsers.map((user) => (
+                  {paginatedUsers.map((user) => (
                     <tr key={user.id} className="bg-transparent align-top">
                       <td className="px-4 py-3">
-                        <div className="space-y-1">
-                          <p className="font-medium text-[var(--color-text-primary)]">
+                        <div className="space-y-0.5">
+                          <p className="font-semibold text-[var(--color-text-primary)]">
                             {user.name}
                           </p>
-                          <p className="text-xs text-[var(--color-text-secondary)]">
+                          <p className="text-sm text-[var(--color-text-secondary)]">
                             {user.username}
                           </p>
                         </div>
@@ -840,7 +873,7 @@ export default function UserManagement() {
                               type="button"
                               onClick={() => setConfirmUnlockUser(user)}
                               disabled={processingUserId === user.id}
-                              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-200"
+                              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-200"
                             >
                               {processingUserId === user.id
                                 ? "Unlocking..."
@@ -861,7 +894,7 @@ export default function UserManagement() {
                                 });
                                 setIsCreateModalOpen(true);
                               }}
-                              className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-2 text-xs font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] ${processingUserId === user.id ? "cursor-not-allowed opacity-50" : ""}`}
+                              className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] ${processingUserId === user.id ? "cursor-not-allowed opacity-50" : ""}`}
                             >
                               Edit
                             </button>
@@ -875,7 +908,7 @@ export default function UserManagement() {
                               user.id === currentUser?.id ||
                               normalizeRole(currentUser?.role) !== "ADMIN"
                             }
-                            className={`table-delete-button ${
+                            className={`table-delete-button !text-sm !font-medium ${
                               processingUserId === user.id ||
                               user.id === currentUser?.id ||
                               currentUser?.role !== "ADMIN" ||
@@ -897,6 +930,53 @@ export default function UserManagement() {
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="flex flex-col gap-3 border-t border-[var(--color-border)] px-4 py-3 text-sm text-[var(--color-text-secondary)] sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                Showing {paginatedUsers.length} of {filteredUsers.length} users
+              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(Math.max(1, activePage - 1))}
+                  disabled={activePage === 1}
+                  className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <span>Page {activePage} of {totalPages}</span>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(Math.min(totalPages, activePage + 1))}
+                  disabled={activePage === totalPages}
+                  className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next
+                </button>
+                {totalPages >= 20 ? (
+                  <label className="flex items-center gap-2">
+                    <span>Go to</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={totalPages}
+                      placeholder={String(activePage)}
+                      aria-label="Go to user page"
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        if (!event.currentTarget.value.trim()) return;
+                        const requestedPage = Number(event.currentTarget.value);
+                        if (!Number.isFinite(requestedPage)) return;
+                        setCurrentPage(
+                          Math.min(totalPages, Math.max(1, Math.trunc(requestedPage))),
+                        );
+                        event.currentTarget.value = "";
+                      }}
+                      className="w-16 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2 py-1.5 text-center text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
+                    />
+                  </label>
+                ) : null}
+              </div>
             </div>
           </div>
         )}
@@ -921,7 +1001,7 @@ export default function UserManagement() {
                 setEditingUser(null);
                 setPasswordError("");
               }}
-              className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
+              className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
             >
               Cancel
             </button>
@@ -930,7 +1010,7 @@ export default function UserManagement() {
                 type="submit"
                 form="edit-user-form"
                 disabled={processingUserId === editingUser.id}
-                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-70"
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-70"
               >
                 {processingUserId === editingUser.id ? "Saving..." : "Save Changes"}
               </button>
@@ -956,7 +1036,7 @@ export default function UserManagement() {
                 disabled={
                   processingUserId === "create" || !isCreateFormValid
                 }
-                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-70"
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-70"
               >
                 {processingUserId === "create" ? "Creating..." : "Create User"}
               </button>
@@ -1139,12 +1219,12 @@ export default function UserManagement() {
       {duplicateUser && (
         <div className={modalOverlayClasses}>
           <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card">
-            <h3 className="mb-3 text-lg font-semibold text-[var(--color-text-primary)]">
+            <h3 className="mb-3 text-lg font-bold text-[var(--color-text-primary)]">
               Existing User Account
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)]">
               An account already exists with a similar name or username:{" "}
-              <span className="font-semibold text-[var(--color-text-primary)]">
+              <span className="font-bold text-[var(--color-text-primary)]">
                 {duplicateUser.name} ({duplicateUser.username})
               </span>
               .
@@ -1157,7 +1237,7 @@ export default function UserManagement() {
                   setIsCreateModalOpen(false);
                 }}
                 disabled={processingUserId === "create"}
-                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] disabled:opacity-50"
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -1165,7 +1245,7 @@ export default function UserManagement() {
                 type="button"
                 onClick={() => setDuplicateUser(null)}
                 disabled={processingUserId === "create"}
-                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-primary)] transition hover:bg-[var(--color-card-bg-hover)] disabled:opacity-50"
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition hover:bg-[var(--color-card-bg-hover)] disabled:opacity-50"
               >
                 Continue Editing
               </button>
@@ -1176,7 +1256,7 @@ export default function UserManagement() {
                   processingUserId === "create" ||
                   duplicateUser.id === currentUser?.id
                 }
-                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-50"
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-50"
               >
                 {processingUserId === "create" ? "Replacing..." : "Replace"}
               </button>
@@ -1188,13 +1268,13 @@ export default function UserManagement() {
       {confirmDeleteUser && (
         <div className={modalOverlayClasses}>
           <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card">
-            <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">
+            <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-4">
               Confirm Delete
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)] mb-6">
               Are you sure you want to delete the user
               <br />
-              <span className="mt-2 block font-semibold text-[var(--color-text-primary)]">{confirmDeleteUser.name} ({confirmDeleteUser.username})</span>
+              <span className="mt-2 block font-bold text-[var(--color-text-primary)]">{confirmDeleteUser.name} ({confirmDeleteUser.username})</span>
               <br />
               This action cannot be undone.
             </p>
@@ -1202,14 +1282,14 @@ export default function UserManagement() {
               <button
                 type="button"
                 onClick={() => setConfirmDeleteUser(null)}
-                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => performDeleteUser(confirmDeleteUser)}
-                className="rounded-xl bg-[var(--color-brand-danger)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] hover:bg-[var(--color-brand-danger)]/90"
+                className="rounded-xl bg-[var(--color-brand-danger)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] hover:bg-[var(--color-brand-danger)]/90"
               >
                 Delete
               </button>
@@ -1221,7 +1301,7 @@ export default function UserManagement() {
       {blockedDeleteUser && (
         <div className={modalOverlayClasses}>
           <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card">
-            <h3 className="mb-3 text-lg font-semibold text-[var(--color-text-primary)]">
+            <h3 className="mb-3 text-lg font-bold text-[var(--color-text-primary)]">
               User Cannot Be Deleted
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)]">
@@ -1235,7 +1315,7 @@ export default function UserManagement() {
               <button
                 type="button"
                 onClick={() => setBlockedDeleteUser(null)}
-                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90"
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90"
               >
                 Close
               </button>

@@ -1,4 +1,5 @@
 import { X, Wrench, AlertTriangle, ShieldAlert, CheckCircle, Info } from 'lucide-react';
+import { useBodyScrollLock } from '../../../lib/hooks/useBodyScrollLock';
 import type { FuelAnomaly } from '../types';
 import FuelStatusBadge from './FuelStatusBadge';
 
@@ -10,6 +11,8 @@ interface AnomalyDetailModalProps {
 }
 
 export default function AnomalyDetailModal({ isOpen, onClose, anomaly, onAction }: AnomalyDetailModalProps) {
+  useBodyScrollLock(isOpen && Boolean(anomaly));
+
   if (!isOpen || !anomaly) return null;
 
   const diff = anomaly.efficiency - anomaly.fleetAvg;
@@ -31,7 +34,7 @@ export default function AnomalyDetailModal({ isOpen, onClose, anomaly, onAction 
     ? 'rounded-xl border border-[var(--color-brand-danger)]/20 bg-[var(--color-brand-danger)]/10 p-4 text-[var(--color-brand-danger)]'
     : 'rounded-xl border border-[var(--color-brand-warning)]/20 bg-[var(--color-brand-warning)]/10 p-4 text-[var(--color-brand-warning)]';
   const actionFooterClasses = 'flex items-center justify-end gap-3 px-6 py-4 shrink-0 border-t border-[var(--color-border)] bg-[var(--color-card-bg)]';
-  const btnBase = 'rounded-xl px-4 py-2.5 text-xs font-semibold transition cursor-pointer';
+  const btnBase = 'rounded-xl px-4 py-2.5 text-sm font-medium transition cursor-pointer';
 
   return (
     <div className={overlayClasses}>
@@ -60,9 +63,9 @@ export default function AnomalyDetailModal({ isOpen, onClose, anomaly, onAction 
               <AlertTriangle className="w-5 h-5" />
               <div className="text-sm leading-relaxed">
                 <strong>Telemetry Alert:</strong> This vehicle is operating at{' '}
-                <span className="font-mono font-semibold">{anomaly.efficiency.toFixed(1)} km/L</span>, which is{' '}
-                <span className="font-mono font-semibold">{diffPercent}% {isAbove ? 'above' : 'below'}</span> the fleet average of{' '}
-                <span className="font-mono font-semibold">{anomaly.fleetAvg.toFixed(1)} km/L</span>.
+                <span className="font-mono font-bold">{anomaly.efficiency.toFixed(1)} km/L</span>, which is{' '}
+                <span className="font-mono font-bold">{diffPercent}% {isAbove ? 'above' : 'below'}</span> the fleet average of{' '}
+                <span className="font-mono font-bold">{anomaly.fleetAvg.toFixed(1)} km/L</span>.
               </div>
             </div>
           </div>
@@ -72,11 +75,11 @@ export default function AnomalyDetailModal({ isOpen, onClose, anomaly, onAction 
                 <Info size={16} className="text-[var(--color-brand-primary)]" />
               Potential Diagnostics
             </h4>
-            <div className="grid gap-3 text-xs">
+            <div className="grid gap-3 text-sm">
               <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-3.5 space-y-1.5 shadow-card">
                 <div className="flex justify-between font-semibold">
                   <span className="text-[var(--color-text-primary)]">1. Fuel Siphoning / Theft Threat</span>
-                  <span className="text-[var(--color-brand-danger)] uppercase tracking-wider text-[10px]">Medium Probability</span>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-brand-danger)]">Medium Probability</span>
                 </div>
                 <p className="text-[var(--color-text-secondary)] leading-relaxed">
                   Telemetry detected sharp drops in the fuel level sensor while the vehicle was parked. Odometer readings did not change during these intervals.
@@ -86,7 +89,7 @@ export default function AnomalyDetailModal({ isOpen, onClose, anomaly, onAction 
               <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-3.5 space-y-1.5 shadow-card">
                 <div className="flex justify-between font-semibold">
                   <span className="text-[var(--color-text-primary)]">2. Fuel Injector Leak / Engine Misfires</span>
-                  <span className="text-[var(--color-brand-warning)] uppercase tracking-wider text-[10px]">High Probability</span>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-brand-warning)]">High Probability</span>
                 </div>
                 <p className="text-[var(--color-text-secondary)] leading-relaxed">
                   Historical diagnostic codes indicate misfire alarms. Low efficiency correlates with high exhaust gas temperature readings.
@@ -96,7 +99,7 @@ export default function AnomalyDetailModal({ isOpen, onClose, anomaly, onAction 
               <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-3.5 space-y-1.5 shadow-card">
                 <div className="flex justify-between font-semibold">
                   <span className="text-[var(--color-text-primary)]">3. Driver Behavior Deviation</span>
-                  <span className="text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Low Probability</span>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Low Probability</span>
                 </div>
                 <p className="text-[var(--color-text-secondary)] leading-relaxed">
                   High engine idle times (over 45 minutes per trip) recorded. Advise driver briefing on eco-driving practices.
@@ -108,7 +111,7 @@ export default function AnomalyDetailModal({ isOpen, onClose, anomaly, onAction 
           {/* Action Checklist */}
           <div className="space-y-2">
             <h4 className="text-sm font-bold text-[var(--color-text-primary)] uppercase tracking-wider">Recommended Action Steps</h4>
-            <ul className="text-xs text-[var(--color-text-secondary)] space-y-2 pl-1">
+            <ul className="space-y-2 pl-1 text-sm text-[var(--color-text-secondary)]">
               <li className="flex items-center gap-2">
                 <CheckCircle size={14} className="text-[var(--color-brand-primary)] shrink-0" />
                 Inspect fuel caps and lines for physical tamper markings or leaks.

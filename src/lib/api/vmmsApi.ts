@@ -1,4 +1,4 @@
-import { fetchJSON, useBackend } from "./requestClient";
+import { fetchJSON, useBackend } from "./httpClient";
 import {
   mockDashboardStats,
   mockRecentActivity,
@@ -11,7 +11,7 @@ import {
   mockSystems,
   getMockChecklistTemplates,
   saveMockChecklistTemplates,
-} from "./mockData";
+} from "../mocks/vmmsMocks";
 
 const fallbackVehicleOptions = [
   { value: "ABC 1234", label: "ABC 1234 - Truck Alpha" },
@@ -27,17 +27,17 @@ const fallbackVehicleOptions = [
   { value: "EFG 2345", label: "EFG 2345 - Truck Kilo" },
   { value: "HU 6789", label: "HU 6789 - Truck Lima" },
 ];
-import type { MaintenanceTask, MaintenanceStatus } from "../types/maintenance";
+import type { MaintenanceTask, MaintenanceStatus } from "../../types/maintenance";
 import type {
   WorkOrderTemplate,
   ChecklistItemTemplate,
-} from "../data/ChecklistData";
+} from "../../data/ChecklistData";
 import type {
   UserStatus,
   UserRecord,
   UserRole,
   UserCreateInput,
-} from "./mockData";
+} from "../mocks/vmmsMocks";
 
 function normalizeRole(role?: string | null) {
   return (role ?? "").trim().toUpperCase();
@@ -149,74 +149,69 @@ export async function recordLoginActivity() {
 export async function getDashboardStats() {
   if (!useBackend) return mockDashboardStats;
 
-  try {
-    const [vehicles, schedules] = await Promise.all([
-      getVehicles(),
-      getMaintenanceSchedules(),
-    ]);
+  const [vehicles, schedules] = await Promise.all([
+    getVehicles(),
+    getMaintenanceSchedules(),
+  ]);
 
-    const now = new Date();
-    const oneWeekAgo = new Date(now);
-    oneWeekAgo.setDate(now.getDate() - 7);
+  const now = new Date();
+  const oneWeekAgo = new Date(now);
+  oneWeekAgo.setDate(now.getDate() - 7);
 
-    const totalVehicles = String(vehicles.length);
-    const activeWorkOrders = String(
-      schedules.filter((s) => (s.status ?? "") !== "Completed").length,
-    );
-    const overdueMaintenance = String(
-      schedules.filter((s) => {
-        if (!s.date) return false;
-        const d = new Date(s.date);
-        return d < now && (s.status ?? "") !== "Completed";
-      }).length,
-    );
-    const completedThisWeek = String(
-      schedules.filter((s) => {
-        if ((s.status ?? "") !== "Completed") return false;
-        if (!s.date) return false;
-        const d = new Date(s.date);
-        return d >= oneWeekAgo && d <= now;
-      }).length,
-    );
+  const totalVehicles = String(vehicles.length);
+  const activeWorkOrders = String(
+    schedules.filter((s) => (s.status ?? "") !== "Completed").length,
+  );
+  const overdueMaintenance = String(
+    schedules.filter((s) => {
+      if (!s.date) return false;
+      const d = new Date(s.date);
+      return d < now && (s.status ?? "") !== "Completed";
+    }).length,
+  );
+  const completedThisWeek = String(
+    schedules.filter((s) => {
+      if ((s.status ?? "") !== "Completed") return false;
+      if (!s.date) return false;
+      const d = new Date(s.date);
+      return d >= oneWeekAgo && d <= now;
+    }).length,
+  );
 
-    return [
-      {
-        label: "Total Vehicles",
-        value: totalVehicles,
-        change: "",
-        icon: "Truck",
-        color: "#3b82f6",
-        bgColor: "rgba(59, 130, 246, 0.12)",
-      },
-      {
-        label: "Active Work Orders",
-        value: activeWorkOrders,
-        change: "",
-        icon: "Wrench",
-        color: "#f59e0b",
-        bgColor: "rgba(245, 158, 11, 0.12)",
-      },
-      {
-        label: "Overdue Maintenance",
-        value: overdueMaintenance,
-        change: "",
-        icon: "AlertTriangle",
-        color: "#ef4444",
-        bgColor: "rgba(239, 68, 68, 0.12)",
-      },
-      {
-        label: "Completed This Week",
-        value: completedThisWeek,
-        change: "",
-        icon: "CheckCircle2",
-        color: "#22c55e",
-        bgColor: "rgba(34, 197, 94, 0.12)",
-      },
-    ];
-  } catch (err) {
-    console.error("Failed to load dashboard stats from backend", err);
-    return mockDashboardStats;
-  }
+  return [
+    {
+      label: "Total Vehicles",
+      value: totalVehicles,
+      change: "",
+      icon: "Truck",
+      color: "#3b82f6",
+      bgColor: "rgba(59, 130, 246, 0.12)",
+    },
+    {
+      label: "Active Work Orders",
+      value: activeWorkOrders,
+      change: "",
+      icon: "Wrench",
+      color: "#f59e0b",
+      bgColor: "rgba(245, 158, 11, 0.12)",
+    },
+    {
+      label: "Overdue Maintenance",
+      value: overdueMaintenance,
+      change: "",
+      icon: "AlertTriangle",
+      color: "#ef4444",
+      bgColor: "rgba(239, 68, 68, 0.12)",
+    },
+    {
+      label: "Completed This Week",
+      value: completedThisWeek,
+      change: "",
+      icon: "CheckCircle2",
+      color: "#22c55e",
+      bgColor: "rgba(34, 197, 94, 0.12)",
+    },
+  ];
 }
 
 export async function getRecentActivity() {
@@ -273,10 +268,20 @@ export async function createUser(user: UserCreateInput) {
     return createdUser;
   }
 
-  return fetchJSON<UserRecord>("/users", {
+  return fetchJSON<UserRecord>("/auth/users", {
     method: "POST",
-    body: JSON.stringify(user),
-  });
+    body: JSON.stringify({
+      name: user.name,
+      username: user.username,
+      password: user.password,
+      roleAssignments: [
+        {
+          role: user.role ?? "OPERATIONS",
+          system: "VMMS",
+        },
+      ],
+    }),
+  }).then((createdUser) => normalizeUserRecord(createdUser));
 }
 
 export async function updateUserRole(userId: string, role: UserRole) {
@@ -294,15 +299,17 @@ export async function updateUserRole(userId: string, role: UserRole) {
     return mockUsers[index] as UserRecord;
   }
 
-  return fetchJSON<UserRecord>(`/users/${encodeURIComponent(userId)}/role`, {
+  return fetchJSON<UserRecord>(`/auth/users/${encodeURIComponent(userId)}`, {
     method: "PATCH",
-    body: JSON.stringify({ role }),
-  });
+    body: JSON.stringify({
+      roleAssignments: [{ role, system: "VMMS" }],
+    }),
+  }).then((updatedUser) => normalizeUserRecord(updatedUser));
 }
 
 export async function updateUser(
   userId: string,
-  data: { name?: string; username?: string; passwordHash?: string },
+  data: { name?: string; username?: string; password?: string },
 ) {
   if (!useBackend) {
     const index = mockUsers.findIndex((u) => u.id === userId);
@@ -314,10 +321,10 @@ export async function updateUser(
     throw new Error("User not found");
   }
 
-  return fetchJSON<UserRecord>(`/users/${encodeURIComponent(userId)}`, {
+  return fetchJSON<UserRecord>(`/auth/users/${encodeURIComponent(userId)}`, {
     method: "PATCH",
     body: JSON.stringify(data),
-  });
+  }).then((updatedUser) => normalizeUserRecord(updatedUser));
 }
 
 export async function updateUserStatus(userId: string, status: UserStatus) {
@@ -335,10 +342,10 @@ export async function updateUserStatus(userId: string, status: UserStatus) {
     return mockUsers[index] as UserRecord;
   }
 
-  return fetchJSON<UserRecord>(`/users/${encodeURIComponent(userId)}/status`, {
+  return fetchJSON<UserRecord>(`/auth/users/${encodeURIComponent(userId)}/status`, {
     method: "PATCH",
-    body: JSON.stringify({ status }),
-  });
+    body: JSON.stringify({ isActive: status === "Active" }),
+  }).then((updatedUser) => normalizeUserRecord(updatedUser));
 }
 
 export async function unlockUser(userId: string) {
@@ -603,4 +610,4 @@ export type {
   UserRecord,
   UserRole,
   UserCreateInput,
-} from "./mockData";
+} from "../mocks/vmmsMocks";

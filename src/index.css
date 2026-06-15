@@ -7,13 +7,24 @@
   --color-brand-primary: #1a1f6e;
   --color-brand-dark: #151b4f;
   --color-brand-black: #0d0d0d;
-  --color-brand-danger: #c0392b;
-  --color-brand-warning: #e8b800;
+  --color-brand-danger: #ef4444;
+  --color-brand-warning: #f59e0b;
   --color-brand-success: #10b981;
   --color-brand-surface: #ffffff;
 
+  /* Status Colors */
+  --color-status-success: #10b981;
+  --color-status-info: #3b82f6;
+  --color-status-secondary: #6366f1;
+  --color-status-warning: #f59e0b;
+  --color-status-caution: #f97316;
+  --color-status-error: #ef4444;
+  --color-status-pending: #eab308;
+  --color-status-special: #a855f7;
+  --color-status-neutral: #64748b;
+
   /* Light Mode Surface Palette */
-  --color-surface-light-bg: #f8fafc;
+  --color-surface-light-bg: #f1f5f9;
   --color-surface-light-card: #ffffff;
   --color-surface-light-border: #e2e8f0;
   --color-surface-light-input-bg: #ffffff;
@@ -27,7 +38,7 @@
   --color-light-muted: #94a3b8;
 
   /* Light Mode Defaults */
-  --color-page-bg: #f8fafc;
+  --color-page-bg: #f1f5f9;
   --color-card-bg: #ffffff;
   --color-text-primary: #0d0d0d;
   --color-text-secondary: #64748b;
@@ -36,7 +47,7 @@
   --color-input-border: #cbd5e1;
   --color-divider: #e2e8f0;
   --color-card-bg-hover: #f1f5f9;
-  --color-input-bg-hover: #f8fafc;
+  --color-input-bg-hover: #f1f5f9;
 }
 
 /* Explicit Dark Mode Class Support */

@@ -1,9 +1,9 @@
-import type { MaintenanceTask } from "../types/maintenance";
+import type { MaintenanceTask } from "../../types/maintenance";
 import {
   defaultChecklistTemplates,
   type WorkOrderTemplate,
   type ChecklistItemTemplate,
-} from "../data/ChecklistData";
+} from "../../data/ChecklistData";
 
 export type DashboardStat = {
   label: string;
@@ -99,7 +99,7 @@ export type UserRole = UserRecord["role"];
 export type UserCreateInput = {
   name: string;
   username: string;
-  passwordHash: string;
+  password: string;
   role?: UserRole;
 };
 

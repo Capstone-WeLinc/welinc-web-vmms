@@ -35,7 +35,7 @@ export default function AnomalyDetection({ anomalies }: AnomalyDetectionProps) {
   const infoBannerClasses = 'rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card';
   const searchRowClasses = 'flex items-center gap-3 w-full';
   const searchInputClasses = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]';
-  const filterButtonClasses = `flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${showFilters ? 'border-[var(--color-brand-warning)]/20 bg-[var(--color-brand-warning)]/10 text-[var(--color-brand-warning)]' : 'border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)]'}`;
+  const filterButtonClasses = `flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${showFilters ? 'border-[var(--color-brand-warning)]/20 bg-[var(--color-brand-warning)]/10 text-[var(--color-brand-warning)]' : 'border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)]'}`;
   const filterPanelClasses = 'flex items-center gap-3 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card';
   const cardBaseClasses = 'rounded-[14px] p-5 border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card transition-all duration-200';
   const countCardClasses = 'rounded-[14px] p-5 border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card';
@@ -45,11 +45,11 @@ export default function AnomalyDetection({ anomalies }: AnomalyDetectionProps) {
       {/* Summary Metric Counters */}
       <div className={metricsGridClasses}>
         <div className={`${countCardClasses} border-[var(--color-brand-danger)]/20 bg-[var(--color-brand-danger)]/10`}>
-          <div className="text-sm font-semibold text-[var(--color-brand-danger)]">Anomaly Detections</div>
+          <div className="text-sm font-bold text-[var(--color-brand-danger)]">Anomaly Detections</div>
           <div className="mt-2 text-3xl font-black text-[var(--color-text-primary)] font-mono">{anomalyCount}</div>
         </div>
         <div className={`${countCardClasses} border-[var(--color-brand-warning)]/20 bg-[var(--color-brand-warning)]/10`}>
-          <div className="text-sm font-semibold text-[var(--color-brand-warning)]">Below Average</div>
+          <div className="text-sm font-bold text-[var(--color-brand-warning)]">Below Average</div>
           <div className="mt-2 text-3xl font-black text-[var(--color-text-primary)] font-mono">{belowAvgCount}</div>
         </div>
       </div>
@@ -59,7 +59,7 @@ export default function AnomalyDetection({ anomalies }: AnomalyDetectionProps) {
           <AlertTriangle size={20} className="text-[var(--color-brand-warning)] mt-1" strokeWidth={1.8} />
           <div className="flex-1">
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-[var(--color-brand-warning)]">Anomaly Detection</h3>
+              <h3 className="font-bold text-[var(--color-brand-warning)]">Anomaly Detection</h3>
             </div>
             <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
               Vehicles with fuel efficiency significantly below fleet average may indicate mechanical issues or potential fuel theft. Fleet average: 8.3 km/L
@@ -87,7 +87,7 @@ export default function AnomalyDetection({ anomalies }: AnomalyDetectionProps) {
 
       {showFilters && (
         <div className={filterPanelClasses}>
-          <label htmlFor="status-filter" className="text-xs font-semibold text-[var(--color-text-secondary)] whitespace-nowrap">Filter Status:</label>
+          <label htmlFor="status-filter" className="text-xs font-medium text-[var(--color-text-secondary)] whitespace-nowrap">Filter Status:</label>
           <select
             id="status-filter"
             value={statusFilter}
@@ -118,7 +118,7 @@ export default function AnomalyDetection({ anomalies }: AnomalyDetectionProps) {
               <div key={anomaly.vehicleId} className={`${cardBaseClasses} ${statusStyles}`}>
                 <div className="flex items-start justify-between gap-3 mb-4">
                   <div>
-                    <h3 className="font-semibold text-[var(--color-text-primary)]">{anomaly.vehicleName}</h3>
+                    <h3 className="font-bold text-[var(--color-text-primary)]">{anomaly.vehicleName}</h3>
                     <p className="text-xs text-[var(--color-text-secondary)] font-mono">{anomaly.vehicleId} · {anomaly.model}</p>
                   </div>
                   <FuelStatusBadge status={anomaly.status} size="sm" />
@@ -128,14 +128,14 @@ export default function AnomalyDetection({ anomalies }: AnomalyDetectionProps) {
                   <div className="flex items-baseline gap-3">
                     <div className="text-2xl font-bold text-[var(--color-text-primary)] font-mono">{anomaly.efficiency.toFixed(1)}</div>
                     <div className="text-xs text-[var(--color-text-secondary)]">km/L</div>
-                    <div className={`ml-auto text-xs font-semibold ${diffColor}`}>{diff >= 0 ? '+' : ''}{diffPercent}%</div>
+                    <div className={`ml-auto text-xs font-bold ${diffColor}`}>{diff >= 0 ? '+' : ''}{diffPercent}%</div>
                   </div>
 
                   <div className="flex items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-2 shadow-card">
                     <Zap size={16} className="text-[var(--color-text-secondary)]" strokeWidth={1.8} />
                     <div>
                       <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--color-text-secondary)]">Fleet avg</div>
-                      <div className="font-semibold text-[var(--color-text-primary)] font-mono">{anomaly.fleetAvg.toFixed(1)} km/L</div>
+                      <div className="font-bold text-[var(--color-text-primary)] font-mono">{anomaly.fleetAvg.toFixed(1)} km/L</div>
                     </div>
                   </div>
 

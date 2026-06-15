@@ -9,7 +9,12 @@ import FuelCostSummary from './components/FuelCostSummary';
 import AnomalyDetectionLog from './components/AnomalyDetectionLog';
 import FleetWideFuelReport from './components/FleetWideFuelReport';
 import EditFuelFillUpModal from './components/EditFuelFillUpModal';
-import { mockFuelFillUps, mockVehicleEfficiency, mockAnomalies, mockAnomalyLogs } from './mockData';
+import {
+  mockFuelFillUps,
+  mockVehicleEfficiency,
+  mockAnomalies,
+  mockAnomalyLogs,
+} from "../../lib/mocks/fuelMocks";
 import type { FuelFillUp } from './types';
 
 type KPIStatCardProps = {
@@ -40,8 +45,8 @@ function KPIStatCard({ icon, value, label, subtitle, iconBgColor, iconColor }: K
           {icon}
         </div>
       </div>
-      <div className="text-2xl font-semibold tracking-tight text-[var(--color-text-primary)]">{value}</div>
-      <div className="mt-2 text-sm text-[var(--color-text-secondary)]">{label}</div>
+      <div className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">{value}</div>
+      <div className="mt-2 text-xs font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">{label}</div>
       {subtitle && (
         <div className="mt-2 text-sm font-medium" style={{ color: iconColor }}>{subtitle}</div>
       )}
@@ -85,11 +90,11 @@ export default function FuelManagement() {
   const pickerButtonClasses = 'flex items-center gap-4 rounded-xl border px-3 py-2 text-xs font-medium transition cursor-pointer';
   const calendarGridClasses = 'grid grid-cols-2 gap-8 relative';
   const monthHeaderClasses = 'flex items-center justify-between mb-4 px-1';
-  const monthDaysGridClasses = 'grid grid-cols-7 text-center text-[11px] font-semibold gap-y-2';
+  const monthDaysGridClasses = 'grid grid-cols-7 text-center text-[11px] font-medium gap-y-2';
   const pickerPanelLayoutClasses = 'absolute top-full right-0 mt-3 z-50';
   const kpiGridClasses = 'grid gap-4 xl:grid-cols-4 lg:grid-cols-2';
   const tabsLayoutClasses = 'border-b border-[var(--color-border)]';
-  const tabButtonBaseClasses = 'flex items-center gap-2 border-b-2 px-4 py-3 font-medium transition-colors cursor-pointer';
+  const tabButtonBaseClasses = 'flex items-center gap-2 border-b-2 px-4 py-3 font-medium transition-colors cursor-pointer text-sm';
   const reportsHeaderClasses = 'flex flex-col sm:flex-row sm:items-center justify-between gap-4';
   const reportSwitcherClasses = 'flex flex-wrap gap-1 rounded-xl p-1 border';
   const reportPanelClasses = 'bg-[var(--color-card-bg)] border border-[var(--color-border)] rounded-2xl p-4 shadow-card transition-all duration-200 min-h-62.5';
@@ -277,8 +282,8 @@ export default function FuelManagement() {
           value={`${totalLiters.toLocaleString()}L`}
           label="Total Liters"
           subtitle="Filtered range metrics"
-          iconBgColor="rgba(20, 184, 166, 0.12)"
-          iconColor="#14b8a6"
+          iconBgColor="rgba(16, 185, 129, 0.12)"
+          iconColor="#10b981"
         />
         <KPIStatCard
           icon={<AlertTriangle size={20} strokeWidth={1.8} />}
@@ -293,8 +298,8 @@ export default function FuelManagement() {
           value={`${avgEfficiency} km/L`}
           label="Avg Efficiency"
           subtitle="Filtered range avg"
-          iconBgColor="rgba(34, 197, 94, 0.12)"
-          iconColor="#22c55e"
+          iconBgColor="rgba(16, 185, 129, 0.12)"
+          iconColor="#10b981"
         />
       </div>
 
@@ -336,7 +341,7 @@ export default function FuelManagement() {
       {/* Switcher Reports Section */}
       <div className="space-y-6 border-t border-[var(--color-border)] pt-8">
         <div className={reportsHeaderClasses}>
-          <h2 className="text-2xl font-semibold text-[var(--color-text-primary)]">Reports</h2>
+          <h2 className="text-2xl font-bold text-[var(--color-text-primary)]">Reports</h2>
 
           <div className={`${reportSwitcherClasses} bg-[var(--color-input-bg)] border-[var(--color-border)]`}>
             <button

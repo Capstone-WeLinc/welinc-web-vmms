@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { mockFuelFillUps } from '../mockData';
+import { mockFuelFillUps } from "../../../lib/mocks/fuelMocks";
+import { useBodyScrollLock } from "../../../lib/hooks/useBodyScrollLock";
 import type { FuelFillUp } from '../types';
 import { X } from 'lucide-react';
 
@@ -13,7 +14,7 @@ function InputField({ label, id, className, ...props }: InputFieldProps) {
   return (
     <div className="flex flex-col gap-1 w-full">
       {label && (
-        <label htmlFor={id} className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+        <label htmlFor={id} className="text-sm font-medium text-[var(--color-text-secondary)]">
           {label}
         </label>
       )}
@@ -42,7 +43,7 @@ function SelectField({ label, id, options, className, ...props }: SelectFieldPro
   return (
     <div className="flex flex-col gap-1 w-full">
       {label && (
-        <label htmlFor={id} className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+        <label htmlFor={id} className="text-sm font-medium text-[var(--color-text-secondary)]">
           {label}
         </label>
       )}
@@ -74,6 +75,8 @@ interface LogFuelFillUpProps {
 }
 
 export default function LogFuelFillUp({ onClose, onAdd }: LogFuelFillUpProps) {
+  useBodyScrollLock(true);
+
   const [formData, setFormData] = useState({
     vehicleId: 'TRK-0011',
     date: new Date().toISOString().split('T')[0],
@@ -130,7 +133,7 @@ export default function LogFuelFillUp({ onClose, onAdd }: LogFuelFillUpProps) {
 
         {/* Header */}
         <div className={modalHeaderClasses}>
-          <h2 className="text-2xl font-semibold text-[var(--color-text-primary)]">Log Fuel Fill-up</h2>
+          <h2 className="text-lg font-bold text-[var(--color-text-primary)]">Log Fuel Fill-up</h2>
           <button
             type="button"
             onClick={onClose}
@@ -183,7 +186,7 @@ export default function LogFuelFillUp({ onClose, onAdd }: LogFuelFillUpProps) {
 
             {/* Auto-calculated total */}
             <div className="flex flex-col gap-1 w-full">
-                <label className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+                <label className="text-sm font-medium text-[var(--color-text-secondary)]">
                   Total Fuel Cost (auto-calculated)
                 </label>
                 <div className="flex items-center rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3.5 py-2.5 h-10.5">
@@ -192,7 +195,7 @@ export default function LogFuelFillUp({ onClose, onAdd }: LogFuelFillUpProps) {
                     type="text"
                     value={totalCost}
                     readOnly
-                    className="ml-2 flex-1 bg-transparent text-[var(--color-text-primary)] focus:outline-none text-sm font-semibold"
+                    className="ml-2 flex-1 bg-transparent text-[var(--color-text-primary)] focus:outline-none text-sm font-medium"
                   />
                 </div>
                 <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Calculated: {formData.liters || '0'} L × ₱{formData.pricePerLiter}</p>
@@ -233,13 +236,13 @@ export default function LogFuelFillUp({ onClose, onAdd }: LogFuelFillUpProps) {
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-5 py-2.5 text-sm font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] transition active:scale-95"
+              className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-5 py-2.5 text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] transition active:scale-95"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="rounded-xl bg-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20 px-6 py-2.5 text-sm font-semibold text-white hover:bg-[var(--color-brand-primary-dark)] transition active:scale-95"
+              className="rounded-xl bg-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20 px-6 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-brand-primary-dark)] transition active:scale-95"
             >
               Save Entry
             </button>

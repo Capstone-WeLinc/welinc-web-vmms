@@ -57,7 +57,7 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
             {icon && <div className="flex-shrink-0">{icon}</div>}
             <div className="flex-1 min-w-0">
               {title && (
-                <h3 className="text-lg font-semibold text-[var(--color-text-primary)] truncate">
+                <h3 className="text-lg font-bold text-[var(--color-text-primary)] truncate">
                   {title}
                 </h3>
               )}

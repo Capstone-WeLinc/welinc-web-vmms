@@ -1,7 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { TrendingUp, TrendingDown, AlertTriangle, DollarSign } from 'lucide-react';
-import { getTransactions, getProfitabilitySummary, type Transaction } from '../../api/fleetService';
-import type { ProfitabilitySummary } from '../../api/mockData';
+import {
+  getTransactions,
+  getProfitabilitySummary,
+  type ProfitabilitySummary,
+  type Transaction,
+} from "../../lib/api/financeService";
 import PageHeader from '../../components/PageHeader/PageHeader';
 import AddIncomeModal from './AddIncomeModal';
 import AddExpenseModal from './AddExpenseModal';
@@ -23,8 +27,8 @@ function KPIStatCard({ icon, value, label, subtitle, iconBgColor, iconColor }: K
           {icon}
         </div>
       </div>
-      <div className="text-3xl font-semibold tracking-tight text-[var(--color-text-primary)]">{value}</div>
-      <div className="mt-2 text-sm text-[var(--color-text-secondary)]">{label}</div>
+      <div className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">{value}</div>
+      <div className="mt-2 text-xs font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">{label}</div>
       {subtitle && (
         <div className="mt-3 text-sm font-medium" style={{ color: iconColor }}>{subtitle}</div>
       )}
@@ -136,8 +140,8 @@ export default function ExpenseTrackingPage() {
           icon={<TrendingUp className="w-4 h-4" />}
           value={totalIncome}
           label="Total Fleet Income"
-          iconBgColor="rgba(34, 197, 94, 0.12)"
-          iconColor="#22c55e"
+          iconBgColor="rgba(16, 185, 129, 0.12)"
+          iconColor="#10b981"
         />
         <KPIStatCard
           icon={<TrendingDown className="w-4 h-4" />}
@@ -151,8 +155,8 @@ export default function ExpenseTrackingPage() {
           value={netProfit}
           label="Net Fleet Profit"
           subtitle={`Margin: ${profitMargin}%`}
-          iconBgColor="rgba(30, 58, 138, 0.12)"
-          iconColor="#1e3a8a"
+          iconBgColor="rgba(26, 31, 110, 0.12)"
+          iconColor="#1a1f6e"
         />
         <KPIStatCard
           icon={<AlertTriangle className="w-4 h-4" />}
@@ -171,7 +175,7 @@ export default function ExpenseTrackingPage() {
               <button
                 key={t.id}
                 onClick={() => setActiveTab(t.id)}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${activeTab === t.id ? 'bg-[var(--color-input-bg)] text-[var(--color-text-primary)] shadow-[0_8px_24px_rgba(26,31,110,0.12)]' : 'bg-[var(--color-input-bg)]/50 text-[var(--color-text-secondary)] hover:bg-[var(--color-input-bg)]'}`}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition ${activeTab === t.id ? 'bg-[var(--color-input-bg)] text-[var(--color-text-primary)] shadow-[0_8px_24px_rgba(26,31,110,0.12)]' : 'bg-[var(--color-input-bg)]/50 text-[var(--color-text-secondary)] hover:bg-[var(--color-input-bg)]'}`}
               >
                 {t.label}
               </button>
@@ -196,10 +200,10 @@ export default function ExpenseTrackingPage() {
               <div key={v.id} className="rounded-2xl border border-amber-300/20 bg-[var(--color-card-bg)] px-4 py-5 transition hover:border-amber-300/40 hover:bg-[var(--color-input-bg-hover)]">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <div className="text-base font-semibold text-[var(--color-text-primary)]">{v.name}</div>
+            <div className="text-base font-bold text-[var(--color-text-primary)]">{v.name}</div>
                     <div className="mt-1 text-xs text-[var(--color-text-secondary)]">{v.plate} • {v.model}</div>
                   </div>
-                  <div className="text-sm font-semibold text-rose-700 dark:text-rose-200">{v.netProfit}</div>
+                  <div className="text-sm font-bold text-[#c41c3b] dark:text-[#fca5ac]">{v.netProfit}</div>
                 </div>
                 <div className="mt-4 text-sm leading-6 text-[var(--color-text-secondary)]">{v.flagReason}</div>
               </div>
@@ -216,7 +220,7 @@ export default function ExpenseTrackingPage() {
                 key={type}
                 type="button"
                 onClick={() => setTransactionTypeFilter(type as 'All' | 'Income' | 'Expense')}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${transactionTypeFilter === type ? 'bg-[var(--color-card-bg)] text-[var(--color-text-primary)]' : 'bg-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-input-bg-hover)]'}`}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition ${transactionTypeFilter === type ? 'bg-[var(--color-card-bg)] text-[var(--color-text-primary)]' : 'bg-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-input-bg-hover)]'}`}
               >
                 {type}
               </button>
@@ -247,22 +251,22 @@ export default function ExpenseTrackingPage() {
       {/* Main content: tabs */}
       {activeTab === 'ranking' && (
         <section className="mx-3 mt-3 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card">
-          <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3">Vehicle Profitability Ranking</h3>
+          <h3 className="text-sm font-bold text-[var(--color-text-primary)] mb-3">Vehicle Profitability Ranking</h3>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-sm text-[var(--color-text-secondary)]">
-              <thead className="bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
+              <thead className="sticky top-0 z-10 bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
                 <tr>
-                  <th className="px-4 py-2 font-semibold">Rank</th>
-                  <th className="px-4 py-2 font-semibold">Vehicle</th>
-                  <th className="px-4 py-2 font-semibold">Plate</th>
-                  <th className="px-4 py-2 font-semibold">Total Income</th>
-                  <th className="px-4 py-2 font-semibold">Individual</th>
-                  <th className="px-4 py-2 font-semibold">Corporate</th>
-                  <th className="px-4 py-2 font-semibold">Fuel</th>
-                  <th className="px-4 py-2 font-semibold">Maint.</th>
-                  <th className="px-4 py-2 font-semibold">Repairs</th>
-                  <th className="px-4 py-2 font-semibold">Net Profit</th>
-                  <th className="px-4 py-2 font-semibold">Margin</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Rank</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Vehicle</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Plate</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Total Income</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Individual</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Corporate</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Fuel</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Maint.</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Repairs</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Net Profit</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Margin</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-divider)]">
@@ -271,14 +275,14 @@ export default function ExpenseTrackingPage() {
                     <td className="px-4 py-2">#{i + 1}</td>
                     <td className="px-4 py-2 font-medium text-[var(--color-text-primary)]">{r.vehicleName}</td>
                     <td className="px-4 py-2">{r.plate}</td>
-                    <td className="px-4 py-2 text-sky-700 font-semibold dark:text-sky-200">{r.income}</td>
+                    <td className="px-4 py-2 font-semibold text-[#0369a1] dark:text-[#7dd3fc]">{r.income}</td>
                     <td className="px-4 py-2">{r.individual}</td>
                     <td className="px-4 py-2">{r.corporate}</td>
                     <td className="px-4 py-2">{r.fuel}</td>
                     <td className="px-4 py-2">{r.maint}</td>
                     <td className="px-4 py-2">{r.repairs}</td>
                     <td className="px-4 py-2 text-green-400 font-semibold">{r.netProfit}</td>
-                    <td className="px-4 py-2"><span className="inline-block rounded-full bg-[var(--color-input-bg)] px-2 py-1 text-xs font-semibold text-[var(--color-text-secondary)]">{r.margin}%</span></td>
+                    <td className="px-4 py-2"><span className="inline-block rounded-full bg-[var(--color-input-bg)] px-2 py-1 text-xs font-medium text-[var(--color-text-secondary)]">{r.margin}%</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -288,13 +292,13 @@ export default function ExpenseTrackingPage() {
       )}
 
       {activeTab === 'history' && (
-        <section className="mx-3 mt-3 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card overflow-x-auto">
+        <section className="mx-3 mt-3 overflow-auto overscroll-contain rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card lg:max-h-[min(40rem,calc(100vh-12rem))]">
           <table className="w-full border-collapse text-left text-sm text-[var(--color-text-secondary)]">
-            <thead className="bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
+            <thead className="sticky top-0 z-10 bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
               <tr>
-                <th className="px-4 py-3 font-semibold">Date</th>
-                <th className="px-4 py-3 font-semibold">Type</th>
-                <th className="px-4 py-3 font-semibold">Vehicle</th>
+                <th className="px-4 py-3 text-xs font-semibold uppercase">Date</th>
+                <th className="px-4 py-3 text-xs font-semibold uppercase">Type</th>
+                <th className="px-4 py-3 text-xs font-semibold uppercase">Vehicle</th>
                 <th className="px-4 py-3 font-semibold">Reference / Description</th>
                 <th className="px-4 py-3 font-semibold">Client</th>
                 <th className="px-4 py-3 font-semibold text-right">Amount</th>
@@ -305,7 +309,7 @@ export default function ExpenseTrackingPage() {
                 <tr key={t.id} className="hover:bg-[var(--color-input-bg-hover)] transition-colors">
                   <td className="px-4 py-4 text-[var(--color-text-primary)]">{t.date}</td>
                   <td className="px-4 py-4">
-                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${t.type === 'Income' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-200' : 'bg-rose-500/10 text-rose-700 dark:text-rose-200'}`}>
+                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${t.type === 'Income' ? 'bg-[var(--color-status-success)]/10 text-[#047857] dark:text-[#a7f3d0]' : 'bg-[var(--color-status-error)]/10 text-[#c41c3b] dark:text-[#fca5ac]'}`}>
                       {t.type}
                     </span>
                   </td>
@@ -315,7 +319,7 @@ export default function ExpenseTrackingPage() {
                   </td>
                   <td className="px-4 py-4 text-[var(--color-text-primary)]">{t.description}</td>
                   <td className="px-4 py-4 text-[var(--color-text-primary)]">{t.client}</td>
-                  <td className={`px-4 py-4 text-right font-semibold ${t.type === 'Income' ? 'text-emerald-700 dark:text-emerald-200' : 'text-rose-700 dark:text-rose-200'}`}>
+                  <td className={`px-4 py-4 text-right font-semibold ${t.type === 'Income' ? 'text-[#047857] dark:text-[#a7f3d0]' : 'text-[#c41c3b] dark:text-[#fca5ac]'}`}>
                     {t.amount}
                   </td>
                 </tr>
@@ -327,24 +331,24 @@ export default function ExpenseTrackingPage() {
 
       {activeTab === 'breakdown' && (
         <section className="mx-3 mt-3 overflow-hidden rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card">
-          <div className="bg-[var(--color-input-bg)] px-5 py-4 text-sm font-semibold text-[var(--color-text-primary)]">Expense Breakdown by Vehicle</div>
+          <div className="bg-[var(--color-input-bg)] px-5 py-4 text-sm font-medium text-[var(--color-text-primary)]">Expense Breakdown by Vehicle</div>
           <div className="flex flex-wrap items-center gap-4 border-b border-[var(--color-border)] bg-[var(--color-input-bg)] px-5 py-3 text-xs text-[var(--color-text-secondary)]">
             <div className="flex items-center gap-2">
-              <span className="inline-flex h-2.5 w-2.5 rounded-full bg-sky-500" />
+              <span className="inline-flex h-2.5 w-2.5 rounded-full" style={{background: 'var(--color-status-info)'}} />
               Fuel %
             </div>
             <div className="flex items-center gap-2">
-              <span className="inline-flex h-2.5 w-2.5 rounded-full bg-indigo-500" />
+              <span className="inline-flex h-2.5 w-2.5 rounded-full" style={{background: 'var(--color-status-secondary)'}} />
               Maintenance %
             </div>
             <div className="flex items-center gap-2">
-              <span className="inline-flex h-2.5 w-2.5 rounded-full bg-rose-500" />
+              <span className="inline-flex h-2.5 w-2.5 rounded-full" style={{background: 'var(--color-status-error)'}} />
               Repair %
             </div>
           </div>
-          <div className="overflow-x-auto">
+          <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
             <table className="w-full border-collapse text-left text-sm text-[var(--color-text-secondary)]">
-              <thead className="bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
+              <thead className="sticky top-0 z-10 bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
                 <tr>
                   <th className="px-4 py-4 font-semibold">Vehicle</th>
                   <th className="px-4 py-4 font-semibold">Fuel Cost</th>
@@ -375,16 +379,16 @@ export default function ExpenseTrackingPage() {
                       <td className="px-4 py-4 font-semibold text-[var(--color-text-primary)]">₱{total.toLocaleString()}</td>
                       <td className="px-4 py-4">
                         <div className="flex h-3 overflow-hidden rounded-full bg-[var(--color-input-bg)]">
-                          <div className="bg-sky-500" style={{ width: `${fuelPct}%` }} />
-                          <div className="bg-indigo-500" style={{ width: `${maintPct}%` }} />
-                          <div className="bg-rose-500" style={{ width: `${repairPct}%` }} />
+                          <div style={{ width: `${fuelPct}%`, background: 'var(--color-status-info)' }} />
+                          <div style={{ width: `${maintPct}%`, background: 'var(--color-status-secondary)' }} />
+                          <div style={{ width: `${repairPct}%`, background: 'var(--color-status-error)' }} />
                         </div>
                         <div className="mt-2 flex items-center gap-2 text-[11px] text-[var(--color-text-secondary)]">
-                          <span className="inline-flex h-2.5 w-2.5 rounded-full bg-sky-500" />
+                          <span className="inline-flex h-2.5 w-2.5 rounded-full" style={{background: 'var(--color-status-info)'}} />
                           <span>{fuelPct}%</span>
-                          <span className="inline-flex h-2.5 w-2.5 rounded-full bg-indigo-500" />
+                          <span className="inline-flex h-2.5 w-2.5 rounded-full" style={{background: 'var(--color-status-secondary)'}} />
                           <span>{maintPct}%</span>
-                          <span className="inline-flex h-2.5 w-2.5 rounded-full bg-rose-500" />
+                          <span className="inline-flex h-2.5 w-2.5 rounded-full" style={{background: 'var(--color-status-error)'}} />
                           <span>{repairPct}%</span>
                         </div>
                       </td>
@@ -406,12 +410,12 @@ export default function ExpenseTrackingPage() {
             <span className="text-sm text-[var(--color-text-secondary)]">Corporate</span>
             <span className="text-sm font-medium text-[var(--color-text-primary)]">{incomeByClientType.corporate.percentage}%</span>
           </div>
-          <div className="h-3 bg-[#2d3a8c] rounded-full" style={{ width: `${incomeByClientType.corporate.percentage}%` }}></div>
+          <div className="h-3 bg-[var(--color-brand-primary)] rounded-full" style={{ width: `${incomeByClientType.corporate.percentage}%` }}></div>
           <div className="flex items-center justify-between mt-2 mb-1">
             <span className="text-sm text-[var(--color-text-secondary)]">Individual</span>
             <span className="text-sm font-medium text-[var(--color-text-primary)]">{incomeByClientType.individual.percentage}%</span>
           </div>
-          <div className="h-3 bg-emerald-500 rounded-full" style={{ width: `${incomeByClientType.individual.percentage}%` }}></div>
+          <div className="h-3 bg-[var(--color-brand-success)] rounded-full" style={{ width: `${incomeByClientType.individual.percentage}%` }}></div>
         </div>
         {/* Top 3 Most Profitable */}
         <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card transition duration-200 hover:border-[var(--color-border)]">
@@ -426,7 +430,7 @@ export default function ExpenseTrackingPage() {
                   <span className="font-medium text-sm text-[var(--color-text-primary)]">{v.name}</span>
                   <span className="text-xs text-[var(--color-text-secondary)]">{v.plate}</span>
                 </div>
-                <span className="text-sm font-semibold text-green-500">{v.netProfit}</span>
+                <span className="text-sm font-medium text-green-500">{v.netProfit}</span>
               </li>
             ))}
           </ul>

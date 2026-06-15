@@ -1,5 +1,6 @@
 import type { FuelFillUp } from '../types';
 import { X, Droplet, Calendar, Gauge, Navigation, User, DollarSign } from 'lucide-react';
+import { useBodyScrollLock } from '../../../lib/hooks/useBodyScrollLock';
 
 interface ViewFuelLogModalProps {
   isOpen: boolean;
@@ -8,6 +9,8 @@ interface ViewFuelLogModalProps {
 }
 
 export default function ViewFuelLogModal({ isOpen, onClose, fillUp }: ViewFuelLogModalProps) {
+  useBodyScrollLock(isOpen && Boolean(fillUp));
+
   if (!isOpen || !fillUp) return null;
   // Layout constants and inline visual styles
     const overlayClasses = 'modal-overlay backdrop-blur-sm p-4';
@@ -32,7 +35,7 @@ export default function ViewFuelLogModal({ isOpen, onClose, fillUp }: ViewFuelLo
               <Droplet size={18} strokeWidth={2} />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-[var(--color-text-primary)]">Fuel Fill-up Details</h2>
+              <h2 className="text-lg font-bold text-[var(--color-text-primary)]">Fuel Fill-up Details</h2>
               <p className="text-xs text-[var(--color-text-secondary)] font-mono mt-0.5">{fillUp.id}</p>
             </div>
           </div>
@@ -67,18 +70,18 @@ export default function ViewFuelLogModal({ isOpen, onClose, fillUp }: ViewFuelLo
 
             {/* Transaction Metrics Card */}
             <div className={cardClasses}>
-              <div className="flex items-center gap-2 text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider pb-1 border-b border-[var(--color-border)]">
+              <div className="flex items-center gap-2 text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider pb-1 border-b border-[var(--color-border)]">
                 <DollarSign size={14} className="text-[var(--color-brand-primary)]" />
                 Cost Breakdown
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <span className="text-xs text-[var(--color-text-secondary)]">Volume Filled</span>
-                  <div className="text-sm font-semibold text-[var(--color-text-primary)] font-mono mt-0.5">{fillUp.liters}L</div>
+                  <div className="text-sm font-bold text-[var(--color-text-primary)] font-mono mt-0.5">{fillUp.liters}L</div>
                 </div>
                 <div>
                   <span className="text-xs text-[var(--color-text-secondary)]">Price Per Liter</span>
-                  <div className="text-sm font-semibold text-[var(--color-text-primary)] font-mono mt-0.5">₱{fillUp.pricePerLiter?.toFixed(2)}</div>
+                  <div className="text-sm font-bold text-[var(--color-text-primary)] font-mono mt-0.5">₱{fillUp.pricePerLiter?.toFixed(2)}</div>
                 </div>
               </div>
               <div className="pt-2 border-t border-[var(--color-border)]">
@@ -90,13 +93,13 @@ export default function ViewFuelLogModal({ isOpen, onClose, fillUp }: ViewFuelLo
             </div>
 
             <div className={cardClasses}>
-              <div className="flex items-center gap-2 text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider pb-1 border-b border-[var(--color-border)]">
+              <div className="flex items-center gap-2 text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider pb-1 border-b border-[var(--color-border)]">
                 <Gauge size={14} className="text-[var(--color-brand-primary)]" />
                 Telemetry Logs
               </div>
                 <div>
                 <span className="text-xs text-[var(--color-text-secondary)]">Odometer Reading</span>
-                <div className="text-sm font-semibold text-[var(--color-text-primary)] font-mono mt-0.5">
+                <div className="text-sm font-bold text-[var(--color-text-primary)] font-mono mt-0.5">
                   {fillUp.odometer?.toLocaleString()} km
                 </div>
               </div>
@@ -104,9 +107,9 @@ export default function ViewFuelLogModal({ isOpen, onClose, fillUp }: ViewFuelLo
                 <span className="text-xs text-[var(--color-text-secondary)]">Performance Status</span>
                 <div className="text-xs font-medium mt-1">
                   {fillUp.trend === 'above' ? (
-                    <span className="inline-flex items-center px-2 py-1 rounded-md bg-[var(--color-brand-success)]/10 text-[var(--color-brand-success)] font-semibold">Optimal / Above Benchmark</span>
+                    <span className="inline-flex items-center px-2 py-1 rounded-md bg-[var(--color-brand-success)]/10 text-[var(--color-brand-success)] font-medium">Optimal / Above Benchmark</span>
                   ) : (
-                    <span className="inline-flex items-center px-2 py-1 rounded-md bg-[var(--color-brand-danger)]/10 text-[var(--color-brand-danger)] font-semibold">Increased Fuel Consumption</span>
+                    <span className="inline-flex items-center px-2 py-1 rounded-md bg-[var(--color-brand-danger)]/10 text-[var(--color-brand-danger)] font-medium">Increased Fuel Consumption</span>
                   )}
                 </div>
               </div>
@@ -122,8 +125,8 @@ export default function ViewFuelLogModal({ isOpen, onClose, fillUp }: ViewFuelLo
                 <Calendar size={14} />
               </div>
               <div>
-                <div className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Date Logged</div>
-                <div className="text-xs font-semibold text-[var(--color-text-secondary)] mt-0.5">{fillUp.date}</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Date Logged</div>
+                <div className="mt-0.5 text-sm font-medium text-[var(--color-text-primary)]">{fillUp.date}</div>
               </div>
             </div>
 
@@ -133,8 +136,8 @@ export default function ViewFuelLogModal({ isOpen, onClose, fillUp }: ViewFuelLo
                 <Navigation size={14} />
               </div>
               <div>
-                <div className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Fuel Station</div>
-                <div className="text-xs font-semibold text-[var(--color-text-secondary)] mt-0.5">{fillUp.station ?? 'N/A'}</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Fuel Station</div>
+                <div className="mt-0.5 text-sm font-medium text-[var(--color-text-primary)]">{fillUp.station ?? 'N/A'}</div>
               </div>
             </div>
 
@@ -144,15 +147,15 @@ export default function ViewFuelLogModal({ isOpen, onClose, fillUp }: ViewFuelLo
                 <User size={14} />
               </div>
               <div>
-                <div className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Filled By</div>
-                <div className="text-xs font-semibold text-[var(--color-text-secondary)] mt-0.5">{fillUp.filledBy ?? 'N/A'}</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Filled By</div>
+                <div className="mt-0.5 text-sm font-medium text-[var(--color-text-primary)]">{fillUp.filledBy ?? 'N/A'}</div>
               </div>
             </div>
           </div>
         </div>
 
           <div className="flex items-center justify-end px-6 py-4 border-t border-[var(--color-border)] bg-[var(--color-card-bg)]">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-semibold rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">Close Profile</button>
+          <button onClick={onClose} className="px-4 py-2 text-sm font-medium rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">Close Profile</button>
         </div>
 
       </div>

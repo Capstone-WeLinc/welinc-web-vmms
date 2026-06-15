@@ -1,4 +1,5 @@
 import { X } from 'lucide-react';
+import { useBodyScrollLock } from '../../../lib/hooks/useBodyScrollLock';
 
 type MaintenanceStatus = 'Pending' | 'In Progress' | 'Completed' | 'On Hold';
 type MaintenanceClass = 'Maintenance' | 'Repair' | 'Inspection';
@@ -25,15 +26,15 @@ interface ViewModalProps {
 const modalOverlayClasses = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4';
 const modalContentClasses = 'w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200';
 const modalHeaderClasses = 'flex items-center justify-between border-b border-[var(--color-divider)] pb-4 mb-5';
-const modalTitleClasses = 'text-lg font-semibold text-[var(--color-text-primary)]';
+const modalTitleClasses = 'text-lg font-bold text-[var(--color-text-primary)]';
 const modalSubtitleClasses = 'text-xs text-[var(--color-text-secondary)] mt-0.5';
 const closeButtonClasses = 'rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:bg-[var(--color-input-bg)] hover:text-[var(--color-text-primary)] transition-colors';
 const infoGridClasses = 'grid grid-cols-2 gap-y-5 gap-x-4';
 const infoLabelClasses = 'block text-xs font-medium text-[var(--color-text-secondary)] mb-1';
-const infoValueClasses = 'text-sm font-semibold text-[var(--color-text-primary)]';
+const infoValueClasses = 'text-sm font-bold text-[var(--color-text-primary)]';
 const classBadgeClasses = 'inline-block rounded-full bg-[var(--color-input-bg)] px-2.5 py-0.5 text-xs font-medium text-[var(--color-text-primary)]';
 const modalFooterClasses = 'mt-8 flex justify-end border-t border-[var(--color-divider)] pt-4';
-const modalCloseButtonClasses = 'font-semibold rounded-lg transition-all duration-200 active:scale-95 focus:outline-none bg-[var(--color-card-bg)] hover:bg-[var(--color-card-bg-hover)] text-[var(--color-text-secondary)] border border-[var(--color-border)] px-4 py-2.5 text-sm';
+const modalCloseButtonClasses = 'font-medium rounded-lg transition-all duration-200 active:scale-95 focus:outline-none bg-[var(--color-card-bg)] hover:bg-[var(--color-card-bg-hover)] text-[var(--color-text-secondary)] border border-[var(--color-border)] px-4 py-2.5 text-sm';
 
 const LogStatusBadge = ({ status }: { status: MaintenanceStatus }) => {
   const getStatusDetails = () => {
@@ -58,6 +59,8 @@ const LogStatusBadge = ({ status }: { status: MaintenanceStatus }) => {
 };
 
 export default function ViewModal({ isOpen, log, onClose }: ViewModalProps) {
+  useBodyScrollLock(isOpen && Boolean(log));
+
   if (!isOpen || !log) return null;
 
   return (
@@ -89,7 +92,7 @@ export default function ViewModal({ isOpen, log, onClose }: ViewModalProps) {
           </div>
           <div>
             <span className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">Type of Maintenance</span>
-            <span className="text-sm font-semibold text-[var(--color-text-primary)]">{log.type}</span>
+            <span className="text-sm font-bold text-[var(--color-text-primary)]">{log.type}</span>
           </div>
           <div>
             <span className={infoLabelClasses}>Class</span>
@@ -101,19 +104,19 @@ export default function ViewModal({ isOpen, log, onClose }: ViewModalProps) {
           </div>
           <div>
             <span className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">Date</span>
-            <span className="text-sm font-semibold text-[var(--color-text-primary)]">{log.date}</span>
+            <span className="text-sm font-bold text-[var(--color-text-primary)]">{log.date}</span>
           </div>
           <div>
             <span className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">Mileage</span>
-            <span className="text-sm font-semibold text-[var(--color-text-primary)]">{log.mileage.toLocaleString()} km</span>
+            <span className="text-sm font-bold text-[var(--color-text-primary)]">{log.mileage.toLocaleString()} km</span>
           </div>
           <div>
             <span className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">Mechanic / Shop</span>
-            <span className="text-sm font-semibold text-[var(--color-text-primary)]">{log.mechanic}</span>
+            <span className="text-sm font-bold text-[var(--color-text-primary)]">{log.mechanic}</span>
           </div>
           <div>
             <span className="block text-xs font-medium text-slate-400 mb-1">Cost</span>
-            <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-200">₱{log.cost.toLocaleString()}</span>
+            <span className="text-sm font-bold text-emerald-700 dark:text-emerald-200">₱{log.cost.toLocaleString()}</span>
           </div>
         </div>
 

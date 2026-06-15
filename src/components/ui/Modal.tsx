@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useBodyScrollLock } from '../../lib/hooks/useBodyScrollLock';
 import Button from './Button';
 
 export interface ModalProps {
@@ -32,18 +33,10 @@ const Modal: React.FC<ModalProps> = ({
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      // Focus on dialog for accessibility
-      dialogRef.current?.focus();
-    } else {
-      document.body.style.overflow = 'unset';
-    }
+  useBodyScrollLock(isOpen);
 
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
+  useEffect(() => {
+    if (isOpen) dialogRef.current?.focus();
   }, [isOpen]);
 
   useEffect(() => {
@@ -90,7 +83,7 @@ const Modal: React.FC<ModalProps> = ({
           <div className="border-b border-[var(--color-divider)] px-6 py-4">
             <h2
               id="modal-title"
-              className="text-xl font-semibold text-[var(--color-text-primary)]"
+              className="text-lg font-bold text-[var(--color-text-primary)]"
             >
               {title}
             </h2>

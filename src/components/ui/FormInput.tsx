@@ -23,9 +23,9 @@ const FormInput = React.forwardRef<HTMLInputElement, FormInputProps>(
     },
     ref
   ) => {
-    const baseInputStyles = 'w-full px-4 py-3 rounded-xl bg-[var(--color-input-bg)] border border-[var(--color-input-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] transition-colors focus:outline-none focus:border-[#1a1f6e] focus:ring-2 focus:ring-[#1a1f6e]/20';
+    const baseInputStyles = 'w-full px-4 py-3 rounded-xl bg-[var(--color-input-bg)] border border-[var(--color-input-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] transition-colors focus:outline-none focus:border-[var(--color-brand-primary)] focus:ring-2 focus:ring-[var(--color-brand-primary)]/20';
 
-    const errorStyles = error ? 'border-[#c0392b] focus:border-[#c0392b] focus:ring-[#c0392b]/20' : '';
+    const errorStyles = error ? 'border-[var(--color-brand-danger)] focus:border-[var(--color-brand-danger)] focus:ring-[var(--color-brand-danger)]/20' : '';
 
     const inputWrapperStyles = icon ? 'relative flex items-center' : '';
 
@@ -34,9 +34,9 @@ const FormInput = React.forwardRef<HTMLInputElement, FormInputProps>(
     return (
       <div className="flex flex-col gap-2">
         {label && (
-          <label className="text-sm font-medium text-[var(--color-text-primary)]">
+          <label className="text-sm font-semibold text-[var(--color-text-primary)]">
             {label}
-            {props.required && <span className="text-[#c0392b] ml-1">*</span>}
+            {props.required && <span className="text-[var(--color-brand-danger)] ml-1">*</span>}
           </label>
         )}
 
@@ -66,7 +66,7 @@ const FormInput = React.forwardRef<HTMLInputElement, FormInputProps>(
         </div>
 
         {error && errorMessage && (
-          <p id={`${props.id}-error`} className="text-xs text-[#c0392b] font-medium">
+          <p id={`${props.id}-error`} className="text-xs text-[var(--color-brand-danger)] font-medium">
             {errorMessage}
           </p>
         )}

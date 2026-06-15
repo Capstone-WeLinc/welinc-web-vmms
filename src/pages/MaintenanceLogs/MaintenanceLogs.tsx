@@ -9,9 +9,9 @@ import {
 } from 'lucide-react';
 import PageHeader from '../../components/PageHeader/PageHeader';
 import ViewModal from './components/ViewModal';
-import { getCurrentUser } from '../../api/fleetService';
-import type { UserRecord } from '../../api/fleetService';
-import { isMechanicRole } from '../../utils/permissions';
+import { getCurrentUser } from "../../lib/api/authService";
+import type { UserRecord } from "../../lib/api/authService";
+import { isMechanicRole } from "../../lib/utils/permissions";
 
 type MaintenanceClass = 'Maintenance' | 'Repair' | 'Inspection';
 type MaintenanceStatus = 'Pending' | 'In Progress' | 'Completed' | 'On Hold';
@@ -76,12 +76,12 @@ const filterGridClasses = 'grid gap-3 mb-6 grid-cols-1 md:grid-cols-5';
 const alertBannerClasses = 'mb-6 rounded-lg border border-rose-500/30 bg-rose-500/10 p-4';
 const alertContentClasses = 'flex items-start gap-3';
 const alertActionsClasses = 'flex gap-2 shrink-0';
-const tableWrapperClasses = 'overflow-x-auto rounded-xl border border-[var(--color-border)] shadow-card';
+const tableWrapperClasses = 'overflow-auto overscroll-contain rounded-xl border border-[var(--color-border)] shadow-card lg:max-h-[min(40rem,calc(100vh-12rem))]';
 const tableClasses = 'w-full border-collapse text-left text-sm text-[var(--color-text-secondary)]';
-const tableHeadClasses = 'bg-[var(--color-input-bg)] border-b border-[var(--color-border)]';
+const tableHeadClasses = 'sticky top-0 z-10 bg-[var(--color-input-bg)] border-b border-[var(--color-border)]';
 const tableRowClasses = 'hover:bg-[var(--color-card-bg-hover)] transition-colors';
 const tableCellClasses = 'px-4 py-3';
-const tableHeaderCellClasses = 'px-4 py-3 font-semibold text-[var(--color-text-secondary)]';
+const tableHeaderCellClasses = 'px-4 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]';
 const footerRowClasses = 'mt-5 pt-4 border-t border-[var(--color-border)] flex items-center justify-between text-sm text-[var(--color-text-secondary)]';
 const paginationButtonClasses = 'flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] disabled:opacity-20 disabled:hover:bg-[var(--color-input-bg)] cursor-pointer disabled:cursor-not-allowed transition';
 const pageLabelClasses = 'text-xs text-[var(--color-text-secondary)] select-none font-medium px-1';
@@ -340,7 +340,7 @@ export default function MaintenanceLogs() {
               <tr>${headers.map(header => `<th>${header}</th>`).join('')}</tr>
             </thead>
             <tbody>
-              ${rows || '<tr><td colspan="9" style="text-align:center;padding:16px;color:#6b7280;">No logs to export</td></tr>'}
+              ${rows || '<tr><td colspan="9" style="text-align:center;padding:16px;color:#64748b;">No logs to export</td></tr>'}
             </tbody>
           </table>
           <script>
@@ -466,7 +466,7 @@ export default function MaintenanceLogs() {
             <div className={alertContentClasses}>
               <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm font-semibold text-rose-700 dark:text-rose-200">
+                <p className="text-sm font-medium text-rose-700 dark:text-rose-200">
                   Delete {selectedIds.length} selected record{selectedIds.length > 1 ? 's' : ''}? This cannot be undone.
                 </p>
               </div>
@@ -515,7 +515,22 @@ export default function MaintenanceLogs() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--color-divider)]">
-              {paginatedLogs.map(log => (
+              {paginatedLogs.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={isMechanic ? 10 : 11}
+                    className="px-6 py-10 text-center"
+                  >
+                    <FileText className="mx-auto mb-3 h-9 w-9 text-[var(--color-text-secondary)] opacity-50" />
+                    <p className="font-semibold text-[var(--color-text-primary)]">
+                      No maintenance logs found
+                    </p>
+                    <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                      Try adjusting the current search or filters.
+                    </p>
+                  </td>
+                </tr>
+              ) : paginatedLogs.map(log => (
                 <tr key={log.id} className={`${tableRowClasses} hover:bg-[var(--color-input-bg-hover)] transition-colors`}>
                   {!isMechanic && (
                     <td className={tableCellClasses}>

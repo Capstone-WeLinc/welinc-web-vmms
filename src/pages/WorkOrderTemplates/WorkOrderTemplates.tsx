@@ -13,7 +13,8 @@ import {
   getChecklistTemplates,
   getMaintenanceSchedules,
   saveChecklistTemplates,
-} from "../../api/fleetService";
+} from "../../lib/api/maintenanceService";
+import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
 import type { MaintenanceTask } from "../../types/maintenance";
 
 type WorkOrderTemplate = string;
@@ -28,29 +29,30 @@ const containerClasses = 'space-y-6';
 const layoutClasses = 'flex flex-col lg:flex-row gap-6 items-start';
 const sidebarContainerClasses = 'w-full lg:w-1/3 xl:w-1/4 lg:sticky lg:top-6';
 const sidebarCardClasses = 'rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 h-full shadow-card';
-const sidebarHeadingClasses = 'text-sm font-semibold text-[var(--color-text-primary)] mb-4 px-2';
+const sidebarHeadingClasses = 'text-sm font-bold text-[var(--color-text-primary)] mb-4 px-2';
 const templateListClasses = 'space-y-1 max-h-[420px] overflow-y-auto pr-1';
 const templateButtonBaseClasses = 'group w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200';
-const templateButtonSelectedClasses = 'bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20 shadow-[0_0_15px_rgba(26,31,110,0.1)] dark:bg-[#22305a]/40 dark:text-sky-100 dark:border-sky-400/30';
-const templateButtonUnselectedClasses = 'text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] border border-transparent dark:hover:text-slate-100';
-const addTypeContainerClasses = 'mt-4 p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] flex flex-col gap-2';
+const templateButtonSelectedClasses = 'bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20 shadow-[0_0_15px_rgba(26,31,110,0.1)] dark:bg-[var(--color-brand-primary)]/20 dark:text-white dark:border-[var(--color-brand-primary)]/40';
+const templateButtonUnselectedClasses = 'text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] border border-transparent dark:hover:text-white';
+const addTypeContainerClasses = 'mb-4 p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] flex flex-col gap-2';
 const addTypeInputClasses = 'w-full bg-[var(--color-input-bg)] border border-[var(--color-input-border)] rounded-lg px-3 py-1.5 text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-brand-primary)]';
 const addTypeButtonGroupClasses = 'flex justify-end gap-2';
 const addTypeCancelClasses = 'text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] px-2 py-1';
-const addTypeSubmitClasses = 'text-xs bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary)]/15 px-3 py-1 rounded-md font-semibold';
+const addTypeSubmitClasses = 'text-xs bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary)]/15 px-3 py-1 rounded-md font-medium';
 const addNewTypeButtonClasses = 'mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] transition-all text-sm font-medium';
 const contentContainerClasses = 'w-full lg:w-2/3 xl:w-3/4';
 const contentCardClasses = 'rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 flex flex-col min-h-[420px] lg:min-h-[540px] shadow-card';
 const headerSectionClasses = 'flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-[var(--color-border)]';
-const addItemButtonClasses = 'flex items-center gap-2 px-4 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-primary)] transition-colors text-sm font-semibold hover:bg-[var(--color-card-bg-hover)]';
-const saveButtonClasses = 'flex items-center gap-2 px-4 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] transition-colors text-sm font-semibold hover:bg-[var(--color-brand-primary)]/15';
+const addItemButtonClasses = 'flex items-center gap-2 px-4 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-primary)] transition-colors text-sm font-medium hover:bg-[var(--color-card-bg-hover)]';
+const saveButtonClasses = 'flex items-center gap-2 px-4 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] transition-colors text-sm font-medium hover:bg-[var(--color-brand-primary)]/15';
 const itemsContainerClasses = 'flex-1 space-y-3 overflow-y-auto pr-1';
 const emptyStateClasses = 'flex flex-col items-center justify-center h-full min-h-[240px] text-[var(--color-text-secondary)] gap-4 py-12';
-const checklistItemClasses = 'flex items-center gap-3 p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] group hover:border-[var(--color-brand-primary)] hover:bg-[var(--color-card-bg-hover)] transition-colors';
+const checklistItemClasses = 'flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2.5 group hover:border-[var(--color-brand-primary)] hover:bg-[var(--color-card-bg-hover)] transition-colors';
 const checklistInputClasses = 'flex-1 bg-transparent border-none text-[var(--color-text-primary)] text-sm focus:outline-none focus:ring-0 placeholder:text-[var(--color-text-secondary)]';
 const deleteItemButtonClasses = 'p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-brand-danger)] hover:bg-[var(--color-brand-danger)]/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100';
 
 export default function WorkOrderTemplates() {
+  const itemsPerPage = 8;
   const [templates, setTemplates] = useState<
     Record<WorkOrderTemplate, ChecklistItemTemplate[]>
   >({});
@@ -63,6 +65,8 @@ export default function WorkOrderTemplates() {
   const [newTypeName, setNewTypeName] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [itemFilter, setItemFilter] = useState("");
+  const [templatePage, setTemplatePage] = useState(1);
+  const [checklistPage, setChecklistPage] = useState(1);
   const [editingType, setEditingType] = useState<string | null>(null);
   const [editingTypeValue, setEditingTypeValue] = useState<string>("");
   const [isEditingChecklist, setIsEditingChecklist] = useState(false);
@@ -76,6 +80,16 @@ export default function WorkOrderTemplates() {
   const [duplicateTypeSource, setDuplicateTypeSource] = useState<string | null>(
     null,
   );
+
+  useBodyScrollLock(
+    Boolean(
+      confirmDeleteType ||
+        blockedDeleteType ||
+        confirmDeleteItem ||
+        duplicateType,
+    ),
+  );
+
   const templateHasMaintenanceSchedule = (type: string) =>
     maintenanceSchedules.some(
       (schedule) =>
@@ -109,6 +123,7 @@ export default function WorkOrderTemplates() {
       text: "",
     };
     setEditingItems((items) => [...items, newItem]);
+    setChecklistPage(Math.ceil((editingItems.length + 1) / itemsPerPage));
   };
 
   const handleUpdateItem = (id: string, text: string) => {
@@ -188,7 +203,7 @@ export default function WorkOrderTemplates() {
       return;
     }
 
-    const newTemplates = { ...templates, [trimmed]: [] };
+    const newTemplates = { [trimmed]: [], ...templates };
     setTemplates(newTemplates);
     saveChecklistTemplates(newTemplates).catch((error) => {
       console.error("Failed to save templates", error);
@@ -196,6 +211,8 @@ export default function WorkOrderTemplates() {
     setNewTypeName("");
     setIsAddingType(false);
     setSelectedType(trimmed);
+    setTemplatePage(1);
+    setChecklistPage(1);
     setEditingItems([]);
   };
 
@@ -332,6 +349,24 @@ export default function WorkOrderTemplates() {
   const filteredItems = editingItems.filter((item) =>
     item.text.toLowerCase().includes(itemFilter.trim().toLowerCase()),
   );
+  const templateTotalPages = Math.max(
+    1,
+    Math.ceil(visibleTemplates.length / itemsPerPage),
+  );
+  const checklistTotalPages = Math.max(
+    1,
+    Math.ceil(filteredItems.length / itemsPerPage),
+  );
+  const activeTemplatePage = Math.min(templatePage, templateTotalPages);
+  const activeChecklistPage = Math.min(checklistPage, checklistTotalPages);
+  const paginatedTemplates = visibleTemplates.slice(
+    (activeTemplatePage - 1) * itemsPerPage,
+    activeTemplatePage * itemsPerPage,
+  );
+  const paginatedItems = filteredItems.slice(
+    (activeChecklistPage - 1) * itemsPerPage,
+    activeChecklistPage * itemsPerPage,
+  );
 
   return (
     <div className={containerClasses}>
@@ -352,18 +387,67 @@ export default function WorkOrderTemplates() {
               <input
                 type="search"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setTemplatePage(1);
+                }}
                 placeholder="Search templates..."
                 className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
               />
             </div>
+            {isAddingType ? (
+              <div className={addTypeContainerClasses}>
+                <input
+                  type="text"
+                  value={newTypeName}
+                  onChange={(e) => setNewTypeName(e.target.value)}
+                  placeholder={"Type name..."}
+                  className={addTypeInputClasses}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleAddType();
+                    if (e.key === "Escape") {
+                      setIsAddingType(false);
+                      setNewTypeName("");
+                    }
+                  }}
+                />
+                <div className={addTypeButtonGroupClasses}>
+                  <button
+                    onClick={() => {
+                      setIsAddingType(false);
+                      setNewTypeName("");
+                    }}
+                    className={addTypeCancelClasses}
+                  >
+                    {"Cancel"}
+                  </button>
+                  <button
+                    onClick={handleAddType}
+                    className={addTypeSubmitClasses}
+                  >
+                    {"Add"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsAddingType(true)}
+                className={addNewTypeButtonClasses}
+              >
+                <Plus className="w-4 h-4" />
+                {"Add New Type"}
+              </button>
+            )}
             <div className={templateListClasses}>
-              {hasTemplateSearch && visibleTemplates.length === 0 ? (
+              {visibleTemplates.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-4 text-sm text-[var(--color-text-secondary)]">
-                  No templates match your search.
+                  {hasTemplateSearch
+                    ? "No templates match your search."
+                    : "No templates yet. Add a new type to get started."}
                 </div>
               ) : (
-                visibleTemplates.map((type) => (
+                paginatedTemplates.map((type) => (
                   <div
                     key={type}
                     role="button"
@@ -371,6 +455,7 @@ export default function WorkOrderTemplates() {
                     onClick={() => {
                       if (editingType === type) return;
                       setSelectedType(type);
+                      setChecklistPage(1);
                       setIsEditingChecklist(false);
                       if (Object.prototype.hasOwnProperty.call(templates, type)) {
                         setEditingItems([...templates[type]]);
@@ -382,6 +467,7 @@ export default function WorkOrderTemplates() {
                       if (editingType === type) return;
                       if (e.key === "Enter" || e.key === " ") {
                         setSelectedType(type);
+                        setChecklistPage(1);
                         setIsEditingChecklist(false);
                         if (Object.prototype.hasOwnProperty.call(templates, type)) {
                           setEditingItems([...templates[type]]);
@@ -412,7 +498,7 @@ export default function WorkOrderTemplates() {
                       <span className="font-medium text-sm truncate flex-1 min-w-0">{type}</span>
                     )}
                     <div className="ml-auto flex items-center gap-2 flex-shrink-0">
-                      <span className="text-xs font-semibold bg-[var(--color-input-bg)] px-2 py-0.5 rounded-full text-[var(--color-text-primary)] border border-[var(--color-border)]">
+                      <span className="text-xs font-medium bg-[var(--color-input-bg)] px-2 py-0.5 rounded-full text-[var(--color-text-primary)] border border-[var(--color-border)]">
                         {Object.prototype.hasOwnProperty.call(templates, type)
                           ? templates[type].length
                           : 0}
@@ -468,52 +554,54 @@ export default function WorkOrderTemplates() {
                   </div>
                 ))
               )}
-
-              {isAddingType ? (
-                <div className={addTypeContainerClasses}>
-                  <input
-                    type="text"
-                    value={newTypeName}
-                    onChange={(e) => setNewTypeName(e.target.value)}
-                    placeholder={"Type name..."}
-                    className={addTypeInputClasses}
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleAddType();
-                      if (e.key === "Escape") {
-                        setIsAddingType(false);
-                        setNewTypeName("");
-                      }
-                    }}
-                  />
-                  <div className={addTypeButtonGroupClasses}>
-                    <button
-                      onClick={() => {
-                        setIsAddingType(false);
-                        setNewTypeName("");
-                      }}
-                      className={addTypeCancelClasses}
-                    >
-                      {"Cancel"}
-                    </button>
-                    <button
-                      onClick={handleAddType}
-                      className={addTypeSubmitClasses}
-                    >
-                      {"Add"}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setIsAddingType(true)}
-                  className={addNewTypeButtonClasses}
-                >
-                  <Plus className="w-4 h-4" />
-                  {"Add New Type"}
-                </button>
-              )}
             </div>
+            {visibleTemplates.length > itemsPerPage ? (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--color-border)] pt-3 text-xs text-[var(--color-text-secondary)]">
+                <button
+                  type="button"
+                  onClick={() => setTemplatePage(Math.max(1, activeTemplatePage - 1))}
+                  disabled={activeTemplatePage === 1}
+                  className="rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <span>Page {activeTemplatePage} of {templateTotalPages}</span>
+                <button
+                  type="button"
+                  onClick={() => setTemplatePage(Math.min(templateTotalPages, activeTemplatePage + 1))}
+                  disabled={activeTemplatePage === templateTotalPages}
+                  className="rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next
+                </button>
+                {templateTotalPages >= 20 ? (
+                  <label className="flex items-center gap-1.5">
+                    <span>Go to</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={templateTotalPages}
+                      placeholder={String(activeTemplatePage)}
+                      aria-label="Go to template page"
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        if (!event.currentTarget.value.trim()) return;
+                        const requestedPage = Number(event.currentTarget.value);
+                        if (!Number.isFinite(requestedPage)) return;
+                        setTemplatePage(
+                          Math.min(
+                            templateTotalPages,
+                            Math.max(1, Math.trunc(requestedPage)),
+                          ),
+                        );
+                        event.currentTarget.value = "";
+                      }}
+                      className="w-14 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2 py-1.5 text-center text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
+                    />
+                  </label>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -531,7 +619,7 @@ export default function WorkOrderTemplates() {
                   <button
                     type="button"
                     onClick={handleCancelEditChecklist}
-                    className="flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-4 py-2 text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-card-bg-hover)]"
+                    className="flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-card-bg-hover)]"
                   >
                     Cancel Edit
                   </button>
@@ -565,23 +653,41 @@ export default function WorkOrderTemplates() {
               <input
                 type="search"
                 value={itemFilter}
-                onChange={(e) => setItemFilter(e.target.value)}
+                onChange={(e) => {
+                  setItemFilter(e.target.value);
+                  setChecklistPage(1);
+                }}
                 placeholder="Filter checklist items..."
                 className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none sm:max-w-xs"
               />
               <p className="text-xs text-[var(--color-text-secondary)]">
-                Showing {filteredItems.length} of {editingItems.length} item{editingItems.length === 1 ? "" : "s"}
+                Showing {paginatedItems.length} of {filteredItems.length} matching item{filteredItems.length === 1 ? "" : "s"}
               </p>
             </div>
 
             <div className={itemsContainerClasses}>
-              {hasChecklistItemSearch && filteredItems.length === 0 ? (
+              {filteredItems.length === 0 ? (
                 <div className={emptyStateClasses}>
                   <ClipboardCheck className="w-12 h-12 opacity-50" />
-                  <p>No checklist items match your filter.</p>
+                  <div className="text-center">
+                    <p className="font-semibold text-[var(--color-text-primary)]">
+                      {hasChecklistItemSearch
+                        ? "No checklist items match your filter."
+                        : hasSelectedTemplate
+                          ? "This template has no checklist items."
+                          : "Select or create a work order template."}
+                    </p>
+                    <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                      {hasChecklistItemSearch
+                        ? "Try a different search term."
+                        : hasSelectedTemplate
+                          ? "Choose Edit Checklist, then Add Item to begin."
+                          : "Templates and their checklist items will appear here."}
+                    </p>
+                  </div>
                 </div>
               ) : (
-                filteredItems.map((item, index) => (
+                paginatedItems.map((item, index) => (
                   <div
                     key={item.id}
                     draggable={isEditingChecklist}
@@ -610,7 +716,7 @@ export default function WorkOrderTemplates() {
                       <GripVertical className="w-4 h-4" />
                     </div>
                     <div className="w-6 h-6 shrink-0 rounded-full bg-[var(--color-border)] text-[var(--color-text-secondary)] flex items-center justify-center text-xs font-bold border border-[var(--color-border)]">
-                      {index + 1}
+                      {(activeChecklistPage - 1) * itemsPerPage + index + 1}
                     </div>
 
                     {isEditingChecklist ? (
@@ -644,6 +750,56 @@ export default function WorkOrderTemplates() {
                 ))
               )}
             </div>
+            {filteredItems.length > itemsPerPage ? (
+              <div className="mt-4 flex flex-col gap-3 border-t border-[var(--color-border)] pt-4 text-sm text-[var(--color-text-secondary)] sm:flex-row sm:items-center sm:justify-between">
+                <span>8 checklist items per page</span>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setChecklistPage(Math.max(1, activeChecklistPage - 1))}
+                    disabled={activeChecklistPage === 1}
+                    className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
+                  <span>Page {activeChecklistPage} of {checklistTotalPages}</span>
+                  <button
+                    type="button"
+                    onClick={() => setChecklistPage(Math.min(checklistTotalPages, activeChecklistPage + 1))}
+                    disabled={activeChecklistPage === checklistTotalPages}
+                    className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                  {checklistTotalPages >= 20 ? (
+                    <label className="flex items-center gap-2">
+                      <span>Go to</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={checklistTotalPages}
+                        placeholder={String(activeChecklistPage)}
+                        aria-label="Go to checklist page"
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter") return;
+                          if (!event.currentTarget.value.trim()) return;
+                          const requestedPage = Number(event.currentTarget.value);
+                          if (!Number.isFinite(requestedPage)) return;
+                          setChecklistPage(
+                            Math.min(
+                              checklistTotalPages,
+                              Math.max(1, Math.trunc(requestedPage)),
+                            ),
+                          );
+                          event.currentTarget.value = "";
+                        }}
+                        className="w-16 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2 py-1.5 text-center text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
+                      />
+                    </label>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -651,13 +807,13 @@ export default function WorkOrderTemplates() {
       {confirmDeleteType && (
         <div className="modal-overlay px-4 backdrop-blur-sm">
           <div className="modal-content">
-            <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">
+            <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-4">
               Confirm Delete
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)] mb-6">
               Are you sure you want to delete this work order template?
               <br />
-              <span className="mt-2 block font-semibold text-[var(--color-text-primary)]">"{confirmDeleteType}"</span>
+              <span className="mt-2 block font-bold text-[var(--color-text-primary)]">"{confirmDeleteType}"</span>
               <br />
               This action cannot be undone.
             </p>
@@ -665,14 +821,14 @@ export default function WorkOrderTemplates() {
               <button
                 type="button"
                 onClick={() => setConfirmDeleteType(null)}
-                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-input-bg)]"
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-input-bg)]"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => performDeleteType(confirmDeleteType)}
-                className="rounded-xl bg-[var(--color-brand-danger)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--color-brand-danger)]/80"
+                className="rounded-xl bg-[var(--color-brand-danger)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-brand-danger)]/80"
               >
                 Delete
               </button>
@@ -684,7 +840,7 @@ export default function WorkOrderTemplates() {
       {blockedDeleteType && (
         <div className="modal-overlay z-[60] px-4 backdrop-blur-sm">
           <div className="modal-content w-full max-w-md rounded-xl p-6">
-            <h3 className="mb-3 text-lg font-semibold text-[var(--color-text-primary)]">
+            <h3 className="mb-3 text-lg font-bold text-[var(--color-text-primary)]">
               Template Cannot Be Deleted
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)]">
@@ -698,7 +854,7 @@ export default function WorkOrderTemplates() {
               <button
                 type="button"
                 onClick={() => setBlockedDeleteType(null)}
-                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90"
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90"
               >
                 Close
               </button>
@@ -710,7 +866,7 @@ export default function WorkOrderTemplates() {
       {duplicateType && (
         <div className="modal-overlay z-[60] px-4 backdrop-blur-sm">
           <div className="modal-content w-full max-w-md rounded-xl p-6">
-            <h3 className="mb-3 text-lg font-semibold text-[var(--color-text-primary)]">
+            <h3 className="mb-3 text-lg font-bold text-[var(--color-text-primary)]">
               Existing Work Order Template
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)]">
@@ -733,21 +889,21 @@ export default function WorkOrderTemplates() {
                   }
                   setDuplicateTypeSource(null);
                 }}
-                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-input-bg)]"
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-input-bg)]"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => setDuplicateType(null)}
-                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-primary)] transition hover:bg-[var(--color-input-bg)]"
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition hover:bg-[var(--color-input-bg)]"
               >
                 Continue Editing
               </button>
               <button
                 type="button"
                 onClick={replaceDuplicateType}
-                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90"
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90"
               >
                 Replace
               </button>
@@ -759,13 +915,13 @@ export default function WorkOrderTemplates() {
       {confirmDeleteItem && (
         <div className="modal-overlay px-4 backdrop-blur-sm">
           <div className="modal-content">
-            <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">
+            <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-4">
               Confirm Delete
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)] mb-6">
               Are you sure you want to delete this checklist item?
               <br />
-              <span className="mt-2 block font-semibold text-[var(--color-text-primary)]">"{confirmDeleteItem.text}"</span>
+              <span className="mt-2 block font-bold text-[var(--color-text-primary)]">"{confirmDeleteItem.text}"</span>
               <br />
               This action cannot be undone.
             </p>
@@ -773,7 +929,7 @@ export default function WorkOrderTemplates() {
               <button
                 type="button"
                 onClick={() => setConfirmDeleteItem(null)}
-                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-input-bg)]"
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-input-bg)]"
               >
                 Cancel
               </button>
@@ -797,7 +953,7 @@ export default function WorkOrderTemplates() {
 
                   setConfirmDeleteItem(null);
                 }}
-                className="rounded-xl bg-[var(--color-brand-danger)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--color-brand-danger)]/80"
+                className="rounded-xl bg-[var(--color-brand-danger)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-brand-danger)]/80"
               >
                 Delete
               </button>

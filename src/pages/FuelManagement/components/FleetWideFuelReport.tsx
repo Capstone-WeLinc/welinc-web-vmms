@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Download, Calendar } from 'lucide-react';
-import { printToPDF } from '../utils/exportUtils';
+import { printToPDF } from "../../../lib/utils/fuelExport";
 
 const branchData = [
   { name: 'Main Branch', vehicles: 6, fillUps: 8, liters: 520, cost: 34321, efficiency: 8.5 },
@@ -180,21 +180,21 @@ export default function FleetWideReport() {
       <div className="space-y-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-2xl font-semibold text-[var(--color-text-primary)]">Fleet-Wide Fuel Cost Report</h2>
+            <h2 className="text-2xl font-bold text-[var(--color-text-primary)]">Fleet-Wide Fuel Cost Report</h2>
             <p className="text-sm text-[var(--color-text-secondary)]">{formatLabel(formatDisplayDate(dateFrom), formatDisplayDate(dateTo))}</p>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={handleExportExcel}
-              className="rounded-xl bg-[var(--color-brand-success)]/15 border border-[var(--color-brand-success)]/20 px-4 h-10 text-sm font-semibold text-[var(--color-brand-success)] hover:bg-[var(--color-brand-success)]/25 transition active:scale-95 cursor-pointer flex items-center gap-2"
+              className="rounded-xl bg-[var(--color-brand-success)]/15 border border-[var(--color-brand-success)]/20 px-4 h-10 text-sm font-medium text-[var(--color-brand-success)] hover:bg-[var(--color-brand-success)]/25 transition active:scale-95 cursor-pointer flex items-center gap-2"
             >
               <Download size={16} />
               Export .xlsx
             </button>
             <button
               onClick={handleExportPDF}
-              className="rounded-xl bg-[var(--color-brand-primary)]/15 border border-[var(--color-brand-primary)]/20 px-4 h-10 text-sm font-semibold text-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary)]/25 transition active:scale-95 cursor-pointer flex items-center gap-2"
+              className="rounded-xl bg-[var(--color-brand-primary)]/15 border border-[var(--color-brand-primary)]/20 px-4 h-10 text-sm font-medium text-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary)]/25 transition active:scale-95 cursor-pointer flex items-center gap-2"
             >
               <Download size={16} />
               Export PDF
@@ -257,7 +257,7 @@ export default function FleetWideReport() {
                     </button>
 
                     <div>
-                      <h4 className="text-center text-sm font-semibold text-[var(--color-text-primary)] mb-4 capitalize">
+                      <h4 className="text-center text-sm font-medium text-[var(--color-text-primary)] mb-4 capitalize">
                         {currentLeftMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                       </h4>
                       <div className="grid grid-cols-7 text-center gap-y-1">
@@ -281,7 +281,7 @@ export default function FleetWideReport() {
                     </div>
 
                     <div>
-                      <h4 className="text-center text-sm font-semibold text-[var(--color-text-primary)] mb-4 capitalize">
+                      <h4 className="text-center text-sm font-medium text-[var(--color-text-primary)] mb-4 capitalize">
                         {rightMonthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                       </h4>
                       <div className="grid grid-cols-7 text-center gap-y-1">
@@ -344,10 +344,10 @@ export default function FleetWideReport() {
         </div>
       </div>
 
-      <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card overflow-x-auto">
+      <div className="overflow-auto overscroll-contain rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card lg:max-h-[min(40rem,calc(100vh-12rem))]">
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b border-[var(--color-divider)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
+            <tr className="sticky top-0 z-10 border-b border-[var(--color-divider)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
               <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider">Branch</th>
               <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider text-right">Vehicles</th>
               <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider text-right">Total Fill-Ups</th>
