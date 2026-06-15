@@ -9,9 +9,9 @@ import {
 } from 'lucide-react';
 import PageHeader from '../../components/PageHeader/PageHeader';
 import ViewModal from './components/ViewModal';
-import { getCurrentUser } from '../../api/fleetService';
-import type { UserRecord } from '../../api/fleetService';
-import { isMechanicRole } from '../../utils/permissions';
+import { getCurrentUser } from "../../lib/api/authService";
+import type { UserRecord } from "../../lib/api/authService";
+import { isMechanicRole } from "../../lib/utils/permissions";
 
 type MaintenanceClass = 'Maintenance' | 'Repair' | 'Inspection';
 type MaintenanceStatus = 'Pending' | 'In Progress' | 'Completed' | 'On Hold';

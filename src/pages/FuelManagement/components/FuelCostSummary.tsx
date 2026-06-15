@@ -1,7 +1,7 @@
 import type { FuelFillUp } from '../types';
 import { Download, Calendar, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { useMemo, useState, useRef, useEffect } from 'react';
-import { printToPDF } from '../utils/exportUtils';
+import { printToPDF } from "../../../lib/utils/fuelExport";
 
 interface FuelCostSummaryProps {
   fillUps: FuelFillUp[];

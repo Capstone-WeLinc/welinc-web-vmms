@@ -9,7 +9,12 @@ import FuelCostSummary from './components/FuelCostSummary';
 import AnomalyDetectionLog from './components/AnomalyDetectionLog';
 import FleetWideFuelReport from './components/FleetWideFuelReport';
 import EditFuelFillUpModal from './components/EditFuelFillUpModal';
-import { mockFuelFillUps, mockVehicleEfficiency, mockAnomalies, mockAnomalyLogs } from './mockData';
+import {
+  mockFuelFillUps,
+  mockVehicleEfficiency,
+  mockAnomalies,
+  mockAnomalyLogs,
+} from "../../lib/mocks/fuelMocks";
 import type { FuelFillUp } from './types';
 
 type KPIStatCardProps = {

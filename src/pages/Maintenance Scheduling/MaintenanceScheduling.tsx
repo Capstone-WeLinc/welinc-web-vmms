@@ -23,9 +23,9 @@ import {
 import {
   getMaintenanceSchedules,
   deleteMaintenanceSchedule,
-  getVehicles,
-} from "../../api/fleetService";
-import { formatWorkOrderNumber } from "../../utils/workOrders";
+} from "../../lib/api/maintenanceService";
+import { getVehicles } from "../../lib/api/vehicleService";
+import { formatWorkOrderNumber } from "../../lib/utils/workOrders";
 
 interface KPIStatCardProps {
   icon: ReactNode;

@@ -1,4 +1,4 @@
-import type { FuelFillUp } from '../types';
+import type { FuelFillUp } from "../../pages/FuelManagement/types";
 
 type ExportableRow = Record<string, string | number | boolean | null | undefined>;
 

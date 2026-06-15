@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Download, Calendar } from 'lucide-react';
-import { printToPDF } from '../utils/exportUtils';
+import { printToPDF } from "../../../lib/utils/fuelExport";
 
 const branchData = [
   { name: 'Main Branch', vehicles: 6, fillUps: 8, liters: 520, cost: 34321, efficiency: 8.5 },

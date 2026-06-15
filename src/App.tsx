@@ -8,8 +8,8 @@ import {
   type Location,
 } from "react-router-dom";
 import Sidebar from "./components/Sidebar/Sidebar";
-import { getCurrentUser } from "./api/fleetService";
-import type { UserRecord } from "./api/fleetService";
+import { getCurrentUser } from "./lib/api/authService";
+import type { UserRecord } from "./lib/api/authService";
 import Dashboard from "./pages/Dashboard/Dashboard";
 import PlaceholderPage from "./pages/PlaceholderPage/PlaceholderPage";
 import SchedulingPage from "./pages/Maintenance Scheduling/MaintenanceScheduling";
@@ -20,11 +20,11 @@ import MaintenanceLogs from "./pages/MaintenanceLogs/MaintenanceLogs";
 import FuelManagement from "./pages/FuelManagement/FuelManagement";
 import UserManagement from "./pages/UserManagement/UserManagement";
 import LoginPage from "./pages/Login/LoginPage";
-import { useBackend } from "./api/requestClient";
+import { useBackend } from "./lib/api/httpClient";
 
 import { FileBarChart2 } from "lucide-react";
-import { setLastActivity, msUntilAbsoluteExpiry, msUntilInactivityExpiry, clearSession } from "./utils/session";
-import { isMechanicRole, isOperationsRole } from "./utils/permissions";
+import { setLastActivity, msUntilAbsoluteExpiry, msUntilInactivityExpiry, clearSession } from "./lib/utils/session";
+import { isMechanicRole, isOperationsRole } from "./lib/utils/permissions";
 
 function RequireAuthWrapper({
   children,

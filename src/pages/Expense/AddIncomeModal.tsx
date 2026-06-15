@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { X, Calendar as CalendarIcon } from "lucide-react";
-import { getVehicles } from "../../api/fleetService";
+import { getVehicles } from "../../lib/api/vehicleService";
 import {
   defaultChecklistTemplates,
   type WorkOrderTemplate,

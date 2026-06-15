@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { FuelFillUp } from '../types';
-import { mockFuelFillUps } from '../mockData';
+import { mockFuelFillUps } from "../../../lib/mocks/fuelMocks";
 import { X } from 'lucide-react';
 
 interface InputFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {

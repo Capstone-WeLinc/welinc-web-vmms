@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { login, recordLoginActivity } from "../../api/fleetService";
-import { ApiError } from "../../api/requestClient";
-import { setLoginTime, setLastActivity } from "../../utils/session";
+import { login, recordLoginActivity } from "../../lib/api/authService";
+import { ApiError } from "../../lib/api/httpClient";
+import { setLoginTime, setLastActivity } from "../../lib/utils/session";
 
 // Layout & interaction classes
 const containerClasses = 'h-full flex items-center justify-center overflow-hidden px-4 sm:px-6 lg:px-8';

@@ -7,7 +7,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
-import { getDashboardStats } from "../../api/fleetService";
+import { getDashboardStats } from "../../lib/api/dashboardService";
 
 type DashboardStat = {
   label: string;

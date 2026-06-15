@@ -1,4 +1,9 @@
-import type { FuelFillUp, VehicleEfficiency, FuelAnomaly, AnomalyLog } from './types';
+import type {
+  FuelFillUp,
+  VehicleEfficiency,
+  FuelAnomaly,
+  AnomalyLog,
+} from "../../pages/FuelManagement/types";
 
 export const mockFuelFillUps: FuelFillUp[] = [
   {

@@ -1,7 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { TrendingUp, TrendingDown, AlertTriangle, DollarSign } from 'lucide-react';
-import { getTransactions, getProfitabilitySummary, type Transaction } from '../../api/fleetService';
-import type { ProfitabilitySummary } from '../../api/mockData';
+import {
+  getTransactions,
+  getProfitabilitySummary,
+  type ProfitabilitySummary,
+  type Transaction,
+} from "../../lib/api/financeService";
 import PageHeader from '../../components/PageHeader/PageHeader';
 import AddIncomeModal from './AddIncomeModal';
 import AddExpenseModal from './AddExpenseModal';

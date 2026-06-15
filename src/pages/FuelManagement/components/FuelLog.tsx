@@ -1,7 +1,7 @@
 import type { FuelFillUp } from '../types';
 import { Edit, Trash2, Filter, Download, Droplet, Eye, AlertTriangle } from 'lucide-react';
 import { useState, useMemo } from 'react';
-import { printToPDF } from '../utils/exportUtils';
+import { printToPDF } from "../../../lib/utils/fuelExport";
 import ViewFuelLogModal from './ViewFuelLogModal';
 
 interface InputFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {

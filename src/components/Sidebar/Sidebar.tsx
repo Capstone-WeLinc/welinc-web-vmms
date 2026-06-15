@@ -1,8 +1,8 @@
 import { useState } from "react";
 import Modal from "../ui/Modal";
-import type { UserRecord } from "../../api/fleetService";
+import type { UserRecord } from "../../lib/api/authService";
 import { NavLink } from "react-router-dom";
-import { isMechanicRole, isOperationsRole } from "../../utils/permissions";
+import { isMechanicRole, isOperationsRole } from "../../lib/utils/permissions";
 import {
   LayoutDashboard,
   Users,

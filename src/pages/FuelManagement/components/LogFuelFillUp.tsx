@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { mockFuelFillUps } from '../mockData';
+import { mockFuelFillUps } from "../../../lib/mocks/fuelMocks";
 import type { FuelFillUp } from '../types';
 import { X } from 'lucide-react';
 

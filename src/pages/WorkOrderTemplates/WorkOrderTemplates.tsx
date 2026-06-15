@@ -13,7 +13,7 @@ import {
   getChecklistTemplates,
   getMaintenanceSchedules,
   saveChecklistTemplates,
-} from "../../api/fleetService";
+} from "../../lib/api/maintenanceService";
 import type { MaintenanceTask } from "../../types/maintenance";
 
 type WorkOrderTemplate = string;

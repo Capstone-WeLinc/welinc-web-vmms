@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useBackend } from "../../api/requestClient";
+import { useBackend } from "../../lib/api/httpClient";
 import {
   ShieldCheck,
   Search,
@@ -16,18 +16,20 @@ import Modal from "../../components/ui/Modal";
 import {
   createUser,
   deleteUser,
-  getMaintenanceSchedules,
   getManagedUsers,
   getUsers,
   unlockUser,
-  updateMaintenanceSchedule,
   updateUser,
   updateUserRole,
-  getCurrentUser,
   type UserCreateInput,
   type UserRecord,
   type UserRole,
-} from "../../api/fleetService";
+} from "../../lib/api/userService";
+import { getCurrentUser } from "../../lib/api/authService";
+import {
+  getMaintenanceSchedules,
+  updateMaintenanceSchedule,
+} from "../../lib/api/maintenanceService";
 import type { MaintenanceTask } from "../../types/maintenance";
 
 const roleOptions: UserRole[] = ["ADMIN", "OPERATIONS", "MECHANIC"];
@@ -453,7 +455,7 @@ export default function UserManagement() {
       const userInput: UserCreateInput = {
         name: newUserForm.name.trim(),
         username: newUserForm.username.trim(),
-        passwordHash: newUserForm.password,
+        password: newUserForm.password,
         role: selectedRole,
       };
 
@@ -466,7 +468,7 @@ export default function UserManagement() {
         const updatedUser = await updateUser(userToReplace.id, {
           name: userInput.name,
           username: userInput.username,
-          passwordHash: userInput.passwordHash,
+          password: userInput.password,
         });
         const userWithRole =
           userToReplace.role === selectedRole

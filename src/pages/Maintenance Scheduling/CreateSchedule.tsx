@@ -11,11 +11,17 @@ import {
   createMaintenanceSchedule,
   updateMaintenanceSchedule,
   getChecklistTemplates,
+} from "../../lib/api/maintenanceService";
+import {
   getUsers,
   type UserRecord,
+} from "../../lib/api/userService";
+import {
   getGarages,
+} from "../../lib/api/locationService";
+import {
   getVehicles,
-} from "../../api/fleetService";
+} from "../../lib/api/vehicleService";
 import type { MaintenanceTask } from "../../types/maintenance";
 
 type WorkOrderTemplate = string;

@@ -23,14 +23,13 @@ import {
   type WorkOrderTemplate,
 } from "../../data/ChecklistData";
 import {
-  getCurrentUser,
-  getGarages,
   getWorkOrders,
   updateWorkOrder,
-  type UserRecord,
-} from "../../api/fleetService";
-import { isMechanicRole } from "../../utils/permissions";
-import { formatWorkOrderNumber } from "../../utils/workOrders";
+} from "../../lib/api/maintenanceService";
+import { getCurrentUser, type UserRecord } from "../../lib/api/authService";
+import { getGarages } from "../../lib/api/locationService";
+import { isMechanicRole } from "../../lib/utils/permissions";
+import { formatWorkOrderNumber } from "../../lib/utils/workOrders";
 
 type ItemStatus = "pass" | "fail" | "pending";
 
