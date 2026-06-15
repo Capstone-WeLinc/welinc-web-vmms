@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { FuelFillUp } from '../types';
 import { X, Droplet, Calendar, Gauge, Navigation, User, DollarSign } from 'lucide-react';
 
@@ -8,6 +9,21 @@ interface ViewFuelLogModalProps {
 }
 
 export default function ViewFuelLogModal({ isOpen, onClose, fillUp }: ViewFuelLogModalProps) {
+  useEffect(() => {
+    if (isOpen) {
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.documentElement.style.overflow = 'unset';
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.documentElement.style.overflow = 'unset';
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
   if (!isOpen || !fillUp) return null;
   // Layout constants and inline visual styles
     const overlayClasses = 'modal-overlay backdrop-blur-sm p-4';

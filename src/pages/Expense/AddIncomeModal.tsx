@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { X, Calendar as CalendarIcon } from "lucide-react";
+import { X } from "lucide-react";
 import { getVehicles } from "../../lib/api/vehicleService";
 import {
   defaultChecklistTemplates,
@@ -52,9 +52,6 @@ function DateField({ label, id, className, ...props }: DateFieldProps) {
           className={`w-full rounded-xl border border-[var(--color-input-border)] bg-[var(--color-input-bg)] px-3 py-2 pr-10 text-sm text-[var(--color-text-primary)] ${className || ''}`}
           {...props}
         />
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-center text-[var(--color-text-secondary)]">
-          <CalendarIcon className="w-4 h-4" />
-        </div>
       </div>
     </div>
   );

@@ -34,14 +34,17 @@ const Modal: React.FC<ModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      document.documentElement.style.overflow = 'hidden';
       document.body.style.overflow = 'hidden';
       // Focus on dialog for accessibility
       dialogRef.current?.focus();
     } else {
+      document.documentElement.style.overflow = 'unset';
       document.body.style.overflow = 'unset';
     }
 
     return () => {
+      document.documentElement.style.overflow = 'unset';
       document.body.style.overflow = 'unset';
     };
   }, [isOpen]);

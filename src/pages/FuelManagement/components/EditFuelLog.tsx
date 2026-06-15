@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { FuelFillUp } from '../types';
 import { mockFuelFillUps } from "../../../lib/mocks/fuelMocks";
 import { X } from 'lucide-react';
@@ -68,6 +68,16 @@ interface EditFuelLogProps {
 }
 
 export default function EditFuelLog({ record, onClose, onSave }: EditFuelLogProps) {
+  useEffect(() => {
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    
+    return () => {
+      document.documentElement.style.overflow = 'unset';
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
+
   const [formData, setFormData] = useState({
     date: record.date,
     liters: record.liters.toString(),

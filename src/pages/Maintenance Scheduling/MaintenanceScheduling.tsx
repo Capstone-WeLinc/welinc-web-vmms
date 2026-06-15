@@ -298,6 +298,16 @@ const MaintenanceSchedulingCombined = () => {
       .catch(() => console.error("Failed to load vehicles"));
   }, []);
 
+  useEffect(() => {
+    if (confirmDeleteTask || isModalOpen) {
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.documentElement.style.overflow = 'unset';
+      document.body.style.overflow = 'unset';
+    }
+  }, [confirmDeleteTask, isModalOpen]);
+
   const formatLocalDate = (date: Date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");

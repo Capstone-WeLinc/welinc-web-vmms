@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { mockFuelFillUps } from "../../../lib/mocks/fuelMocks";
 import type { FuelFillUp } from '../types';
 import { X } from 'lucide-react';
@@ -74,6 +74,16 @@ interface LogFuelFillUpProps {
 }
 
 export default function LogFuelFillUp({ onClose, onAdd }: LogFuelFillUpProps) {
+  useEffect(() => {
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    
+    return () => {
+      document.documentElement.style.overflow = 'unset';
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
+
   const [formData, setFormData] = useState({
     vehicleId: 'TRK-0011',
     date: new Date().toISOString().split('T')[0],

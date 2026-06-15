@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { X, Wrench, AlertTriangle, ShieldAlert, CheckCircle, Info } from 'lucide-react';
 import type { FuelAnomaly } from '../types';
 import FuelStatusBadge from './FuelStatusBadge';
@@ -10,6 +11,21 @@ interface AnomalyDetailModalProps {
 }
 
 export default function AnomalyDetailModal({ isOpen, onClose, anomaly, onAction }: AnomalyDetailModalProps) {
+  useEffect(() => {
+    if (isOpen) {
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.documentElement.style.overflow = 'unset';
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.documentElement.style.overflow = 'unset';
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
   if (!isOpen || !anomaly) return null;
 
   const diff = anomaly.efficiency - anomaly.fleetAvg;
