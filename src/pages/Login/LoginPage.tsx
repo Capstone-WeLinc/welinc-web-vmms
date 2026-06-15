@@ -20,26 +20,6 @@ interface LoginPageProps {
   onLogin: () => void;
 }
 
-const MAX_LOGIN_ATTEMPTS = 5;
-
-function getAttemptStorageKey(username: string) {
-  return `login-attempts-remaining:${username.trim().toLowerCase()}`;
-}
-
-function getStoredRemainingAttempts(username: string) {
-  if (!username.trim()) return MAX_LOGIN_ATTEMPTS;
-
-  const storedValue = Number(
-    window.localStorage.getItem(getAttemptStorageKey(username)),
-  );
-
-  return Number.isInteger(storedValue) &&
-    storedValue >= 0 &&
-    storedValue <= MAX_LOGIN_ATTEMPTS
-    ? storedValue
-    : MAX_LOGIN_ATTEMPTS;
-}
-
 type LoginFeedback = {
   message: string;
   isLocked: boolean;
@@ -112,8 +92,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [feedback, setFeedback] = useState<LoginFeedback | null>(null);
-  const [remainingAttempts, setRemainingAttempts] =
-    useState(MAX_LOGIN_ATTEMPTS);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const system = "VMMS" as const;
@@ -125,7 +103,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
     try {
       const response = await login(username, password, system);
-      window.localStorage.removeItem(getAttemptStorageKey(username));
       window.localStorage.setItem("accessToken", response.accessToken);
       // session timestamps: login time and last activity
       setLoginTime(new Date());
@@ -137,14 +114,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       console.error("Login failed:", error);
       const nextFeedback = getUserFriendlyLoginError(error);
       setFeedback(nextFeedback);
-      if (typeof nextFeedback.remainingAttempts === "number") {
-        const nextRemaining = nextFeedback.remainingAttempts;
-        window.localStorage.setItem(
-          getAttemptStorageKey(username),
-          String(nextRemaining),
-        );
-        setRemainingAttempts(nextRemaining);
-      }
     } finally {
       setLoading(false);
     }
@@ -171,12 +140,8 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 type="text"
                 value={username}
                 onChange={(event) => {
-                  const nextUsername = event.target.value;
-                  setUsername(nextUsername);
+                  setUsername(event.target.value);
                   setFeedback(null);
-                  setRemainingAttempts(
-                    getStoredRemainingAttempts(nextUsername),
-                  );
                 }}
                 placeholder="Enter your username"
                 autoComplete="username"
@@ -223,9 +188,9 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 </>
               ) : typeof feedback.remainingAttempts === "number" ? (
                 <p className="font-semibold">
-                  {remainingAttempts}{" "}
-                  {remainingAttempts === 1 ? "attempt" : "attempts"} remaining
-                  before your account is locked.
+                  {feedback.remainingAttempts}{" "}
+                  {feedback.remainingAttempts === 1 ? "attempt" : "attempts"}{" "}
+                  remaining before your account is locked.
                 </p>
               ) : (
                 <p className="font-semibold">{feedback.message}</p>
