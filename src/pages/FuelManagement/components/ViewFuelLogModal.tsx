@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
 import type { FuelFillUp } from '../types';
 import { X, Droplet, Calendar, Gauge, Navigation, User, DollarSign } from 'lucide-react';
+import { useBodyScrollLock } from '../../../lib/hooks/useBodyScrollLock';
 
 interface ViewFuelLogModalProps {
   isOpen: boolean;
@@ -9,20 +9,7 @@ interface ViewFuelLogModalProps {
 }
 
 export default function ViewFuelLogModal({ isOpen, onClose, fillUp }: ViewFuelLogModalProps) {
-  useEffect(() => {
-    if (isOpen) {
-      document.documentElement.style.overflow = 'hidden';
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.documentElement.style.overflow = 'unset';
-      document.body.style.overflow = 'unset';
-    }
-
-    return () => {
-      document.documentElement.style.overflow = 'unset';
-      document.body.style.overflow = 'unset';
-    };
-  }, [isOpen]);
+  useBodyScrollLock(isOpen && Boolean(fillUp));
 
   if (!isOpen || !fillUp) return null;
   // Layout constants and inline visual styles
@@ -138,8 +125,8 @@ export default function ViewFuelLogModal({ isOpen, onClose, fillUp }: ViewFuelLo
                 <Calendar size={14} />
               </div>
               <div>
-                <div className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Date Logged</div>
-                <div className="text-xs font-medium text-[var(--color-text-secondary)] mt-0.5">{fillUp.date}</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Date Logged</div>
+                <div className="mt-0.5 text-sm font-medium text-[var(--color-text-primary)]">{fillUp.date}</div>
               </div>
             </div>
 
@@ -149,8 +136,8 @@ export default function ViewFuelLogModal({ isOpen, onClose, fillUp }: ViewFuelLo
                 <Navigation size={14} />
               </div>
               <div>
-                <div className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Fuel Station</div>
-                <div className="text-xs font-medium text-[var(--color-text-secondary)] mt-0.5">{fillUp.station ?? 'N/A'}</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Fuel Station</div>
+                <div className="mt-0.5 text-sm font-medium text-[var(--color-text-primary)]">{fillUp.station ?? 'N/A'}</div>
               </div>
             </div>
 
@@ -160,8 +147,8 @@ export default function ViewFuelLogModal({ isOpen, onClose, fillUp }: ViewFuelLo
                 <User size={14} />
               </div>
               <div>
-                <div className="text-[11px] font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">Filled By</div>
-                <div className="text-xs font-medium text-[var(--color-text-secondary)] mt-0.5">{fillUp.filledBy ?? 'N/A'}</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Filled By</div>
+                <div className="mt-0.5 text-sm font-medium text-[var(--color-text-primary)]">{fillUp.filledBy ?? 'N/A'}</div>
               </div>
             </div>
           </div>

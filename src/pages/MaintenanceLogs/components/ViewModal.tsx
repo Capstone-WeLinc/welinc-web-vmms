@@ -1,4 +1,5 @@
 import { X } from 'lucide-react';
+import { useBodyScrollLock } from '../../../lib/hooks/useBodyScrollLock';
 
 type MaintenanceStatus = 'Pending' | 'In Progress' | 'Completed' | 'On Hold';
 type MaintenanceClass = 'Maintenance' | 'Repair' | 'Inspection';
@@ -58,6 +59,8 @@ const LogStatusBadge = ({ status }: { status: MaintenanceStatus }) => {
 };
 
 export default function ViewModal({ isOpen, log, onClose }: ViewModalProps) {
+  useBodyScrollLock(isOpen && Boolean(log));
+
   if (!isOpen || !log) return null;
 
   return (

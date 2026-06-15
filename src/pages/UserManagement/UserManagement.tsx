@@ -27,6 +27,7 @@ import {
   type UserRole,
 } from "../../lib/api/userService";
 import { getCurrentUser } from "../../lib/api/authService";
+import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
 import {
   getMaintenanceSchedules,
   updateMaintenanceSchedule,
@@ -116,20 +117,20 @@ function validatePassword(password: string) {
 // Layout & interaction classes
 const containerClasses = 'space-y-6';
 const statsGridClasses = 'grid gap-4 md:grid-cols-3';
-const cardClasses = 'rounded-[26px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card';
+const cardClasses = 'rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card';
 const headerSectionClasses = 'mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between';
 const filtersGridClasses = 'grid gap-3 md:grid-cols-[1.8fr_1fr_1fr] mb-6';
 const searchInputClasses = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none';
 const selectInputClasses = 'w-full appearance-none rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none';
 const loadingStateClasses = 'rounded-2xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-4 py-8 text-center text-sm text-[var(--color-text-secondary)]';
 const emptyStateClasses = 'rounded-2xl border border-dashed border-[var(--color-border)] px-4 py-10 text-center text-sm text-[var(--color-text-secondary)]';
-const tableWrapperClasses = 'overflow-hidden rounded-2xl border border-[var(--color-border)] shadow-card';
+const tableWrapperClasses = 'overflow-hidden rounded-xl border border-[var(--color-border)] shadow-card';
 const tableClasses = 'min-w-full text-left text-sm text-[var(--color-text-primary)]';
-const theadClasses = 'sticky top-0 z-10 bg-[var(--color-card-bg)] text-xs uppercase tracking-[0.16em] text-[var(--color-text-secondary)]';
+const theadClasses = 'sticky top-0 z-10 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]';
 const tbodyClasses = 'divide-y divide-[var(--color-divider)]';
-const sortButtonClasses = 'inline-flex items-center gap-2 text-left uppercase tracking-[0.16em] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]';
+const sortButtonClasses = 'inline-flex items-center gap-2 text-left uppercase tracking-wider text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]';
 const actionButtonsGroupClasses = 'flex flex-wrap gap-2';
-const badgeClasses = 'rounded-full border px-2.5 py-1 text-xs font-medium';
+const badgeClasses = 'inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-wider';
 const modalOverlayClasses = 'fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.5)] px-4 backdrop-blur-sm';
 const formClasses = 'space-y-4';
 const inputClasses = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none';
@@ -160,6 +161,11 @@ export default function UserManagement() {
     useState<UserRecord | null>(null);
   const [confirmCreateUser, setConfirmCreateUser] = useState(false);
   const [duplicateUser, setDuplicateUser] = useState<UserRecord | null>(null);
+
+  useBodyScrollLock(
+    Boolean(duplicateUser || confirmDeleteUser || blockedDeleteUser),
+  );
+
   const [passwordError, setPasswordError] = useState("");
   const [newUserForm, setNewUserForm] = useState<{
     name: string;
@@ -785,7 +791,7 @@ export default function UserManagement() {
               <table className={tableClasses}>
                 <thead className={theadClasses}>
                   <tr>
-                    <th className="px-4 py-2.5 font-medium">
+                    <th className="px-4 py-3">
                       <button
                         type="button"
                         onClick={() => handleSort("name")}
@@ -801,7 +807,7 @@ export default function UserManagement() {
                         ) : null}
                       </button>
                     </th>
-                    <th className="px-4 py-2.5 font-medium">
+                    <th className="px-4 py-3">
                       <button
                         type="button"
                         onClick={() => handleSort("role")}
@@ -817,32 +823,32 @@ export default function UserManagement() {
                         ) : null}
                       </button>
                     </th>
-                    <th className="px-4 py-2.5 font-medium">Status</th>
-                    <th className="px-4 py-2.5 font-medium">Last Active</th>
-                    <th className="px-4 py-2.5 font-medium">Actions</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Last Active</th>
+                    <th className="px-4 py-3">Actions</th>
                   </tr>
                 </thead>
                 <tbody className={tbodyClasses}>
                   {paginatedUsers.map((user) => (
                     <tr key={user.id} className="bg-transparent align-top">
-                      <td className="px-4 py-2.5">
+                      <td className="px-4 py-3">
                         <div className="space-y-0.5">
-                          <p className="font-medium text-[var(--color-text-primary)]">
+                          <p className="font-semibold text-[var(--color-text-primary)]">
                             {user.name}
                           </p>
-                          <p className="text-xs text-[var(--color-text-secondary)]">
+                          <p className="text-sm text-[var(--color-text-secondary)]">
                             {user.username}
                           </p>
                         </div>
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-4 py-3">
                         <span
                           className={`${badgeClasses} ${roleStyles[user.role] ?? "border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]"}`}
                         >
                           {displayRole(user.role)}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-4 py-3">
                         <span
                           className={`${badgeClasses} ${
                             user.isLocked
@@ -854,12 +860,12 @@ export default function UserManagement() {
                           {user.isLocked ? "Locked" : user.status ?? "Unknown"}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5 text-[var(--color-text-secondary)]">
+                      <td className="px-4 py-3 text-[var(--color-text-secondary)]">
                         {user.lastActive
                           ? new Date(user.lastActive).toLocaleString()
                           : "—"}
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-4 py-3">
                         <div className={actionButtonsGroupClasses}>
                           {normalizeRole(currentUser?.role) === "ADMIN" &&
                           user.isLocked ? (
@@ -867,7 +873,7 @@ export default function UserManagement() {
                               type="button"
                               onClick={() => setConfirmUnlockUser(user)}
                               disabled={processingUserId === user.id}
-                              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-200"
+                              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-200"
                             >
                               {processingUserId === user.id
                                 ? "Unlocking..."
@@ -888,7 +894,7 @@ export default function UserManagement() {
                                 });
                                 setIsCreateModalOpen(true);
                               }}
-                              className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-2 text-xs font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] ${processingUserId === user.id ? "cursor-not-allowed opacity-50" : ""}`}
+                              className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] ${processingUserId === user.id ? "cursor-not-allowed opacity-50" : ""}`}
                             >
                               Edit
                             </button>
@@ -902,7 +908,7 @@ export default function UserManagement() {
                               user.id === currentUser?.id ||
                               normalizeRole(currentUser?.role) !== "ADMIN"
                             }
-                            className={`table-delete-button ${
+                            className={`table-delete-button !text-sm !font-medium ${
                               processingUserId === user.id ||
                               user.id === currentUser?.id ||
                               currentUser?.role !== "ADMIN" ||

@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { mockFuelFillUps } from "../../../lib/mocks/fuelMocks";
+import { useBodyScrollLock } from "../../../lib/hooks/useBodyScrollLock";
 import type { FuelFillUp } from '../types';
 import { X } from 'lucide-react';
 
@@ -13,7 +14,7 @@ function InputField({ label, id, className, ...props }: InputFieldProps) {
   return (
     <div className="flex flex-col gap-1 w-full">
       {label && (
-        <label htmlFor={id} className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+        <label htmlFor={id} className="text-sm font-medium text-[var(--color-text-secondary)]">
           {label}
         </label>
       )}
@@ -42,7 +43,7 @@ function SelectField({ label, id, options, className, ...props }: SelectFieldPro
   return (
     <div className="flex flex-col gap-1 w-full">
       {label && (
-        <label htmlFor={id} className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+        <label htmlFor={id} className="text-sm font-medium text-[var(--color-text-secondary)]">
           {label}
         </label>
       )}
@@ -74,15 +75,7 @@ interface LogFuelFillUpProps {
 }
 
 export default function LogFuelFillUp({ onClose, onAdd }: LogFuelFillUpProps) {
-  useEffect(() => {
-    document.documentElement.style.overflow = 'hidden';
-    document.body.style.overflow = 'hidden';
-    
-    return () => {
-      document.documentElement.style.overflow = 'unset';
-      document.body.style.overflow = 'unset';
-    };
-  }, []);
+  useBodyScrollLock(true);
 
   const [formData, setFormData] = useState({
     vehicleId: 'TRK-0011',
@@ -140,7 +133,7 @@ export default function LogFuelFillUp({ onClose, onAdd }: LogFuelFillUpProps) {
 
         {/* Header */}
         <div className={modalHeaderClasses}>
-          <h2 className="text-xl font-bold text-[var(--color-text-primary)]">Log Fuel Fill-up</h2>
+          <h2 className="text-lg font-bold text-[var(--color-text-primary)]">Log Fuel Fill-up</h2>
           <button
             type="button"
             onClick={onClose}
@@ -193,7 +186,7 @@ export default function LogFuelFillUp({ onClose, onAdd }: LogFuelFillUpProps) {
 
             {/* Auto-calculated total */}
             <div className="flex flex-col gap-1 w-full">
-                <label className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+                <label className="text-sm font-medium text-[var(--color-text-secondary)]">
                   Total Fuel Cost (auto-calculated)
                 </label>
                 <div className="flex items-center rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3.5 py-2.5 h-10.5">

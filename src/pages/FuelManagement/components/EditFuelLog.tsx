@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { FuelFillUp } from '../types';
 import { mockFuelFillUps } from "../../../lib/mocks/fuelMocks";
+import { useBodyScrollLock } from "../../../lib/hooks/useBodyScrollLock";
 import { X } from 'lucide-react';
 
 interface InputFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -13,7 +14,7 @@ function InputField({ label, id, className, ...props }: InputFieldProps) {
   return (
     <div className="flex flex-col gap-1 w-full">
       {label && (
-        <label htmlFor={id} className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+        <label htmlFor={id} className="text-sm font-medium text-[var(--color-text-secondary)]">
           {label}
         </label>
       )}
@@ -42,7 +43,7 @@ function SelectField({ label, id, options, className, ...props }: SelectFieldPro
   return (
     <div className="flex flex-col gap-1 w-full">
       {label && (
-        <label htmlFor={id} className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+        <label htmlFor={id} className="text-sm font-medium text-[var(--color-text-secondary)]">
           {label}
         </label>
       )}
@@ -68,15 +69,7 @@ interface EditFuelLogProps {
 }
 
 export default function EditFuelLog({ record, onClose, onSave }: EditFuelLogProps) {
-  useEffect(() => {
-    document.documentElement.style.overflow = 'hidden';
-    document.body.style.overflow = 'hidden';
-    
-    return () => {
-      document.documentElement.style.overflow = 'unset';
-      document.body.style.overflow = 'unset';
-    };
-  }, []);
+  useBodyScrollLock(true);
 
   const [formData, setFormData] = useState({
     date: record.date,
@@ -124,7 +117,7 @@ export default function EditFuelLog({ record, onClose, onSave }: EditFuelLogProp
     <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
       <div className="w-full max-w-2xl rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-2xl modal-content">
         <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-[var(--color-text-primary)]">Edit Fuel Record</h2>
+          <h2 className="text-lg font-bold text-[var(--color-text-primary)]">Edit Fuel Record</h2>
           <button
             onClick={onClose}
             className="rounded-lg p-2 text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] transition"
@@ -171,7 +164,7 @@ export default function EditFuelLog({ record, onClose, onSave }: EditFuelLogProp
             />
 
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+              <label className="text-sm font-medium text-[var(--color-text-secondary)]">
                 Total Fuel Cost (auto-calculated)
               </label>
               <div className="flex h-10.5 items-center rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3.5 py-2.5">

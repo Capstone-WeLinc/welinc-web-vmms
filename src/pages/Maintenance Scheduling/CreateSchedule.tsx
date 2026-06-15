@@ -22,6 +22,7 @@ import {
 import {
   getVehicles,
 } from "../../lib/api/vehicleService";
+import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
 import type { MaintenanceTask } from "../../types/maintenance";
 
 type WorkOrderTemplate = string;
@@ -98,6 +99,8 @@ export default function CreateScheduleModal({
   const scheduledCalendarRef = useRef<HTMLDivElement | null>(null);
   const startReferenceCalendarRef = useRef<HTMLDivElement | null>(null);
   const [notes, setNotes] = useState("");
+
+  useBodyScrollLock(isOpen);
   const [isSaving, setIsSaving] = useState(false);
   const [duplicateSchedule, setDuplicateSchedule] =
     useState<MaintenanceTask | null>(null);
@@ -437,7 +440,7 @@ export default function CreateScheduleModal({
             <span className="font-bold">›</span>
           </button>
         </div>
-        <div className="grid grid-cols-7 gap-1 text-[10px] uppercase tracking-[0.15em] text-[var(--color-text-secondary)] mb-2">
+        <div className="mb-2 grid grid-cols-7 gap-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
           {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
             <div key={day} className="text-center">
               {day}
@@ -476,7 +479,7 @@ export default function CreateScheduleModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-card-bg)] px-6 py-5 shrink-0">
           <div>
-            <h2 className="mt-2 text-xl font-bold text-[var(--color-text-primary)]">Create / Edit Maintenance Schedule</h2>
+            <h2 className="mt-2 text-lg font-bold text-[var(--color-text-primary)]">Create / Edit Maintenance Schedule</h2>
 
           </div>
           <button
@@ -503,7 +506,7 @@ export default function CreateScheduleModal({
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium uppercase text-[var(--color-text-secondary)] mb-1.5">
+                <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
                   Vehicle
                 </label>
                 <div className="relative">
@@ -542,7 +545,7 @@ export default function CreateScheduleModal({
               </div>
               <div className="flex gap-4">
                 <div className="flex-1">
-                  <label className="block text-xs font-medium uppercase text-[var(--color-text-secondary)] mb-1.5">
+                  <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
                     Odometer Reading (km)
                   </label>
                   <input
@@ -561,7 +564,7 @@ export default function CreateScheduleModal({
               </div>
 
               <div className="col-start-2 row-start-1">
-                <label className="block text-xs font-medium uppercase text-[var(--color-text-secondary)] mb-1.5">
+                <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
                   Garage / Cluster
                 </label>
                 <div className="relative">
@@ -608,7 +611,7 @@ export default function CreateScheduleModal({
               </div>
 
               <div>
-                <label className="block text-xs font-medium uppercase text-[var(--color-text-secondary)] mb-1.5">
+                <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
                   Account Type
                 </label>
                 <input
@@ -664,7 +667,7 @@ export default function CreateScheduleModal({
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:items-start mb-4">
               <div className="flex h-full flex-col">
-                <label className="mb-1.5 min-h-[2.2rem] text-xs font-medium uppercase text-[var(--color-text-secondary)]">
+                <label className="mb-1.5 min-h-[2.2rem] text-sm font-medium text-[var(--color-text-secondary)]">
                   Interval (km)
                 </label>
                 <input
@@ -684,7 +687,7 @@ export default function CreateScheduleModal({
                 />
               </div>
               <div className="flex h-full flex-col">
-                <label className="mb-1.5 min-h-[2.2rem] text-xs font-medium uppercase text-[var(--color-text-secondary)]">
+                <label className="mb-1.5 min-h-[2.2rem] text-sm font-medium text-[var(--color-text-secondary)]">
                   Buffer Distance (km)
                 </label>
                 <input
@@ -706,7 +709,7 @@ export default function CreateScheduleModal({
                 />
               </div>
               <div className="flex h-full flex-col">
-                <label className="mb-1.5 min-h-[2.2rem] text-xs font-medium uppercase text-[var(--color-text-secondary)] leading-tight">
+                <label className="mb-1.5 min-h-[2.2rem] text-sm font-medium leading-tight text-[var(--color-text-secondary)]">
                   Starting Reference Reading (km)
                 </label>
                 <input
@@ -731,7 +734,7 @@ export default function CreateScheduleModal({
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium uppercase text-[var(--color-text-secondary)] mb-1.5">
+                <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
                   Interval Type
                 </label>
                 <div className="relative">
@@ -764,7 +767,7 @@ export default function CreateScheduleModal({
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium uppercase text-[var(--color-text-secondary)] mb-1.5">
+                <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
                   Start Reference Date
                 </label>
                 <div className="relative" ref={startReferenceCalendarRef}>
@@ -851,7 +854,7 @@ export default function CreateScheduleModal({
             </div>
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="block text-xs font-medium uppercase text-[var(--color-text-secondary)] mb-1.5">
+                <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
                   Work Order Template
                 </label>
                 <div className="relative">
@@ -920,7 +923,7 @@ export default function CreateScheduleModal({
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium uppercase text-[var(--color-text-secondary)] mb-1.5">
+                <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
                   Scheduled Date
                 </label>
                 <div className="relative" ref={scheduledCalendarRef}>
@@ -979,7 +982,7 @@ export default function CreateScheduleModal({
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium uppercase text-[var(--color-text-secondary)] mb-1.5">
+              <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
                 Assigned Mechanic
               </label>
               <div className="relative">
@@ -1084,7 +1087,7 @@ export default function CreateScheduleModal({
       {duplicateSchedule ? (
         <div className="modal-overlay z-[60] px-4 backdrop-blur-sm">
           <div className="modal-content w-full max-w-lg rounded-xl p-6">
-            <h3 className="mb-3 text-lg font-semibold text-[var(--color-text-primary)]">
+            <h3 className="mb-3 text-lg font-bold text-[var(--color-text-primary)]">
               Existing Maintenance Schedule
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)]">

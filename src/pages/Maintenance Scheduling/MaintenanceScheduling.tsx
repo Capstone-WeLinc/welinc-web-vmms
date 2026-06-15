@@ -27,6 +27,7 @@ import {
   deleteMaintenanceSchedule,
 } from "../../lib/api/maintenanceService";
 import { getVehicles } from "../../lib/api/vehicleService";
+import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
 import { formatWorkOrderNumber } from "../../lib/utils/workOrders";
 
 interface KPIStatCardProps {
@@ -50,20 +51,22 @@ const KPIStatCard = ({
     padding="none"
     className="p-5 transition duration-200 hover:-translate-y-0.5"
   >
-    <div className="mb-4 flex items-center justify-between">
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <p className="text-sm text-[var(--color-text-secondary)]">{label}</p>
+        <p className="mt-3 text-3xl font-bold text-[var(--color-text-primary)]">
+          {value}
+        </p>
+        <p className="mt-2 text-sm font-medium" style={{ color: iconColor }}>
+          {subtitle}
+        </p>
+      </div>
       <div
-        className="flex h-10 w-10 items-center justify-center rounded-xl"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[var(--color-border)]"
         style={{ background: iconBgColor, color: iconColor }}
       >
         {icon}
       </div>
-    </div>
-    <div className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">
-      {value}
-    </div>
-    <div className="mt-2 text-xs font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">{label}</div>
-    <div className="mt-3 text-sm font-medium" style={{ color: iconColor }}>
-      {subtitle}
     </div>
   </Card>
 );
@@ -144,7 +147,7 @@ const StatusBadge = ({ status }: { status: MaintenanceStatus }) => {
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 font-medium rounded-full border px-2.5 py-0.5 text-[11px] uppercase tracking-wider ${getStatusDetails()}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${getStatusDetails()}`}
     >
       {status}
     </span>
@@ -287,6 +290,8 @@ const MaintenanceSchedulingCombined = () => {
   const [confirmDeleteTask, setConfirmDeleteTask] =
     useState<MaintenanceTask | null>(null);
 
+  useBodyScrollLock(Boolean(confirmDeleteTask));
+
   const loadMaintenanceSchedules = () => {
     getMaintenanceSchedules().then(setTasks).catch(console.error);
   };
@@ -297,16 +302,6 @@ const MaintenanceSchedulingCombined = () => {
       .then((loadedVehicles) => setVehicles(loadedVehicles))
       .catch(() => console.error("Failed to load vehicles"));
   }, []);
-
-  useEffect(() => {
-    if (confirmDeleteTask || isModalOpen) {
-      document.documentElement.style.overflow = 'hidden';
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.documentElement.style.overflow = 'unset';
-      document.body.style.overflow = 'unset';
-    }
-  }, [confirmDeleteTask, isModalOpen]);
 
   const formatLocalDate = (date: Date) => {
     const year = date.getFullYear();
@@ -528,10 +523,10 @@ const MaintenanceSchedulingCombined = () => {
         <div className="card-base p-6 transition duration-200 hover:-translate-y-0.5">
           <div className="mb-5 flex flex-col gap-5 border-b border-[var(--color-border)] pb-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
+              <h2 className="text-lg font-bold text-[var(--color-text-primary)]">
                 Maintenance Schedules
               </h2>
-              <p className="text-sm text-[var(--color-text-secondary)]">
+              <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
                 Current and completed scheduled items for the fleet.
               </p>
             </div>
@@ -638,18 +633,18 @@ const MaintenanceSchedulingCombined = () => {
               className="overflow-hidden"
             >
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left text-sm text-[var(--color-text-secondary)]">
-                <thead className="sticky top-0 z-10 bg-[var(--color-card-bg)] border-b border-[var(--color-border)] text-[var(--color-text-secondary)]">
+                <table className="w-full border-collapse text-left text-sm text-[var(--color-text-primary)]">
+                <thead className="sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-card-bg)] text-xs uppercase tracking-[0.16em] text-[var(--color-text-secondary)]">
                   <tr>
-                    <th className="px-5 py-3 font-semibold">
+                    <th className="px-5 py-3 font-medium">
                       {"Work Order No."}
                     </th>
-                    <th className="px-5 py-3 font-semibold">{"Plate No."}</th>
-                    <th className="px-5 py-3 font-semibold">
+                    <th className="px-5 py-3 font-medium">{"Plate No."}</th>
+                    <th className="px-5 py-3 font-medium">
                       {"Work Order Template"}
                     </th>
-                    <th className="px-5 py-3 font-semibold">{"Trigger"}</th>
-                    <th className="px-5 py-3 font-semibold">
+                    <th className="px-5 py-3 font-medium">{"Trigger"}</th>
+                    <th className="px-5 py-3 font-medium">
                       <button
                         type="button"
                         onClick={() => {
@@ -658,7 +653,7 @@ const MaintenanceSchedulingCombined = () => {
                           );
                           setCurrentPage(1);
                         }}
-                        className="inline-flex items-center gap-2 hover:text-[var(--color-text-primary)]"
+                        className="inline-flex items-center gap-2 uppercase tracking-[0.16em] hover:text-[var(--color-text-primary)]"
                       >
                         <span>Scheduled Date</span>
                         {dateSortDirection === "asc" ? (
@@ -668,9 +663,9 @@ const MaintenanceSchedulingCombined = () => {
                         )}
                       </button>
                     </th>
-                    <th className="px-5 py-3 font-semibold">{"Mechanic"}</th>
-                    <th className="px-5 py-3 font-semibold">{"Status"}</th>
-                    <th className="px-5 py-3 font-semibold">{"Actions"}</th>
+                    <th className="px-5 py-3 font-medium">{"Mechanic"}</th>
+                    <th className="px-5 py-3 font-medium">{"Status"}</th>
+                    <th className="px-5 py-3 font-medium">{"Actions"}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--color-divider)]">
@@ -687,7 +682,7 @@ const MaintenanceSchedulingCombined = () => {
                         <td className="px-5 py-3 font-medium text-[var(--color-text-primary)]">
                           {task.vehicleId}
                         </td>
-                        <td className="px-5 py-3">{task.title}</td>
+                        <td className="px-5 py-3 text-[var(--color-text-secondary)]">{task.title}</td>
                         <td className="px-5 py-3">
                           <span className="inline-block rounded-full bg-[var(--color-card-bg)] px-2.5 py-1 text-xs font-medium text-[var(--color-text-secondary)]">
                             {task.triggerType === "TIME"
@@ -697,8 +692,8 @@ const MaintenanceSchedulingCombined = () => {
                                 : "Odometer"}
                           </span>
                         </td>
-                        <td className="px-5 py-3">{task.date}</td>
-                        <td className="px-5 py-3">{task.assignedDriver}</td>
+                        <td className="px-5 py-3 text-[var(--color-text-secondary)]">{task.date}</td>
+                        <td className="px-5 py-3 text-[var(--color-text-secondary)]">{task.assignedDriver}</td>
                         <td className="px-5 py-3">
                           <StatusBadge status={task.status} />
                         </td>
@@ -807,7 +802,7 @@ const MaintenanceSchedulingCombined = () => {
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
-                <h2 className="text-xl font-bold tracking-tight text-[var(--color-text-primary)]">
+                <h2 className="text-lg font-bold text-[var(--color-text-primary)]">
                   {monthName} {yearName}
                 </h2>
                 <button
@@ -818,10 +813,10 @@ const MaintenanceSchedulingCombined = () => {
                   <ChevronRight className="w-5 h-5" />
                 </button>
               </div>
-              <div className="grid grid-cols-7 gap-2 text-center text-sm text-[var(--color-text-secondary)] mb-2">
+              <div className="mb-2 grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
                   (day) => (
-                    <div key={day} className="py-2 font-medium">
+                    <div key={day} className="py-2">
                       {day}
                     </div>
                   ),
@@ -870,13 +865,13 @@ const MaintenanceSchedulingCombined = () => {
                                 key={task.id}
                                 className={`block w-full rounded-lg px-2.5 py-2 text-left transition hover:brightness-110 ${getTaskStyle(task.status)}`}
                               >
-                                <span className="block truncate text-[10px] font-bold">
+                                <span className="block truncate text-xs font-semibold">
                                   {formatWorkOrderNumber(task.id)}
                                 </span>
-                                <span className="block truncate text-[10px] font-medium">
+                                <span className="block truncate text-xs">
                                   Plate No.: {task.vehicleId}
                                 </span>
-                                <span className="block truncate text-[10px] font-medium">
+                                <span className="block truncate text-xs">
                                   Work Order: {task.title}
                                 </span>
                               </button>
@@ -952,7 +947,7 @@ const MaintenanceSchedulingCombined = () => {
             >
               <div className="flex items-center justify-between gap-4 border-b border-[var(--color-divider)] px-4 py-3">
                 <div>
-                  <h3 className="text-base font-semibold text-[var(--color-text-primary)]">
+                  <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
                     {selectedSchedule.title}
                   </h3>
                   <p className="text-sm text-[var(--color-text-secondary)]">
@@ -1089,13 +1084,13 @@ const MaintenanceSchedulingCombined = () => {
       {confirmDeleteTask && (
         <div className="modal-overlay px-4 backdrop-blur-sm">
           <div className="modal-content w-full max-w-md rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">
+            <h3 className="mb-4 text-lg font-bold text-[var(--color-text-primary)]">
               Confirm Delete
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)] mb-6">
               Are you sure you want to delete this schedule?
               <br />
-              <span className="mt-2 block font-semibold text-[var(--color-text-primary)]">{confirmDeleteTask.title} - {confirmDeleteTask.vehicleId}</span>
+              <span className="mt-2 block font-bold text-[var(--color-text-primary)]">{confirmDeleteTask.title} - {confirmDeleteTask.vehicleId}</span>
               <br />
               This action cannot be undone.
             </p>

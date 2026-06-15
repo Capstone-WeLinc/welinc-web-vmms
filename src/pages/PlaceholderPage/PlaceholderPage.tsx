@@ -27,12 +27,9 @@ export default function PlaceholderPage({ title, subtitle, icon }: PlaceholderPa
           <div className={iconCircleClasses}>
             <Construction size={40} strokeWidth={1.4} />
           </div>
-          <h2 className={titleClasses}>Coming Soon</h2>
-          <p className={subtitleClasses}>
+          <h2 className={titleClasses}>
             The <strong className={highlightedTextClasses}>{title}</strong> module is currently under development.
-            <br />
-            Check back soon for updates.
-          </p>
+          </h2>
           <div className={loaderRowClasses}>
             <span className={loaderDotClasses} />
             <span className={loaderDotClasses} style={{ animationDelay: '0.2s' }} />

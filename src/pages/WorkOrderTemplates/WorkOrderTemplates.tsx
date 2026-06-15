@@ -14,6 +14,7 @@ import {
   getMaintenanceSchedules,
   saveChecklistTemplates,
 } from "../../lib/api/maintenanceService";
+import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
 import type { MaintenanceTask } from "../../types/maintenance";
 
 type WorkOrderTemplate = string;
@@ -79,6 +80,16 @@ export default function WorkOrderTemplates() {
   const [duplicateTypeSource, setDuplicateTypeSource] = useState<string | null>(
     null,
   );
+
+  useBodyScrollLock(
+    Boolean(
+      confirmDeleteType ||
+        blockedDeleteType ||
+        confirmDeleteItem ||
+        duplicateType,
+    ),
+  );
+
   const templateHasMaintenanceSchedule = (type: string) =>
     maintenanceSchedules.some(
       (schedule) =>

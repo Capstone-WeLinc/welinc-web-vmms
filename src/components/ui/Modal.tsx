@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useBodyScrollLock } from '../../lib/hooks/useBodyScrollLock';
 import Button from './Button';
 
 export interface ModalProps {
@@ -32,21 +33,10 @@ const Modal: React.FC<ModalProps> = ({
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (isOpen) {
-      document.documentElement.style.overflow = 'hidden';
-      document.body.style.overflow = 'hidden';
-      // Focus on dialog for accessibility
-      dialogRef.current?.focus();
-    } else {
-      document.documentElement.style.overflow = 'unset';
-      document.body.style.overflow = 'unset';
-    }
+  useBodyScrollLock(isOpen);
 
-    return () => {
-      document.documentElement.style.overflow = 'unset';
-      document.body.style.overflow = 'unset';
-    };
+  useEffect(() => {
+    if (isOpen) dialogRef.current?.focus();
   }, [isOpen]);
 
   useEffect(() => {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { getVehicles } from "../../lib/api/vehicleService";
+import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
 import {
   defaultChecklistTemplates,
   type WorkOrderTemplate,
@@ -18,7 +19,7 @@ function InputField({ label, id, className, ...props }: InputFieldProps) {
   return (
     <div className="flex flex-col gap-1 w-full">
       {label && (
-        <label htmlFor={id} className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+        <label htmlFor={id} className="text-sm font-medium text-[var(--color-text-secondary)]">
           {label}
         </label>
       )}
@@ -41,7 +42,7 @@ function DateField({ label, id, className, ...props }: DateFieldProps) {
   return (
     <div className="flex flex-col gap-1 w-full">
       {label && (
-        <label htmlFor={id} className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+        <label htmlFor={id} className="text-sm font-medium text-[var(--color-text-secondary)]">
           {label}
         </label>
       )}
@@ -96,7 +97,7 @@ function SearchableSelect({ id, label, options, placeholder = 'Select...', value
   return (
     <div ref={ref} className="flex flex-col gap-1 w-full">
       {label && (
-        <label htmlFor={id} className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+        <label htmlFor={id} className="text-sm font-medium text-[var(--color-text-secondary)]">
           {label}
         </label>
       )}
@@ -169,6 +170,8 @@ export default function AddIncomeModal({
     { value: string; label: string }[]
   >([]);
 
+  useBodyScrollLock(isOpen);
+
   useEffect(() => {
     getVehicles()
       .then(setVehicleOptions)
@@ -212,7 +215,7 @@ export default function AddIncomeModal({
             />
 
             <div className="flex flex-col">
-              <label className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider mb-2">
+              <label className="mb-2 text-sm font-medium text-[var(--color-text-secondary)]">
                 Work Order Template *
               </label>
               <select
@@ -235,7 +238,7 @@ export default function AddIncomeModal({
             <div className="grid grid-cols-2 gap-4">
               <DateField id="trip-date" label="Trip Date" />
               <div className="flex flex-col">
-                <label className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+                <label className="text-sm font-medium text-[var(--color-text-secondary)]">
                   Client Type *
                 </label>
                 <div className="mt-2 flex gap-2">
