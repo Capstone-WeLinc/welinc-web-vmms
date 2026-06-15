@@ -26,7 +26,7 @@ export default function AnomalyDetailModal({ isOpen, onClose, anomaly, onAction 
   const containerClasses = 'w-full max-w-150 rounded-xl flex flex-col max-h-[90vh] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-2xl';
   const headerClasses = 'flex items-center justify-between px-6 py-4 shrink-0 border-b border-[var(--color-border)]';
   const contentWrapperClasses = 'flex-1 overflow-y-auto px-6 py-6 space-y-6';
-  const infoCardClasses = 'flex items-start justify-between rounded-xl p-4 border border-[var(--color-border)] bg-[var(--color-card-bg)]';
+  const infoCardClasses = 'flex items-start justify-between rounded-xl p-4 border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card';
   const diagCardClasses = anomaly.status === 'Anomaly'
     ? 'rounded-xl border border-[var(--color-brand-danger)]/20 bg-[var(--color-brand-danger)]/10 p-4 text-[var(--color-brand-danger)]'
     : 'rounded-xl border border-[var(--color-brand-warning)]/20 bg-[var(--color-brand-warning)]/10 p-4 text-[var(--color-brand-warning)]';
@@ -73,7 +73,7 @@ export default function AnomalyDetailModal({ isOpen, onClose, anomaly, onAction 
               Potential Diagnostics
             </h4>
             <div className="grid gap-3 text-xs">
-              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-3.5 space-y-1.5">
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-3.5 space-y-1.5 shadow-card">
                 <div className="flex justify-between font-semibold">
                   <span className="text-[var(--color-text-primary)]">1. Fuel Siphoning / Theft Threat</span>
                   <span className="text-[var(--color-brand-danger)] uppercase tracking-wider text-[10px]">Medium Probability</span>
@@ -83,7 +83,7 @@ export default function AnomalyDetailModal({ isOpen, onClose, anomaly, onAction 
                 </p>
               </div>
 
-              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-3.5 space-y-1.5">
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-3.5 space-y-1.5 shadow-card">
                 <div className="flex justify-between font-semibold">
                   <span className="text-[var(--color-text-primary)]">2. Fuel Injector Leak / Engine Misfires</span>
                   <span className="text-[var(--color-brand-warning)] uppercase tracking-wider text-[10px]">High Probability</span>
@@ -93,7 +93,7 @@ export default function AnomalyDetailModal({ isOpen, onClose, anomaly, onAction 
                 </p>
               </div>
 
-              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-3.5 space-y-1.5">
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-3.5 space-y-1.5 shadow-card">
                 <div className="flex justify-between font-semibold">
                   <span className="text-[var(--color-text-primary)]">3. Driver Behavior Deviation</span>
                   <span className="text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Low Probability</span>

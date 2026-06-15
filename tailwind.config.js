@@ -61,7 +61,7 @@ export default {
         'full': '9999px', // Pills, badges, circular elements
       },
       boxShadow: {
-        'card': '0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08)',
+        'card': '0 0 0 1px var(--color-border), 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08)',
         'elevation': '0 10px 15px rgba(0, 0, 0, 0.1), 0 4px 6px rgba(0, 0, 0, 0.05)',
         'sidebar': '4px 0 24px rgba(0, 0, 0, 0.1)',
         'focus': '0 0 0 2px #1a1f6e',

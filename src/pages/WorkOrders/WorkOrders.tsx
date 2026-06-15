@@ -13,6 +13,7 @@ import {
   ArrowDown,
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
+import { Card } from "../../components/ui";
 import {
   type MaintenanceTask,
   type MaintenanceStatus,
@@ -29,6 +30,7 @@ import {
   type UserRecord,
 } from "../../api/fleetService";
 import { isMechanicRole } from "../../utils/permissions";
+import { formatWorkOrderNumber } from "../../utils/workOrders";
 
 type ItemStatus = "pass" | "fail" | "pending";
 
@@ -102,15 +104,15 @@ const getTemplates = () => {
 
 // Layout & interaction classes
 const containerClasses = 'space-y-6';
-const listViewClasses = 'space-y-4';
-const headerSectionClasses = 'mb-6 flex flex-col gap-4 border-b border-[var(--color-divider)] pb-4 sm:flex-row sm:items-center sm:justify-between';
-const filtersGridClasses = 'mb-6 grid gap-4 md:grid-cols-5';
+const listViewClasses = 'overflow-hidden';
+const headerSectionClasses = 'flex flex-col gap-4 border-b border-[var(--color-divider)] px-6 py-5 sm:flex-row sm:items-center sm:justify-between';
+const filtersGridClasses = 'grid gap-4 border-b border-[var(--color-divider)] px-6 py-5 md:grid-cols-5';
 const searchInputClasses = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-hidden';
 const selectInputClasses = 'w-full appearance-none rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-hidden';
 const sortButtonClasses = 'flex items-center justify-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-4 py-2.5 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-input-bg-hover)] hover:text-[var(--color-text-primary)] dark:hover:bg-slate-700 dark:hover:text-white';
-const taskGridClasses = 'grid gap-4 md:grid-cols-2 lg:grid-cols-3';
-const taskCardClasses = 'group cursor-pointer rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 transition-all hover:-translate-y-1 hover:border-[var(--color-brand-primary)] hover:bg-[var(--color-card-bg-hover)] hover:shadow-[0_10px_28px_rgba(15,23,42,0.12)] dark:hover:border-[var(--color-brand-primary)] dark:hover:bg-[var(--color-card-bg-hover)] dark:hover:shadow-[0_14px_32px_rgba(26,31,110,0.18)]';
-const emptyStateClasses = 'col-span-full rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-8 text-center';
+const taskGridClasses = 'grid gap-4 p-6 md:grid-cols-2 lg:grid-cols-3';
+const taskCardClasses = 'group cursor-pointer rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card transition-all hover:-translate-y-1 hover:border-[var(--color-brand-primary)] hover:bg-[var(--color-card-bg-hover)] hover:shadow-[0_10px_28px_rgba(15,23,42,0.12)] dark:hover:border-[var(--color-brand-primary)] dark:hover:bg-[var(--color-card-bg-hover)] dark:hover:shadow-[0_14px_32px_rgba(26,31,110,0.18)]';
+const emptyStateClasses = 'col-span-full rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-8 text-center shadow-card';
 const detailViewClasses = 'rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-xl backdrop-blur-sm transition-all';
 const backButtonClasses = 'mb-6 flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-brand-primary)] dark:hover:text-[var(--color-brand-primary)]';
 const executionTableClasses = 'mb-6 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)]';
@@ -355,6 +357,7 @@ export default function WorkOrders() {
 
   const renderScheduleDetails = (task: MaintenanceTask) => {
     const details = [
+      { label: "Work Order No.", value: formatWorkOrderNumber(task.id) },
       { label: "Vehicle", value: task.vehicleId },
       { label: "Work Order Template", value: task.title },
       { label: "Assigned Mechanic", value: task.assignedDriver },
@@ -841,7 +844,7 @@ export default function WorkOrders() {
       />
 
       {!selectedTask ? (
-        <div className={listViewClasses}>
+        <Card padding="none" className={listViewClasses}>
           <div className={headerSectionClasses}>
             <div>
               <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
@@ -932,19 +935,24 @@ export default function WorkOrders() {
                 className={taskCardClasses}
               >
                 <div className="mb-4 flex items-center justify-between">
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
-                    <Truck size={14} />
-                    {task.vehicleId}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex rounded-full border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                      {formatWorkOrderNumber(task.id)}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                      <Truck size={14} />
+                      {task.vehicleId}
+                    </span>
+                  </div>
                   <span
                     className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
                       task.status === "Overdue"
-                        ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                        ? "bg-rose-500/10 text-rose-700 border border-rose-500/30 dark:text-rose-200"
                         : task.status === "Flagged"
-                          ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                          ? "bg-amber-500/10 text-amber-800 border border-amber-500/30 dark:text-amber-200"
                           : task.status === "In-Progress"
-                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                            : "bg-sky-500/10 text-sky-400 border border-sky-500/20"
+                            ? "bg-emerald-500/10 text-emerald-700 border border-emerald-500/30 dark:text-emerald-200"
+                            : "bg-sky-500/10 text-sky-700 border border-sky-500/30 dark:text-sky-200"
                     }`}
                   >
                     {task.status}
@@ -990,7 +998,7 @@ export default function WorkOrders() {
               </div>
             )}
           </div>
-        </div>
+        </Card>
       ) : (
         <div
           ref={detailRef}
@@ -1013,29 +1021,25 @@ export default function WorkOrders() {
               <div
                 className={`mb-4 overflow-hidden rounded-xl px-6 py-4 ${
                   !currentExecution.done
-                    ? "border border-emerald-500/20 bg-emerald-500/10 text-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.08)]"
-                    : "border border-rose-500/20 bg-rose-500/10 text-rose-200 shadow-[0_0_15px_rgba(244,63,94,0.08)]"
+                    ? "border border-[var(--color-brand-primary)]/20 bg-[var(--color-brand-primary)]/10 shadow-card"
+                    : "border border-emerald-500/30 bg-emerald-500/10 shadow-card"
                 }`}
               >
-                <h3
-                  className={`text-lg font-semibold ${!currentExecution.done ? "text-emerald-100" : "text-rose-100"}`}
-                >
+                <h3 className="text-lg font-semibold text-[var(--color-text-primary)]">
                   <div className="flex items-center">
                     <span>Execution Checklist</span>
                     <span
                       className={`ml-3 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
                         !currentExecution.done
-                          ? "border border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
-                          : "border border-rose-500/20 bg-rose-500/10 text-rose-200"
+                          ? "border border-[var(--color-brand-primary)]/20 bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] dark:text-sky-100"
+                          : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
                       }`}
                     >
-                      {!currentExecution.done ? "Enabled" : "Disabled"}
+                      {!currentExecution.done ? "Enabled" : "Completed"}
                     </span>
                   </div>
                 </h3>
-                <p
-                  className={`text-sm ${!currentExecution.done ? "text-emerald-300/80" : "text-rose-300/80"}`}
-                >
+                <p className="text-sm text-[var(--color-text-secondary)]">
                   Mechanics must select Checked, Changed, or Not Checked for
                   each execution item before completing execution.
                 </p>
@@ -1053,7 +1057,7 @@ export default function WorkOrders() {
                       <div>Photos</div>
                       <div className="text-center">Status</div>
                     </div>
-                    <div className="divide-y divide-white/5">
+                    <div className="divide-y divide-[var(--color-divider)]">
                       {currentExecution.items.map((item) => (
                         <div
                           key={item.id}
@@ -1084,7 +1088,7 @@ export default function WorkOrders() {
                               className={`flex h-6 w-6 items-center justify-center rounded-full border-2 transition-all duration-200 ${
                                 item.status === "checked"
                                   ? "border-emerald-400 bg-emerald-400/20"
-                                  : "border-slate-600 hover:border-emerald-400/50"
+                                  : "border-[var(--color-border)] hover:border-emerald-500/60"
                               } ${currentExecution.done ? "cursor-not-allowed opacity-60" : ""}`}
                             >
                               {item.status === "checked" && (
@@ -1106,7 +1110,7 @@ export default function WorkOrders() {
                               className={`flex h-6 w-6 items-center justify-center rounded-full border-2 transition-all duration-200 ${
                                 item.status === "changed"
                                   ? "border-sky-400 bg-sky-400/20"
-                                  : "border-slate-600 hover:border-sky-400/50"
+                                  : "border-[var(--color-border)] hover:border-sky-500/60"
                               } ${currentExecution.done ? "cursor-not-allowed opacity-60" : ""}`}
                             >
                               {item.status === "changed" && (
@@ -1128,7 +1132,7 @@ export default function WorkOrders() {
                               className={`flex h-6 w-6 items-center justify-center rounded-full border-2 transition-all duration-200 ${
                                 item.status === "notChecked"
                                   ? "border-amber-400 bg-amber-400/20"
-                                  : "border-slate-600 hover:border-amber-400/50"
+                                  : "border-[var(--color-border)] hover:border-amber-500/60"
                               } ${currentExecution.done ? "cursor-not-allowed opacity-60" : ""}`}
                             >
                               {item.status === "notChecked" && (
@@ -1172,7 +1176,7 @@ export default function WorkOrders() {
                                 className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-1.5 text-sm outline-none transition-colors focus:border-[var(--color-brand-primary)] focus:bg-[var(--color-input-bg-hover)] text-[var(--color-text-primary)] ${currentExecution.done ? "opacity-70" : ""}`}
                               />
                             ) : (
-                              <span className="text-slate-500">-</span>
+                              <span className="text-[var(--color-text-secondary)]">-</span>
                             )}
                           </div>
 
@@ -1194,7 +1198,7 @@ export default function WorkOrders() {
                                 className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-1.5 text-sm outline-none transition-colors focus:border-[var(--color-brand-primary)] focus:bg-[var(--color-input-bg-hover)] text-[var(--color-text-primary)] ${currentExecution.done ? "opacity-70" : ""}`}
                               />
                             ) : (
-                              <span className="text-slate-500">-</span>
+                              <span className="text-[var(--color-text-secondary)]">-</span>
                             )}
                           </div>
 
@@ -1232,17 +1236,17 @@ export default function WorkOrders() {
 
                           <div className="flex justify-center">
                             {item.status === "checked" && (
-                              <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-emerald-300">
+                              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-200">
                                 Checked
                               </span>
                             )}
                             {item.status === "changed" && (
-                              <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-sky-300">
+                              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-200">
                                 Changed
                               </span>
                             )}
                             {item.status === "notChecked" && (
-                              <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-amber-300">
+                              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-200">
                                 Not Checked
                               </span>
                             )}
@@ -1285,10 +1289,10 @@ export default function WorkOrders() {
                           size={20}
                         />
                         <div>
-                          <h3 className="font-semibold text-rose-200">
+                          <h3 className="font-semibold text-rose-700 dark:text-rose-200">
                             {"Cannot complete execution"}
                           </h3>
-                          <p className="mt-1 text-sm text-rose-300/80">
+                          <p className="mt-1 text-sm text-rose-700/80 dark:text-rose-200/80">
                             {executionPendingCount > 0
                               ? `${executionPendingCount} item(s) still need proof of check/change. `
                               : ""}
@@ -1308,7 +1312,7 @@ export default function WorkOrders() {
                       <button
                         className={`no-print w-full rounded-lg px-4 py-3 text-sm font-semibold transition ${
                           canCompleteExecution
-                            ? "bg-rose-500 text-slate-900 hover:bg-rose-400"
+                            ? "bg-[var(--color-brand-primary)] text-white hover:bg-[var(--color-brand-dark)]"
                             : "bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] cursor-not-allowed"
                         }`}
                         disabled={!canCompleteExecution}
@@ -1318,8 +1322,8 @@ export default function WorkOrders() {
                       </button>
                     </div>
                   ) : (
-                    <div className="mt-4 border-t border-white/10 px-6 py-4">
-                      <p className="text-sm text-emerald-200">
+                    <div className="mt-4 border-t border-[var(--color-divider)] px-6 py-4">
+                      <p className="text-sm text-emerald-700 dark:text-emerald-200">
                         Execution checklist completed. The section remains visible for review until the work order is fully closed.
                       </p>
                     </div>
@@ -1331,29 +1335,25 @@ export default function WorkOrders() {
           <div
             className={`mb-4 rounded-xl px-6 py-4 ${
               currentExecution.done
-                ? "border border-emerald-500/20 bg-emerald-500/10 text-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.08)]"
-                : "border border-rose-500/20 bg-rose-500/10 text-rose-200 shadow-[0_0_15px_rgba(244,63,94,0.08)]"
+                ? "border border-emerald-500/30 bg-emerald-500/10 shadow-card"
+                : "border border-amber-500/30 bg-amber-500/10 shadow-card"
             }`}
           >
-            <h3
-              className={`text-lg font-semibold ${currentExecution.done ? "text-emerald-100" : "text-slate-200"}`}
-            >
+            <h3 className="text-lg font-semibold text-[var(--color-text-primary)]">
               <div className="flex items-center">
                 <span>Inspection Checklist</span>
                 <span
                   className={`ml-3 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
                     currentExecution.done
-                      ? "border border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
-                      : "border border-rose-500/20 bg-rose-500/10 text-rose-200"
+                      ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
+                      : "border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-200"
                   }`}
                 >
                   {currentExecution.done ? "Enabled" : "Disabled"}
                 </span>
               </div>
             </h3>
-            <p
-              className={`text-sm ${currentExecution.done ? "text-emerald-300/80" : "text-rose-300/80"}`}
-            >
+            <p className="text-sm text-[var(--color-text-secondary)]">
               Complete the inspection for each item after execution is finished.
             </p>
           </div>
@@ -1369,7 +1369,7 @@ export default function WorkOrders() {
               <div className="text-center">{"Status"}</div>
             </div>
 
-            <div className="divide-y divide-white/5">
+            <div className="divide-y divide-[var(--color-divider)]">
               {currentChecklist.map((item) => {
                 const executionData = getExecutionItemData(item.id);
                 const displayNote = item.note || (currentExecution.done ? executionData?.note || "" : "");
@@ -1395,7 +1395,7 @@ export default function WorkOrders() {
                       className={`flex h-6 w-6 items-center justify-center rounded-full border-2 transition-all duration-200 ${
                         item.status === "pass"
                           ? "border-emerald-400 bg-emerald-400/20"
-                          : "border-slate-600 hover:border-emerald-400/50"
+                          : "border-[var(--color-border)] hover:border-emerald-500/60"
                       } ${selectedTask?.status === "Completed" ? "cursor-not-allowed opacity-50" : ""}`}
                     >
                       {item.status === "pass" && (
@@ -1411,7 +1411,7 @@ export default function WorkOrders() {
                       className={`flex h-6 w-6 items-center justify-center rounded-full border-2 transition-all duration-200 ${
                         item.status === "fail"
                           ? "border-rose-400 bg-rose-400/20"
-                          : "border-slate-600 hover:border-rose-400/50"
+                          : "border-[var(--color-border)] hover:border-rose-500/60"
                       } ${selectedTask?.status === "Completed" ? "cursor-not-allowed opacity-50" : ""}`}
                     >
                       {item.status === "fail" && (
@@ -1431,12 +1431,12 @@ export default function WorkOrders() {
                       placeholder={displayPartsUsed ? `Parts used: ${displayPartsUsed} | Add inspection note` : "Add note"}
                       className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-1.5 text-sm outline-none transition-colors focus:border-[var(--color-brand-primary)] focus:bg-[var(--color-input-bg-hover)] ${
                         item.status === "fail"
-                          ? "text-rose-300 placeholder:text-rose-500/50"
+                          ? "text-rose-700 placeholder:text-rose-500/60 dark:text-rose-200 dark:placeholder:text-rose-300/50"
                           : "text-[var(--color-text-primary)]"
                       } ${selectedTask?.status === "Completed" ? "cursor-not-allowed opacity-50" : ""}`}
                     />
                     {item.status === "fail" && (
-                      <span className="text-xs font-semibold text-rose-400">
+                      <span className="text-xs font-semibold text-rose-700 dark:text-rose-300">
                         ⚠️ Recommended for repair
                       </span>
                     )}
@@ -1448,12 +1448,12 @@ export default function WorkOrders() {
 
                   <div className="flex justify-center">
                     {item.status === "pass" && (
-                      <span className="flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-emerald-300">
+                      <span className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-200">
                         {"Pass"}
                       </span>
                     )}
                     {item.status === "fail" && (
-                      <span className="flex items-center gap-1.5 rounded-full border border-rose-500/20 bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-rose-300">
+                      <span className="flex items-center gap-1.5 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-rose-700 dark:text-rose-200">
                         {"Fail"}
                       </span>
                     )}
@@ -1474,10 +1474,10 @@ export default function WorkOrders() {
             <div className={warningBannerClasses}>
               <AlertTriangle className="mt-0.5 text-rose-400" size={20} />
               <div>
-                <h3 className="font-semibold text-rose-200">
+                <h3 className="font-semibold text-rose-700 dark:text-rose-200">
                   {"Cannot mark as Complete"}
                 </h3>
-                <p className="mt-1 text-sm text-rose-300/80">
+                <p className="mt-1 text-sm text-rose-700/80 dark:text-rose-200/80">
                   {pendingCount > 0 ? `${pendingCount} item(s) pending. ` : ""}
                   {!currentExecution.done ? "Execution not completed. " : ""}
                   Resolve all before closing.
@@ -1487,13 +1487,13 @@ export default function WorkOrders() {
           )}
 
           {failedCount > 0 && canComplete && (
-            <div className="mt-6 rounded-lg border border-amber-500/20 bg-amber-500/10 px-5 py-4 text-sm text-amber-200 shadow-[0_0_15px_rgba(245,158,11,0.1)]">
+            <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-700 shadow-card dark:text-amber-200">
               {`${failedCount} item(s) failed. You can still mark the inspection complete.`}
             </div>
           )}
 
           {/* Actions */}
-          <div className="mt-8 flex items-center justify-between border-t border-white/5 pt-6">
+          <div className="mt-8 flex items-center justify-between border-t border-[var(--color-divider)] pt-6">
             <button
               onClick={exportPdf}
               className={actionButtonClasses}

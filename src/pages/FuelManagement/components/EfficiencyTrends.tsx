@@ -59,7 +59,7 @@ export default function EfficiencyTrends({ vehicles, fleetAvg }: EfficiencyTrend
         })}
       </div>
 
-      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
+      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card">
         <p className="text-xs text-[var(--color-text-secondary)]">
           The chart shows vehicle fuel efficiency compared to fleet average. Bars extending beyond the vertical amber line indicate above-average performance.
         </p>

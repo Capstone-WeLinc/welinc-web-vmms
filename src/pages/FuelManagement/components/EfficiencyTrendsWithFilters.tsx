@@ -162,7 +162,7 @@ export default function EfficiencyTrendsWithFilters({
         />
       )}
 
-      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
+      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card">
         <p className="text-xs text-[var(--color-text-secondary)] max-w-2xl leading-relaxed">
           The chart shows vehicle fuel efficiency compared to fleet average. Bars extending beyond the vertical amber line indicate above-average performance.
         </p>
@@ -203,7 +203,7 @@ export default function EfficiencyTrendsWithFilters({
             );
           })
         ) : (
-          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-8 text-center">
+          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-8 text-center shadow-card">
             <Search size={32} className="mx-auto mb-3 text-[var(--color-text-secondary)]" strokeWidth={1.8} />
             <p className="text-[var(--color-text-secondary)]">No vehicles match your search criteria</p>
           </div>
@@ -211,7 +211,7 @@ export default function EfficiencyTrendsWithFilters({
       </div>
 
       {/* Pagination control overlay & standard footer */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card">
 
         {/* Results Count Summary */}
         <div className="text-sm text-[var(--color-text-secondary)]">

@@ -42,7 +42,7 @@ const mapBackendStats = (stats: BackendStatFromApi[]): DashboardStat[] =>
     };
   });
 
-const cardBaseClasses = 'rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5';
+const cardBaseClasses = 'rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card';
 
 // Layout & interaction classes
 const containerClasses = 'space-y-6';

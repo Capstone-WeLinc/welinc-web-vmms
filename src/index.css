@@ -141,6 +141,10 @@ html.light {
   }
 
   /* Tables */
+  :where(div, section):has(> table) {
+    @apply border border-[var(--color-border)] shadow-card;
+  }
+
   thead {
     @apply bg-[#1a1f6e] text-white dark:bg-slate-700;
   }
@@ -264,7 +268,7 @@ html.light {
 
   /* Card Component */
   .card-base {
-    @apply rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 transition-theme;
+    @apply rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card transition-theme;
   }
 
   /* Modal Component */

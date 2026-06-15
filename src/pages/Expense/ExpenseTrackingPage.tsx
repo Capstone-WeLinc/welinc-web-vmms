@@ -17,7 +17,7 @@ type KPIStatCardProps = {
 
 function KPIStatCard({ icon, value, label, subtitle, iconBgColor, iconColor }: KPIStatCardProps) {
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 transition duration-200 ease-in-out">
+    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card transition duration-200 ease-in-out">
       <div className="mb-4 flex items-center justify-between">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ background: iconBgColor, color: iconColor }}>
           {icon}
@@ -185,8 +185,8 @@ export default function ExpenseTrackingPage() {
       {flaggedVehicles.length > 0 && (
         <div className="mx-3 mb-4 rounded-3xl border border-amber-400/20 bg-[var(--color-input-bg)]/80 p-4 shadow-[0_0_24px_rgba(26,31,110,0.12)]">
           <div className="flex flex-col gap-3 rounded-2xl border border-amber-300/15 bg-[var(--color-card-bg)] p-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-3 text-amber-200 font-semibold text-sm">
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-amber-400/10 text-amber-300">⚠️</span>
+            <div className="flex items-center gap-3 text-amber-800 font-semibold text-sm dark:text-amber-200">
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-amber-400/10 text-amber-700 dark:text-amber-200">⚠️</span>
               <span>Flagged Vehicles — Require Immediate Attention</span>
             </div>
             <p className="text-xs text-[var(--color-text-secondary)] md:ml-auto">Review and address high-priority fleet alerts immediately.</p>
@@ -199,7 +199,7 @@ export default function ExpenseTrackingPage() {
                     <div className="text-base font-semibold text-[var(--color-text-primary)]">{v.name}</div>
                     <div className="mt-1 text-xs text-[var(--color-text-secondary)]">{v.plate} • {v.model}</div>
                   </div>
-                  <div className="text-sm font-semibold text-rose-300">{v.netProfit}</div>
+                  <div className="text-sm font-semibold text-rose-700 dark:text-rose-200">{v.netProfit}</div>
                 </div>
                 <div className="mt-4 text-sm leading-6 text-[var(--color-text-secondary)]">{v.flagReason}</div>
               </div>
@@ -246,7 +246,7 @@ export default function ExpenseTrackingPage() {
 
       {/* Main content: tabs */}
       {activeTab === 'ranking' && (
-        <section className="mx-3 mt-3 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
+        <section className="mx-3 mt-3 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card">
           <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3">Vehicle Profitability Ranking</h3>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-sm text-[var(--color-text-secondary)]">
@@ -271,7 +271,7 @@ export default function ExpenseTrackingPage() {
                     <td className="px-4 py-2">#{i + 1}</td>
                     <td className="px-4 py-2 font-medium text-[var(--color-text-primary)]">{r.vehicleName}</td>
                     <td className="px-4 py-2">{r.plate}</td>
-                    <td className="px-4 py-2 text-sky-400 font-semibold">{r.income}</td>
+                    <td className="px-4 py-2 text-sky-700 font-semibold dark:text-sky-200">{r.income}</td>
                     <td className="px-4 py-2">{r.individual}</td>
                     <td className="px-4 py-2">{r.corporate}</td>
                     <td className="px-4 py-2">{r.fuel}</td>
@@ -288,7 +288,7 @@ export default function ExpenseTrackingPage() {
       )}
 
       {activeTab === 'history' && (
-        <section className="mx-3 mt-3 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 overflow-x-auto">
+        <section className="mx-3 mt-3 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card overflow-x-auto">
           <table className="w-full border-collapse text-left text-sm text-[var(--color-text-secondary)]">
             <thead className="bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
               <tr>
@@ -305,7 +305,7 @@ export default function ExpenseTrackingPage() {
                 <tr key={t.id} className="hover:bg-[var(--color-input-bg-hover)] transition-colors">
                   <td className="px-4 py-4 text-[var(--color-text-primary)]">{t.date}</td>
                   <td className="px-4 py-4">
-                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${t.type === 'Income' ? 'bg-emerald-500/10 text-emerald-300' : 'bg-rose-500/10 text-rose-300'}`}>
+                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${t.type === 'Income' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-200' : 'bg-rose-500/10 text-rose-700 dark:text-rose-200'}`}>
                       {t.type}
                     </span>
                   </td>
@@ -315,7 +315,7 @@ export default function ExpenseTrackingPage() {
                   </td>
                   <td className="px-4 py-4 text-[var(--color-text-primary)]">{t.description}</td>
                   <td className="px-4 py-4 text-[var(--color-text-primary)]">{t.client}</td>
-                  <td className={`px-4 py-4 text-right font-semibold ${t.type === 'Income' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  <td className={`px-4 py-4 text-right font-semibold ${t.type === 'Income' ? 'text-emerald-700 dark:text-emerald-200' : 'text-rose-700 dark:text-rose-200'}`}>
                     {t.amount}
                   </td>
                 </tr>
@@ -326,7 +326,7 @@ export default function ExpenseTrackingPage() {
       )}
 
       {activeTab === 'breakdown' && (
-        <section className="mx-3 mt-3 overflow-hidden rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)]">
+        <section className="mx-3 mt-3 overflow-hidden rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card">
           <div className="bg-[var(--color-input-bg)] px-5 py-4 text-sm font-semibold text-[var(--color-text-primary)]">Expense Breakdown by Vehicle</div>
           <div className="flex flex-wrap items-center gap-4 border-b border-[var(--color-border)] bg-[var(--color-input-bg)] px-5 py-3 text-xs text-[var(--color-text-secondary)]">
             <div className="flex items-center gap-2">
@@ -400,7 +400,7 @@ export default function ExpenseTrackingPage() {
       {/* Bottom panels – keep existing */}
       <section className="grid grid-cols-2 gap-3 mx-3 mt-3 mb-6">
         {/* Income by Client Type */}
-        <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 transition duration-200 hover:border-[var(--color-border)]">
+        <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card transition duration-200 hover:border-[var(--color-border)]">
           <h3 className="font-semibold mb-2 text-sm text-[var(--color-text-primary)]">Income by Client Type</h3>
           <div className="flex items-center justify-between mb-1">
             <span className="text-sm text-[var(--color-text-secondary)]">Corporate</span>
@@ -414,7 +414,7 @@ export default function ExpenseTrackingPage() {
           <div className="h-3 bg-emerald-500 rounded-full" style={{ width: `${incomeByClientType.individual.percentage}%` }}></div>
         </div>
         {/* Top 3 Most Profitable */}
-        <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 transition duration-200 hover:border-[var(--color-border)]">
+        <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card transition duration-200 hover:border-[var(--color-border)]">
           <h3 className="font-semibold mb-2 text-sm text-[var(--color-text-primary)]">Top 3 Most Profitable</h3>
           <ul className="space-y-2">
             {topProfitableVehicles.map((v, i) => (

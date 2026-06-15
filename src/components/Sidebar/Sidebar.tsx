@@ -1,5 +1,5 @@
 import { useState } from "react";
-import ConfirmModal from "../ui/ConfirmModal";
+import Modal from "../ui/Modal";
 import type { UserRecord } from "../../api/fleetService";
 import { NavLink } from "react-router-dom";
 import { isMechanicRole, isOperationsRole } from "../../utils/permissions";
@@ -151,14 +151,14 @@ export default function Sidebar({ onCollapse, onLogout, currentUser, darkMode = 
           <LogOut size={20} strokeWidth={1.7} />
           {!collapsed && <span>Logout</span>}
         </button>
-        <ConfirmModal
+        <Modal
           isOpen={showConfirm}
           title="Logout"
           message="Are you sure you want to log out? Your session will be ended." 
           confirmLabel="Log out"
           cancelLabel="Cancel"
           onConfirm={() => { setShowConfirm(false); onLogout?.(); }}
-          onCancel={() => setShowConfirm(false)}
+          onClose={() => setShowConfirm(false)}
         />
       </div>
     </aside>

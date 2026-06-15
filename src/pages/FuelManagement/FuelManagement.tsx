@@ -23,7 +23,7 @@ type KPIStatCardProps = {
 
 function KPIStatCard({ icon, value, label, subtitle, iconBgColor, iconColor }: KPIStatCardProps) {
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 transition-theme">
+    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card transition-theme">
       <div className="mb-4 flex items-center justify-between">
         <div
           style={{
@@ -92,7 +92,7 @@ export default function FuelManagement() {
   const tabButtonBaseClasses = 'flex items-center gap-2 border-b-2 px-4 py-3 font-medium transition-colors cursor-pointer';
   const reportsHeaderClasses = 'flex flex-col sm:flex-row sm:items-center justify-between gap-4';
   const reportSwitcherClasses = 'flex flex-wrap gap-1 rounded-xl p-1 border';
-  const reportPanelClasses = 'bg-[var(--color-card-bg)] border border-[var(--color-border)] rounded-2xl p-4 transition-all duration-200 min-h-62.5';
+  const reportPanelClasses = 'bg-[var(--color-card-bg)] border border-[var(--color-border)] rounded-2xl p-4 shadow-card transition-all duration-200 min-h-62.5';
 
   // Layout class constants for calendar buttons
   const dayButtonBaseClasses = 'h-8 w-8 text-xs font-medium relative mx-auto flex items-center justify-center transition-all';
@@ -161,7 +161,7 @@ export default function FuelManagement() {
         title="Fuel Management"
         subtitle="Consumption tracking, efficiency analysis, and anomaly detection"
       />
-      <div className={`${bannerLayoutClasses} rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-3` }>
+      <div className={`${bannerLayoutClasses} rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-3 shadow-card` }>
           <span className="text-xs text-[var(--color-text-secondary)] font-medium">
           Dashboard Stats Timeframe:
         </span>

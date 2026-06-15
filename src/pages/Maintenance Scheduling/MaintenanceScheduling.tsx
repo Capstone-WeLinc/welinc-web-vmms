@@ -14,6 +14,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
+import { Card, Modal } from "../../components/ui";
 import CreateSchedule from "./CreateSchedule";
 import {
   type MaintenanceStatus,
@@ -24,6 +25,7 @@ import {
   deleteMaintenanceSchedule,
   getVehicles,
 } from "../../api/fleetService";
+import { formatWorkOrderNumber } from "../../utils/workOrders";
 
 interface KPIStatCardProps {
   icon: ReactNode;
@@ -42,7 +44,10 @@ const KPIStatCard = ({
   iconBgColor,
   iconColor,
 }: KPIStatCardProps) => (
-  <div className="card-base p-5 transition duration-200 hover:-translate-y-0.5">
+  <Card
+    padding="none"
+    className="p-5 transition duration-200 hover:-translate-y-0.5"
+  >
     <div className="mb-4 flex items-center justify-between">
       <div
         className="flex h-10 w-10 items-center justify-center rounded-xl"
@@ -58,7 +63,7 @@ const KPIStatCard = ({
     <div className="mt-3 text-sm font-medium" style={{ color: iconColor }}>
       {subtitle}
     </div>
-  </div>
+  </Card>
 );
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -84,11 +89,11 @@ const Button = ({
       break;
     case "danger":
       variantClass =
-        "bg-rose-500/15 text-rose-400 hover:bg-rose-500/25 border border-rose-500/20";
+        "bg-rose-500/15 text-rose-700 hover:bg-rose-500/25 border border-rose-500/30 dark:text-rose-200";
       break;
     case "warning":
       variantClass =
-        "bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 border border-amber-500/20";
+        "bg-amber-500/15 text-amber-800 hover:bg-amber-500/25 border border-amber-500/30 dark:text-amber-200";
       break;
   }
 
@@ -122,16 +127,16 @@ const StatusBadge = ({ status }: { status: MaintenanceStatus }) => {
   const getStatusDetails = () => {
     switch (status) {
       case "Overdue":
-        return "text-rose-400 bg-rose-500/15 border-rose-500/20";
+        return "text-rose-700 bg-rose-500/15 border-rose-500/30 dark:text-rose-200";
       case "Flagged":
-        return "text-amber-400 bg-amber-500/15 border-amber-500/20";
+        return "text-amber-800 bg-amber-500/15 border-amber-500/30 dark:text-amber-200";
       case "In-Progress":
-        return "text-emerald-400 bg-emerald-500/15 border-emerald-500/20";
+        return "text-emerald-700 bg-emerald-500/15 border-emerald-500/30 dark:text-emerald-200";
       case "Completed":
         return "text-[var(--color-text-secondary)] bg-[var(--color-card-bg)] border-[var(--color-border)]";
       case "Pending":
       default:
-        return "text-sky-400 bg-sky-500/15 border-sky-500/20";
+        return "text-sky-700 bg-sky-500/15 border-sky-500/30 dark:text-sky-200";
     }
   };
 
@@ -237,15 +242,15 @@ const formatDateStr = (year: number, month: number, day: number) => {
 const getTaskStyle = (status: MaintenanceStatus) => {
   switch (status) {
     case "Overdue":
-      return "bg-rose-500/20 text-rose-300 border border-rose-500/30";
+      return "border border-rose-500/40 bg-rose-500/15 text-rose-700 shadow-sm dark:border-rose-500/30 dark:bg-rose-500/20 dark:text-rose-200";
     case "Flagged":
-      return "bg-amber-500/20 text-amber-300 border border-amber-500/30";
+      return "border border-amber-500/50 bg-amber-500/15 text-amber-800 shadow-sm dark:border-amber-500/30 dark:bg-amber-500/20 dark:text-amber-200";
     case "In-Progress":
-      return "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30";
+      return "border border-emerald-500/40 bg-emerald-500/15 text-emerald-700 shadow-sm dark:border-emerald-500/30 dark:bg-emerald-500/20 dark:text-emerald-200";
     case "Pending":
-      return "bg-sky-500/20 text-sky-300 border border-sky-500/30";
+      return "border border-sky-500/40 bg-sky-500/15 text-sky-700 shadow-sm dark:border-sky-500/30 dark:bg-sky-500/20 dark:text-sky-200";
     default:
-      return "bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] border border-[var(--color-border)]";
+      return "border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-primary)] shadow-sm";
   }
 };
 
@@ -268,6 +273,10 @@ const MaintenanceSchedulingCombined = () => {
   );
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<MaintenanceTask | null>(null);
+  const [selectedSchedules, setSelectedSchedules] = useState<MaintenanceTask[]>(
+    [],
+  );
+  const [selectedSchedulePage, setSelectedSchedulePage] = useState(0);
   const [confirmDeleteTask, setConfirmDeleteTask] =
     useState<MaintenanceTask | null>(null);
 
@@ -398,6 +407,19 @@ const MaintenanceSchedulingCombined = () => {
       new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1),
     );
 
+  const openScheduleDetails = (schedules: MaintenanceTask[]) => {
+    setSelectedSchedules(schedules);
+    setSelectedSchedulePage(0);
+  };
+
+  const closeScheduleDetails = () => {
+    setSelectedSchedules([]);
+    setSelectedSchedulePage(0);
+  };
+
+  const selectedSchedule =
+    selectedSchedules[selectedSchedulePage] ?? selectedSchedules[0] ?? null;
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -470,30 +492,44 @@ const MaintenanceSchedulingCombined = () => {
         </div>
 
         <div className="card-base p-6 transition duration-200 hover:-translate-y-0.5">
-          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[var(--color-border)] pb-4">
+          <div className="mb-5 flex flex-col gap-5 border-b border-[var(--color-border)] pb-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
-                {"Active Maintenance Schedules"}
+                Maintenance Schedules
               </h2>
               <p className="text-sm text-[var(--color-text-secondary)]">
-                {"Current scheduled items for the fleet."}
+                Current and completed scheduled items for the fleet.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setViewMode("list")}
-                className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${viewMode === "list" ? "active-filter" : "border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)]"}`}
-              >
-                <List className="mr-2 inline-block w-4 h-4" />
-                List View
-              </button>
-              <button
-                onClick={() => setViewMode("calendar")}
-                className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${viewMode === "calendar" ? "active-filter" : "border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)]"}`}
-              >
-                <CalendarIcon className="mr-2 inline-block w-4 h-4" />
-                Calendar View
-              </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="inline-flex rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-1 shadow-inner">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("list")}
+                  aria-pressed={viewMode === "list"}
+                  className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-warning)] ${
+                    viewMode === "list"
+                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white shadow-md dark:border-sky-400/50 dark:bg-[#2a317d] dark:text-white"
+                      : "border-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"
+                  }`}
+                >
+                  <List className="mr-2 h-4 w-4" />
+                  List
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("calendar")}
+                  aria-pressed={viewMode === "calendar"}
+                  className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-warning)] ${
+                    viewMode === "calendar"
+                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white shadow-md dark:border-sky-400/50 dark:bg-[#2a317d] dark:text-white"
+                      : "border-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"
+                  }`}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  Calendar
+                </button>
+              </div>
             </div>
           </div>
 
@@ -548,10 +584,16 @@ const MaintenanceSchedulingCombined = () => {
           </div>
 
           {viewMode === "list" ? (
-            <div className="overflow-x-auto rounded-xl border border-[var(--color-border)]">
+            <Card
+              padding="none"
+              className="overflow-x-auto"
+            >
               <table className="w-full border-collapse text-left text-sm text-[var(--color-text-secondary)]">
                 <thead className="bg-[var(--color-card-bg)] border-b border-[var(--color-border)] text-[var(--color-text-secondary)]">
                   <tr>
+                    <th className="px-6 py-4 font-semibold">
+                      {"Work Order No."}
+                    </th>
                     <th className="px-6 py-4 font-semibold">{"Plate No."}</th>
                     <th className="px-6 py-4 font-semibold">
                       {"Work Order Template"}
@@ -570,8 +612,12 @@ const MaintenanceSchedulingCombined = () => {
                     filteredTasks.map((task) => (
                       <tr
                         key={task.id}
-                        className="hover:bg-[var(--color-card-bg-hover)] transition-colors"
+                        onClick={() => openScheduleDetails([task])}
+                        className="cursor-pointer hover:bg-[var(--color-card-bg-hover)] transition-colors"
                       >
+                        <td className="px-6 py-4 font-medium text-[var(--color-text-primary)]">
+                          {formatWorkOrderNumber(task.id)}
+                        </td>
                         <td className="px-6 py-4 font-medium text-[var(--color-text-primary)]">
                           {task.vehicleId}
                         </td>
@@ -593,7 +639,8 @@ const MaintenanceSchedulingCombined = () => {
                         <td className="px-6 py-4 flex gap-2">
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={(event) => {
+                              event.stopPropagation();
                               setEditingTask(task);
                               setIsModalOpen(true);
                             }}
@@ -603,7 +650,10 @@ const MaintenanceSchedulingCombined = () => {
                           </button>
                           <button
                             type="button"
-                            onClick={() => setConfirmDeleteTask(task)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setConfirmDeleteTask(task);
+                            }}
                             className="table-delete-button"
                           >
                             Delete
@@ -614,7 +664,7 @@ const MaintenanceSchedulingCombined = () => {
                   ) : (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={8}
                         className="px-6 py-12 text-center text-sm text-[var(--color-text-secondary)]"
                       >
                         {noTasks ? (
@@ -630,9 +680,9 @@ const MaintenanceSchedulingCombined = () => {
                   )}
                 </tbody>
               </table>
-            </div>
+            </Card>
           ) : (
-            <div className="card-base p-6">
+            <Card padding="none" className="p-6">
               <div className="mb-6 flex items-center justify-between">
                 <button
                   type="button"
@@ -662,45 +712,241 @@ const MaintenanceSchedulingCombined = () => {
                 )}
               </div>
               <div className="grid grid-cols-7 gap-2">
-                {calendarCells.map((cell, idx) => (
-                  <div
-                    key={idx}
-                    className={`min-h-30 rounded-xl border p-2 transition duration-200 ${cell.day ? "bg-[var(--color-card-bg)] border-[var(--color-border)] hover:border-[var(--color-border)]" : "bg-transparent border-transparent"}`}
-                  >
-                    {cell.day && (
-                      <>
-                        <div className="mb-2 flex items-center justify-between">
-                          <span className="font-semibold text-sm text-[var(--color-text-secondary)]">
-                            {cell.day}
-                          </span>
-                          <button
-                            type="button"
-                            className="rounded-md p-1 text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] transition opacity-0 group-hover:opacity-100"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                        <div className="space-y-1.5 text-xs">
-                          {filteredTasks
-                            .filter((task) => task.date === cell.dateStr)
-                            .map((task) => (
-                              <div
+                {calendarCells.map((cell, idx) => {
+                  const schedulesForDay = filteredTasks.filter(
+                    (task) => task.date === cell.dateStr,
+                  );
+
+                  return (
+                    <div
+                      key={idx}
+                      onClick={() => {
+                        if (schedulesForDay.length > 0) {
+                          openScheduleDetails(schedulesForDay);
+                        }
+                      }}
+                      className={`min-h-44 rounded-xl border p-2 transition duration-200 ${
+                        cell.day
+                          ? `bg-[var(--color-card-bg)] border-[var(--color-border)] hover:border-[var(--color-brand-primary)] ${
+                              schedulesForDay.length > 0 ? "cursor-pointer" : ""
+                            }`
+                          : "bg-transparent border-transparent"
+                      }`}
+                    >
+                      {cell.day && (
+                        <>
+                          <div className="mb-2 flex items-center justify-between">
+                            <span className="font-semibold text-sm text-[var(--color-text-secondary)]">
+                              {cell.day}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(event) => event.stopPropagation()}
+                              className="rounded-md p-1 text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] transition opacity-0 group-hover:opacity-100"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <div className="space-y-1.5 text-xs">
+                            {schedulesForDay.map((task) => (
+                              <button
+                                type="button"
                                 key={task.id}
-                                className={`truncate rounded-md px-2 py-1 font-medium ${getTaskStyle(task.status)}`}
+                                className={`block w-full rounded-lg px-2.5 py-2 text-left transition hover:brightness-110 ${getTaskStyle(task.status)}`}
                               >
-                                {task.title}
-                              </div>
+                                <span className="block truncate text-[10px] font-bold">
+                                  {formatWorkOrderNumber(task.id)}
+                                </span>
+                                <span className="block truncate text-[10px] font-medium">
+                                  Plate No.: {task.vehicleId}
+                                </span>
+                                <span className="block truncate text-[10px] font-medium">
+                                  Work Order: {task.title}
+                                </span>
+                              </button>
                             ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            </div>
+            </Card>
           )}
         </div>
       </div>
+      <Modal
+        isOpen={selectedSchedules.length > 0}
+        title={
+          selectedSchedules.length > 1
+            ? `Maintenance Schedules (${selectedSchedules.length})`
+            : "Maintenance Schedule Details"
+        }
+        size="lg"
+        className="flex max-h-[90vh] max-w-xl flex-col overflow-hidden"
+        onClose={closeScheduleDetails}
+        footer={
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {selectedSchedules.length > 1 ? (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={selectedSchedulePage === 0}
+                  onClick={() =>
+                    setSelectedSchedulePage((page) => Math.max(0, page - 1))
+                  }
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-[var(--color-text-secondary)]">
+                  {selectedSchedulePage + 1} of {selectedSchedules.length}
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={
+                    selectedSchedulePage >= selectedSchedules.length - 1
+                  }
+                  onClick={() =>
+                    setSelectedSchedulePage((page) =>
+                      Math.min(selectedSchedules.length - 1, page + 1),
+                    )
+                  }
+                >
+                  Next
+                </Button>
+              </div>
+            ) : (
+              <span />
+            )}
+            <Button
+              variant="secondary"
+              onClick={closeScheduleDetails}
+            >
+              Close
+            </Button>
+          </div>
+        }
+      >
+        {selectedSchedule && (
+            <section
+              className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card"
+            >
+              <div className="flex items-center justify-between gap-4 border-b border-[var(--color-divider)] px-4 py-3">
+                <div>
+                  <h3 className="text-base font-semibold text-[var(--color-text-primary)]">
+                    {selectedSchedule.title}
+                  </h3>
+                  <p className="text-sm text-[var(--color-text-secondary)]">
+                    {selectedSchedule.vehicleId} - {selectedSchedule.date}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setEditingTask(selectedSchedule);
+                    closeScheduleDetails();
+                    setIsModalOpen(true);
+                  }}
+                >
+                  Edit
+                </Button>
+              </div>
+
+              <div className="grid gap-4 p-4 sm:grid-cols-2">
+                {[
+              {
+                label: "Work Order No.",
+                value: formatWorkOrderNumber(selectedSchedule.id),
+              },
+              { label: "Plate No.", value: selectedSchedule.vehicleId },
+              { label: "Work Order Template", value: selectedSchedule.title },
+              {
+                label: "Trigger",
+                value:
+                  selectedSchedule.triggerType === "TIME"
+                    ? "Time-Based"
+                    : selectedSchedule.triggerType === "MANUAL"
+                      ? "Manual"
+                      : selectedSchedule.triggerType === "ODOMETER"
+                        ? "Odometer"
+                        : "Not specified",
+              },
+              { label: "Scheduled Date", value: selectedSchedule.date },
+              { label: "Mechanic", value: selectedSchedule.assignedDriver },
+              { label: "Status", value: selectedSchedule.status },
+              { label: "Garage / Cluster", value: selectedSchedule.garageId },
+              { label: "Account Type", value: selectedSchedule.accountType },
+              {
+                label: "System Affected",
+                value: selectedSchedule.systemAffected,
+              },
+              {
+                label: "Odometer Reading",
+                value: selectedSchedule.odometerReading
+                  ? `${selectedSchedule.odometerReading} km`
+                  : undefined,
+              },
+              { label: "Interval Type", value: selectedSchedule.intervalType },
+              {
+                label: "Interval",
+                value: selectedSchedule.intervalKm
+                  ? `${selectedSchedule.intervalKm} km`
+                  : undefined,
+              },
+              {
+                label: "Buffer Distance",
+                value: selectedSchedule.bufferDistanceKm
+                  ? `${selectedSchedule.bufferDistanceKm} km`
+                  : undefined,
+              },
+              {
+                label: "Starting Reference",
+                value: selectedSchedule.startingReferenceReadingKm
+                  ? `${selectedSchedule.startingReferenceReadingKm} km`
+                  : undefined,
+              },
+              {
+                label: "Start Reference Date",
+                value: selectedSchedule.startReferenceDate,
+              },
+            ]
+              .filter((detail) => detail.value)
+              .map((detail) => (
+                <div
+                  key={detail.label}
+                  className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4"
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                    {detail.label}
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-[var(--color-text-primary)]">
+                    {detail.label === "Status" ? (
+                      <StatusBadge status={selectedSchedule.status} />
+                    ) : (
+                      detail.value
+                    )}
+                  </p>
+                </div>
+              ))}
+
+            {selectedSchedule.notes && (
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4 sm:col-span-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                  Notes
+                </p>
+                <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--color-text-primary)]">
+                  {selectedSchedule.notes}
+                </p>
+              </div>
+            )}
+              </div>
+            </section>
+        )}
+      </Modal>
+
       <CreateSchedule
         isOpen={isModalOpen}
         editingTask={editingTask ?? undefined}

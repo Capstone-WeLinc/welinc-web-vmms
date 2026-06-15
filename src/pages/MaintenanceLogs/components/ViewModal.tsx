@@ -39,14 +39,14 @@ const LogStatusBadge = ({ status }: { status: MaintenanceStatus }) => {
   const getStatusDetails = () => {
     switch (status) {
       case 'In Progress':
-        return 'text-sky-300 border-sky-500/30 bg-sky-500/10';
+        return 'text-sky-700 border-sky-500/30 bg-sky-500/10 dark:text-sky-200';
       case 'Completed':
-        return 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10';
+        return 'text-emerald-700 border-emerald-500/30 bg-emerald-500/10 dark:text-emerald-200';
       case 'On Hold':
         return 'text-slate-300 border-slate-500/30 bg-slate-500/10';
       case 'Pending':
       default:
-        return 'text-amber-300 border-amber-500/30 bg-amber-500/10';
+        return 'text-amber-800 border-amber-500/30 bg-amber-500/10 dark:text-amber-200';
     }
   };
 
@@ -113,7 +113,7 @@ export default function ViewModal({ isOpen, log, onClose }: ViewModalProps) {
           </div>
           <div>
             <span className="block text-xs font-medium text-slate-400 mb-1">Cost</span>
-            <span className="text-sm font-semibold text-emerald-400">₱{log.cost.toLocaleString()}</span>
+            <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-200">₱{log.cost.toLocaleString()}</span>
           </div>
         </div>
 

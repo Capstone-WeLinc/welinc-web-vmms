@@ -69,14 +69,14 @@ const initialLogs: MaintenanceLog[] = [
 ];
 
 const pageContainerClasses = 'space-y-6';
-const panelClasses = 'rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 transition duration-200';
+const panelClasses = 'rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card transition duration-200';
 const headerSectionClasses = 'flex flex-col gap-4 mb-6 md:flex-row md:items-end md:justify-between';
 const actionRowClasses = 'flex gap-3';
 const filterGridClasses = 'grid gap-3 mb-6 grid-cols-1 md:grid-cols-5';
 const alertBannerClasses = 'mb-6 rounded-lg border border-rose-500/30 bg-rose-500/10 p-4';
 const alertContentClasses = 'flex items-start gap-3';
 const alertActionsClasses = 'flex gap-2 shrink-0';
-const tableWrapperClasses = 'overflow-x-auto rounded-xl border border-[var(--color-border)]';
+const tableWrapperClasses = 'overflow-x-auto rounded-xl border border-[var(--color-border)] shadow-card';
 const tableClasses = 'w-full border-collapse text-left text-sm text-[var(--color-text-secondary)]';
 const tableHeadClasses = 'bg-[var(--color-input-bg)] border-b border-[var(--color-border)]';
 const tableRowClasses = 'hover:bg-[var(--color-card-bg-hover)] transition-colors';
@@ -185,14 +185,14 @@ const LogStatusBadge = ({ status }: StatusBadgeProps) => {
   const getStatusDetails = () => {
     switch (status) {
       case 'In Progress':
-        return 'text-sky-300 border-[var(--color-brand-primary)]/30 bg-[var(--color-brand-primary)]/10';
+        return 'text-sky-700 border-[var(--color-brand-primary)]/30 bg-[var(--color-brand-primary)]/10 dark:text-sky-200';
       case 'Completed':
-        return 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10';
+        return 'text-emerald-700 border-emerald-500/30 bg-emerald-500/10 dark:text-emerald-200';
       case 'On Hold':
         return 'text-[var(--color-text-secondary)] border-[var(--color-border)]/50 bg-[var(--color-card-bg-hover)]';
       case 'Pending':
       default:
-        return 'text-amber-300 border-amber-500/30 bg-amber-500/10';
+        return 'text-amber-800 border-amber-500/30 bg-amber-500/10 dark:text-amber-200';
     }
   };
 
@@ -466,7 +466,7 @@ export default function MaintenanceLogs() {
             <div className={alertContentClasses}>
               <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm font-semibold text-rose-300">
+                <p className="text-sm font-semibold text-rose-700 dark:text-rose-200">
                   Delete {selectedIds.length} selected record{selectedIds.length > 1 ? 's' : ''}? This cannot be undone.
                 </p>
               </div>

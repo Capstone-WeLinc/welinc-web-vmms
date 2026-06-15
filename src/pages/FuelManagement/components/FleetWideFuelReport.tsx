@@ -330,21 +330,21 @@ export default function FleetWideReport() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5">
+        <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card">
           <div className="text-sm font-medium text-[var(--color-text-secondary)] mb-2">Total Fleet Fuel Cost</div>
           <div className="text-3xl font-bold text-[var(--color-text-primary)] font-mono">₱{totals.cost.toLocaleString()}</div>
         </div>
-        <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5">
+        <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card">
           <div className="text-sm font-medium text-[var(--color-text-secondary)] mb-2">Total Liters Consumed</div>
           <div className="text-3xl font-bold text-[var(--color-text-primary)] font-mono">{totals.liters}L</div>
         </div>
-        <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5">
+        <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card">
           <div className="text-sm font-medium text-[var(--color-text-secondary)] mb-2">Avg Fleet Efficiency</div>
           <div className="text-3xl font-bold text-[var(--color-brand-primary)] font-mono">{totals.efficiency} km/L</div>
         </div>
       </div>
 
-      <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] overflow-x-auto">
+      <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--color-divider)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">

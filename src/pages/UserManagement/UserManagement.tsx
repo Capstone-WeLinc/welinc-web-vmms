@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import Button from "../../components/ui/Button";
-import ConfirmModal from "../../components/ui/ConfirmModal";
 import Modal from "../../components/ui/Modal";
 import {
   createUser,
@@ -32,15 +31,15 @@ import type { MaintenanceTask } from "../../types/maintenance";
 const roleOptions: UserRole[] = ["ADMIN", "OPERATIONS", "MECHANIC"];
 
 const statusStyles: Record<UserRecord["status"], string> = {
-  Active: "text-emerald-400 bg-emerald-500/15 border border-emerald-500/20",
-  Inactive: "text-amber-400 bg-amber-500/15 border border-amber-500/20",
-  Suspended: "text-rose-400 bg-rose-500/15 border border-rose-500/20",
+  Active: "text-emerald-700 bg-emerald-500/15 border border-emerald-500/30 dark:text-emerald-200",
+  Inactive: "text-amber-800 bg-amber-500/15 border border-amber-500/30 dark:text-amber-200",
+  Suspended: "text-rose-700 bg-rose-500/15 border border-rose-500/30 dark:text-rose-200",
 };
 
 const roleStyles: Record<string, string> = {
-  ADMIN: "text-sky-400 bg-sky-500/15 border border-sky-500/20",
-  OPERATIONS: "text-amber-400 bg-amber-500/15 border border-amber-500/20",
-  MECHANIC: "text-emerald-400 bg-emerald-500/15 border border-emerald-500/20",
+  ADMIN: "text-sky-700 bg-sky-500/15 border border-sky-500/30 dark:text-sky-200",
+  OPERATIONS: "text-amber-800 bg-amber-500/15 border border-amber-500/30 dark:text-amber-200",
+  MECHANIC: "text-emerald-700 bg-emerald-500/15 border border-emerald-500/30 dark:text-emerald-200",
 };
 
 function normalizeRole(role?: string | null) {
@@ -112,14 +111,14 @@ function validatePassword(password: string) {
 // Layout & interaction classes
 const containerClasses = 'space-y-6';
 const statsGridClasses = 'grid gap-4 md:grid-cols-3';
-const cardClasses = 'rounded-[26px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.16)]';
+const cardClasses = 'rounded-[26px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card';
 const headerSectionClasses = 'mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between';
 const filtersGridClasses = 'grid gap-3 md:grid-cols-[1.8fr_1fr_1fr] mb-6';
 const searchInputClasses = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none';
 const selectInputClasses = 'w-full appearance-none rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none';
 const loadingStateClasses = 'rounded-2xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-4 py-8 text-center text-sm text-[var(--color-text-secondary)]';
 const emptyStateClasses = 'rounded-2xl border border-dashed border-[var(--color-border)] px-4 py-10 text-center text-sm text-[var(--color-text-secondary)]';
-const tableWrapperClasses = 'overflow-hidden rounded-2xl border border-[var(--color-border)]';
+const tableWrapperClasses = 'overflow-hidden rounded-2xl border border-[var(--color-border)] shadow-card';
 const tableClasses = 'min-w-full text-left text-sm text-[var(--color-text-primary)]';
 const theadClasses = 'bg-[var(--color-card-bg)] text-xs uppercase tracking-[0.16em] text-[var(--color-text-secondary)]';
 const tbodyClasses = 'divide-y divide-[var(--color-divider)]';
@@ -621,7 +620,7 @@ export default function UserManagement() {
                     {stat.value}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)]/80 p-3 text-[var(--color-text-secondary)]">
+                <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)]/80 p-3 text-[var(--color-text-secondary)] shadow-card">
                   <Icon className="h-5 w-5" />
                 </div>
               </div>
@@ -1042,7 +1041,7 @@ export default function UserManagement() {
             </form>
       </Modal>
 
-      <ConfirmModal
+      <Modal
         isOpen={confirmCreateUser}
         title="Create user account"
         message={`Create account for ${newUserForm.name || "this user"} (${newUserForm.username || "username"}) with the ${displayRole(newUserForm.role || "") || "selected"} role?`}
@@ -1052,12 +1051,12 @@ export default function UserManagement() {
           setConfirmCreateUser(false);
           await confirmCreateUserAccount();
         }}
-        onCancel={() => setConfirmCreateUser(false)}
+        onClose={() => setConfirmCreateUser(false)}
       />
 
       {duplicateUser && (
         <div className={modalOverlayClasses}>
-          <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6">
+          <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card">
             <h3 className="mb-3 text-lg font-semibold text-[var(--color-text-primary)]">
               Existing User Account
             </h3>
@@ -1106,7 +1105,7 @@ export default function UserManagement() {
 
       {confirmDeleteUser && (
         <div className={modalOverlayClasses}>
-          <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6">
+          <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card">
             <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">
               Confirm Delete
             </h3>
@@ -1139,7 +1138,7 @@ export default function UserManagement() {
 
       {blockedDeleteUser && (
         <div className={modalOverlayClasses}>
-          <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6">
+          <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card">
             <h3 className="mb-3 text-lg font-semibold text-[var(--color-text-primary)]">
               User Cannot Be Deleted
             </h3>

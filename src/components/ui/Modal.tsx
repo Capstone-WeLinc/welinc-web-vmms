@@ -1,15 +1,17 @@
 import React, { useEffect, useRef } from 'react';
 import Button from './Button';
 
-interface ModalProps {
+export interface ModalProps {
   isOpen: boolean;
   title?: React.ReactNode;
-  children: React.ReactNode;
+  message?: React.ReactNode;
+  children?: React.ReactNode;
   footer?: React.ReactNode;
   onClose: () => void;
   onConfirm?: () => void;
   confirmLabel?: string;
   cancelLabel?: string;
+  confirmVariant?: 'primary' | 'danger' | 'warning';
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }
@@ -17,12 +19,14 @@ interface ModalProps {
 const Modal: React.FC<ModalProps> = ({
   isOpen,
   title,
+  message,
   children,
   footer,
   onClose,
   onConfirm,
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
+  confirmVariant = 'primary',
   size = 'md',
   className = '',
 }) => {
@@ -94,9 +98,16 @@ const Modal: React.FC<ModalProps> = ({
         )}
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-          {children}
-        </div>
+        {(message !== undefined || children !== undefined) && (
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            {message !== undefined && (
+              <p className="text-sm text-[var(--color-text-secondary)]">
+                {message}
+              </p>
+            )}
+            {children}
+          </div>
+        )}
 
         {/* Footer */}
         {(footer !== undefined || onConfirm) && (
@@ -113,7 +124,7 @@ const Modal: React.FC<ModalProps> = ({
                 </Button>
                 {onConfirm && (
                   <Button
-                    variant="primary"
+                    variant={confirmVariant}
                     onClick={onConfirm}
                   >
                     {confirmLabel}

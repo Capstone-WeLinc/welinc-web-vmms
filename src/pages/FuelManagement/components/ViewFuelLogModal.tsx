@@ -14,8 +14,8 @@ export default function ViewFuelLogModal({ isOpen, onClose, fillUp }: ViewFuelLo
     const containerClasses = 'w-full max-w-2xl overflow-hidden rounded-2xl shadow-2xl modal-content';
     const headerClasses = 'flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)]';
     const iconBgClasses = 'p-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-brand-primary)]';
-    const infoBannerClasses = 'flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)]';
-    const cardClasses = 'p-4 rounded-xl space-y-3 border border-[var(--color-border)] bg-[var(--color-card-bg)]';
+    const infoBannerClasses = 'flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card';
+    const cardClasses = 'p-4 rounded-xl space-y-3 border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card';
     const statusBadgeClasses = fillUp.trend === 'above'
       ? 'mt-2 inline-flex items-center px-3 py-1.5 rounded-md font-mono text-lg font-bold bg-[var(--color-brand-success)]/15 text-[var(--color-brand-success)] border border-[var(--color-brand-success)]/20'
       : 'mt-2 inline-flex items-center px-3 py-1.5 rounded-md font-mono text-lg font-bold bg-[var(--color-brand-danger)]/15 text-[var(--color-brand-danger)] border border-[var(--color-brand-danger)]/20';

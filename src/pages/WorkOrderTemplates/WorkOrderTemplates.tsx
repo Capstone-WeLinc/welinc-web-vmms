@@ -27,7 +27,7 @@ interface ChecklistItemTemplate {
 const containerClasses = 'space-y-6';
 const layoutClasses = 'flex flex-col lg:flex-row gap-6 items-start';
 const sidebarContainerClasses = 'w-full lg:w-1/3 xl:w-1/4 lg:sticky lg:top-6';
-const sidebarCardClasses = 'rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 h-full';
+const sidebarCardClasses = 'rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 h-full shadow-card';
 const sidebarHeadingClasses = 'text-sm font-semibold text-[var(--color-text-primary)] mb-4 px-2';
 const templateListClasses = 'space-y-1 max-h-[420px] overflow-y-auto pr-1';
 const templateButtonBaseClasses = 'group w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200';
@@ -40,7 +40,7 @@ const addTypeCancelClasses = 'text-xs text-[var(--color-text-secondary)] hover:t
 const addTypeSubmitClasses = 'text-xs bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary)]/15 px-3 py-1 rounded-md font-semibold';
 const addNewTypeButtonClasses = 'mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] transition-all text-sm font-medium';
 const contentContainerClasses = 'w-full lg:w-2/3 xl:w-3/4';
-const contentCardClasses = 'rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 flex flex-col min-h-[420px] lg:min-h-[540px]';
+const contentCardClasses = 'rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 flex flex-col min-h-[420px] lg:min-h-[540px] shadow-card';
 const headerSectionClasses = 'flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-[var(--color-border)]';
 const addItemButtonClasses = 'flex items-center gap-2 px-4 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-primary)] transition-colors text-sm font-semibold hover:bg-[var(--color-card-bg-hover)]';
 const saveButtonClasses = 'flex items-center gap-2 px-4 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] transition-colors text-sm font-semibold hover:bg-[var(--color-brand-primary)]/15';
@@ -324,9 +324,11 @@ export default function WorkOrderTemplates() {
     selectedType !== "" &&
     Object.prototype.hasOwnProperty.call(templates, selectedType);
   const canSaveTemplate = hasSelectedTemplate;
+  const hasTemplateSearch = searchTerm.trim().length > 0;
   const visibleTemplates = Object.keys(templates).filter((type) =>
     type.toLowerCase().includes(searchTerm.trim().toLowerCase()),
   );
+  const hasChecklistItemSearch = itemFilter.trim().length > 0;
   const filteredItems = editingItems.filter((item) =>
     item.text.toLowerCase().includes(itemFilter.trim().toLowerCase()),
   );
@@ -356,7 +358,7 @@ export default function WorkOrderTemplates() {
               />
             </div>
             <div className={templateListClasses}>
-              {visibleTemplates.length === 0 ? (
+              {hasTemplateSearch && visibleTemplates.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-4 text-sm text-[var(--color-text-secondary)]">
                   No templates match your search.
                 </div>
@@ -573,14 +575,10 @@ export default function WorkOrderTemplates() {
             </div>
 
             <div className={itemsContainerClasses}>
-              {filteredItems.length === 0 ? (
+              {hasChecklistItemSearch && filteredItems.length === 0 ? (
                 <div className={emptyStateClasses}>
                   <ClipboardCheck className="w-12 h-12 opacity-50" />
-                  <p>
-                    {editingItems.length === 0
-                      ? "No items in this checklist yet."
-                      : "No checklist items match your filter."}
-                  </p>
+                  <p>No checklist items match your filter.</p>
                 </div>
               ) : (
                 filteredItems.map((item, index) => (
