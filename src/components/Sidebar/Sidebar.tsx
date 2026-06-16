@@ -1,5 +1,4 @@
 import { useState } from "react";
-import Modal from "../ui/Modal";
 import type { UserRecord } from "../../lib/api/authService";
 import { NavLink } from "react-router-dom";
 import { isMechanicRole, isOperationsRole } from "../../lib/utils/permissions";
@@ -16,7 +15,6 @@ import {
   DollarSign,
   PanelLeftClose,
   PanelLeftOpen,
-  LogOut,
   User,
   Moon,
   Sun,
@@ -24,7 +22,6 @@ import {
 
 interface SidebarProps {
   onCollapse?: (collapsed: boolean) => void;
-  onLogout?: () => void;
   currentUser?: UserRecord | null;
   darkMode?: boolean;
   onToggleDarkMode?: () => void;
@@ -78,9 +75,8 @@ const getNavLinkClass = (isActive: boolean, collapsed: boolean) => {
   return `${base} text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]`;
 };
 
-export default function Sidebar({ onCollapse, onLogout, currentUser, darkMode = false, onToggleDarkMode }: SidebarProps) {
+export default function Sidebar({ onCollapse, currentUser, darkMode = false, onToggleDarkMode }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
   const collapsedWidth = collapsed ? "80px" : "256px";
   const isMechanic = isMechanicRole(currentUser);
   const isOperations = isOperationsRole(currentUser);
@@ -162,20 +158,6 @@ export default function Sidebar({ onCollapse, onLogout, currentUser, darkMode = 
         <button className={`${baseButtonClasses} ${collapsed ? 'justify-center' : 'justify-start'}`} onClick={toggleCollapse} title={collapsed ? "Expand sidebar" : "Collapse sidebar"} type="button">
           {collapsed ? <PanelLeftOpen size={20} strokeWidth={1.7} /> : <><PanelLeftClose size={20} strokeWidth={1.7} /><span>Collapse</span></>}
         </button>
-
-        <button className={`${baseButtonClasses} ${collapsed ? 'justify-center' : 'justify-start'}`} title="Logout" onClick={() => setShowConfirm(true)} type="button">
-          <LogOut size={20} strokeWidth={1.7} />
-          {!collapsed && <span>Logout</span>}
-        </button>
-        <Modal
-          isOpen={showConfirm}
-          title="Logout"
-          message="Are you sure you want to log out? Your session will be ended." 
-          confirmLabel="Log out"
-          cancelLabel="Cancel"
-          onConfirm={() => { setShowConfirm(false); onLogout?.(); }}
-          onClose={() => setShowConfirm(false)}
-        />
       </div>
     </aside>
   );

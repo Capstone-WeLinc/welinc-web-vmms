@@ -16,6 +16,12 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   useEffect(() => {
     const ssoToken = searchParams.get("token");
     if (!ssoToken) {
+      const existingToken = window.localStorage.getItem("accessToken");
+      if (existingToken) {
+        onLogin();
+        navigate("/dashboard", { replace: true });
+        return;
+      }
       // If no token is provided, redirect directly to the unified portal
       const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:5176";
       window.location.href = `${portalUrl}/login`;

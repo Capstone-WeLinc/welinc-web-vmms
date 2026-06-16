@@ -95,6 +95,16 @@ function App() {
   }, [navigate]);
 
   useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'token' || e.key === 'welinc_token' || e.key === 'accessToken' || e.key === 'welinc_user') {
+        window.location.reload();
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  useEffect(() => {
     if (!isAuthenticated) return;
     getCurrentUser()
       .then((u) => setCurrentUser(u))
@@ -194,7 +204,6 @@ function App() {
       {isAuthenticated && (
         <Sidebar
           onCollapse={setSidebarCollapsed}
-          onLogout={handleLogout}
           currentUser={currentUser}
           darkMode={darkMode}
           onToggleDarkMode={toggleDarkMode}
