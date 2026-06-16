@@ -4,6 +4,7 @@ import { NavLink } from "react-router-dom";
 import { isMechanicRole, isOperationsRole } from "../../lib/utils/permissions";
 import {
   LayoutGrid,
+  LogOut,
   LayoutDashboard,
   Users,
   CalendarClock,
@@ -94,6 +95,45 @@ export default function Sidebar({ onCollapse, currentUser, darkMode = false, onT
     onCollapse?.(next);
   };
 
+  const getSubsystemCount = () => {
+    try {
+      const token = window.localStorage.getItem('accessToken');
+      if (!token) return 0;
+      const [, payload] = token.split('.');
+      if (!payload) return 0;
+      const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+      const json = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join(''),
+      );
+      const decoded = JSON.parse(json) as { roles?: { system: string }[] };
+      const subsystemRoles = (decoded.roles || []).filter((r) =>
+        ['VRMS', 'VMMS', 'BMS'].includes(r.system.toUpperCase())
+      );
+      const uniqueSystems = new Set(subsystemRoles.map(r => r.system.toUpperCase()));
+      return uniqueSystems.size;
+    } catch (err) {
+      console.error('Error parsing token to count subsystems:', err);
+      return 2;
+    }
+  };
+
+  const hasMultipleSystems = getSubsystemCount() > 1;
+
+  const handleSignOut = () => {
+    window.localStorage.removeItem("accessToken");
+    try {
+      window.localStorage.removeItem("session_login_time");
+      window.localStorage.removeItem("session_last_activity");
+    } catch (e) {
+      console.error(e);
+    }
+    const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:5176";
+    window.location.href = `${portalUrl}/login?logout=true`;
+  };
+
   const handleBackToPortal = () => {
     const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:5176";
     window.location.href = portalUrl;
@@ -145,15 +185,28 @@ export default function Sidebar({ onCollapse, currentUser, darkMode = false, onT
           {!collapsed && <span>{darkMode ? "Light Mode" : "Dark Mode"}</span>}
         </button>
 
-        <button
-          className={`${baseButtonClasses} ${collapsed ? 'justify-center' : 'justify-start'}`}
-          onClick={handleBackToPortal}
-          title="Switch Subsystem"
-          type="button"
-        >
-          <LayoutGrid size={20} strokeWidth={1.7} />
-          {!collapsed && <span>Switch Subsystem</span>}
-        </button>
+        {hasMultipleSystems ? (
+          <button
+            className={`${baseButtonClasses} ${collapsed ? 'justify-center' : 'justify-start'}`}
+            onClick={handleBackToPortal}
+            title="Switch Subsystem"
+            type="button"
+          >
+            <LayoutGrid size={20} strokeWidth={1.7} />
+            {!collapsed && <span>Switch Subsystem</span>}
+          </button>
+        ) : (
+          <button
+            className={`${baseButtonClasses} ${collapsed ? 'justify-center' : 'justify-start'}`}
+            onClick={handleSignOut}
+            title="Sign Out"
+            type="button"
+            style={{ color: '#ef4444' }}
+          >
+            <LogOut size={20} strokeWidth={1.7} />
+            {!collapsed && <span>Sign Out</span>}
+          </button>
+        )}
 
         <button className={`${baseButtonClasses} ${collapsed ? 'justify-center' : 'justify-start'}`} onClick={toggleCollapse} title={collapsed ? "Expand sidebar" : "Collapse sidebar"} type="button">
           {collapsed ? <PanelLeftOpen size={20} strokeWidth={1.7} /> : <><PanelLeftClose size={20} strokeWidth={1.7} /><span>Collapse</span></>}
