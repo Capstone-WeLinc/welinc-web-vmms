@@ -13,6 +13,12 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [searchParams] = useSearchParams();
   const [error, setError] = useState("");
 
+  const getPortalUrl = () => {
+    const envUrl = import.meta.env.VITE_PORTAL_URL;
+    if (envUrl) return envUrl;
+    return `${window.location.protocol}//${window.location.hostname}:5176`;
+  };
+
   useEffect(() => {
     if (searchParams.get('logout') === 'true') {
       window.localStorage.removeItem("accessToken");
@@ -22,8 +28,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       } catch (e) {
         console.error(e);
       }
-      const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:5176";
-      window.location.href = `${portalUrl}/login?logout=true`;
+      window.location.href = `${getPortalUrl()}/login?logout=true`;
       return;
     }
 
@@ -36,8 +41,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         return;
       }
       // If no token is provided, redirect directly to the unified portal
-      const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:5176";
-      window.location.href = `${portalUrl}/login`;
+      window.location.href = `${getPortalUrl()}/login`;
       return;
     }
 
@@ -72,8 +76,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             <p className="text-[var(--color-text-secondary)] text-sm">{error}</p>
             <button
               onClick={() => {
-                const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:5176";
-                window.location.href = `${portalUrl}/login`;
+                window.location.href = `${getPortalUrl()}/login`;
               }}
               className="mt-4 w-full bg-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary-hover)] text-white font-bold py-2.5 rounded-xl transition-all cursor-pointer"
             >
