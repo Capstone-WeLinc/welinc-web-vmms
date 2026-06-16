@@ -14,6 +14,19 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (searchParams.get('logout') === 'true') {
+      window.localStorage.removeItem("accessToken");
+      try {
+        window.localStorage.removeItem("session_login_time");
+        window.localStorage.removeItem("session_last_activity");
+      } catch (e) {
+        console.error(e);
+      }
+      const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:5176";
+      window.location.href = `${portalUrl}/login?logout=true`;
+      return;
+    }
+
     const ssoToken = searchParams.get("token");
     if (!ssoToken) {
       const existingToken = window.localStorage.getItem("accessToken");
