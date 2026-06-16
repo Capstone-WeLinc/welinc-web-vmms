@@ -4,6 +4,7 @@ import type { UserRecord } from "../../lib/api/authService";
 import { NavLink } from "react-router-dom";
 import { isMechanicRole, isOperationsRole } from "../../lib/utils/permissions";
 import {
+  LayoutGrid,
   LayoutDashboard,
   Users,
   CalendarClock,
@@ -97,6 +98,11 @@ export default function Sidebar({ onCollapse, onLogout, currentUser, darkMode = 
     onCollapse?.(next);
   };
 
+  const handleBackToPortal = () => {
+    const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:5176";
+    window.location.href = portalUrl;
+  };
+
   const resolvedAvatarClass = `${avatarClasses} ${collapsed ? 'mx-auto' : ''}`;
 
   const currentRole = currentUser ? roleLabelMap[currentUser.role] ?? currentUser.role : "Administrator";
@@ -141,6 +147,16 @@ export default function Sidebar({ onCollapse, onLogout, currentUser, darkMode = 
         >
           {darkMode ? <Sun size={20} strokeWidth={1.7} /> : <Moon size={20} strokeWidth={1.7} />}
           {!collapsed && <span>{darkMode ? "Light Mode" : "Dark Mode"}</span>}
+        </button>
+
+        <button
+          className={`${baseButtonClasses} ${collapsed ? 'justify-center' : 'justify-start'}`}
+          onClick={handleBackToPortal}
+          title="Switch Subsystem"
+          type="button"
+        >
+          <LayoutGrid size={20} strokeWidth={1.7} />
+          {!collapsed && <span>Switch Subsystem</span>}
         </button>
 
         <button className={`${baseButtonClasses} ${collapsed ? 'justify-center' : 'justify-start'}`} onClick={toggleCollapse} title={collapsed ? "Expand sidebar" : "Collapse sidebar"} type="button">
