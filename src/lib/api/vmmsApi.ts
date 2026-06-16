@@ -13,19 +13,25 @@ import {
   saveMockChecklistTemplates,
 } from "../mocks/vmmsMocks";
 
-const fallbackVehicleOptions = [
-  { value: "ABC 1234", label: "ABC 1234 - Truck Alpha" },
-  { value: "DEF 5678", label: "DEF 5678 - Truck Bravo" },
-  { value: "GHI 9012", label: "GHI 9012 - Truck Charlie" },
-  { value: "JKL 3456", label: "JKL 3456 - Truck Delta" },
-  { value: "MNO 7890", label: "MNO 7890 - Truck Echo" },
-  { value: "PQR 2345", label: "PQR 2345 - Truck Foxtrot" },
-  { value: "STU 6789", label: "STU 6789 - Truck Golf" },
-  { value: "VWX 0123", label: "VWX 0123 - Truck Hotel" },
-  { value: "YZA 4567", label: "YZA 4567 - Truck India" },
-  { value: "BCD 8901", label: "BCD 8901 - Truck Juliet" },
-  { value: "EFG 2345", label: "EFG 2345 - Truck Kilo" },
-  { value: "HU 6789", label: "HU 6789 - Truck Lima" },
+export interface VehicleOption {
+  value: string;
+  label: string;
+  status?: string;
+}
+
+const fallbackVehicleOptions: VehicleOption[] = [
+  { value: "ABC 1234", label: "ABC 1234 - Truck Alpha", status: "AVAILABLE" },
+  { value: "DEF 5678", label: "DEF 5678 - Truck Bravo", status: "AVAILABLE" },
+  { value: "GHI 9012", label: "GHI 9012 - Truck Charlie", status: "AVAILABLE" },
+  { value: "JKL 3456", label: "JKL 3456 - Truck Delta", status: "AVAILABLE" },
+  { value: "MNO 7890", label: "MNO 7890 - Truck Echo", status: "AVAILABLE" },
+  { value: "PQR 2345", label: "PQR 2345 - Truck Foxtrot", status: "AVAILABLE" },
+  { value: "STU 6789", label: "STU 6789 - Truck Golf", status: "AVAILABLE" },
+  { value: "VWX 0123", label: "VWX 0123 - Truck Hotel", status: "AVAILABLE" },
+  { value: "YZA 4567", label: "YZA 4567 - Truck India", status: "AVAILABLE" },
+  { value: "BCD 8901", label: "BCD 8901 - Truck Juliet", status: "AVAILABLE" },
+  { value: "EFG 2345", label: "EFG 2345 - Truck Kilo", status: "AVAILABLE" },
+  { value: "HU 6789", label: "HU 6789 - Truck Lima", status: "AVAILABLE" },
 ];
 import type { MaintenanceTask, MaintenanceStatus } from "../../types/maintenance";
 import type {
@@ -71,6 +77,34 @@ function normalizeUserRecord(user: unknown): UserRecord {
         ? "Inactive"
         : "Active",
   } as UserRecord;
+}
+
+const vehicleMaintenanceStatus = "UNDER MAINTENANCE";
+
+function saveMockVehicleStatus(vehicleId: string, status: string) {
+  try {
+    const storageKey = "mockVehicleStatuses";
+    const savedStatuses = window.localStorage.getItem(storageKey);
+    const statuses = savedStatuses
+      ? (JSON.parse(savedStatuses) as Record<string, string>)
+      : {};
+
+    statuses[vehicleId] = status;
+    window.localStorage.setItem(storageKey, JSON.stringify(statuses));
+  } catch {
+    // ignore mock storage failures
+  }
+}
+
+function loadMockVehicleStatuses() {
+  try {
+    const savedStatuses = window.localStorage.getItem("mockVehicleStatuses");
+    return savedStatuses
+      ? (JSON.parse(savedStatuses) as Record<string, string>)
+      : {};
+  } catch {
+    return {};
+  }
 }
 
 export async function login(
@@ -411,10 +445,22 @@ export async function updateWorkOrder(task: MaintenanceTask) {
     if (index >= 0) {
       mockWorkOrders[index] = task;
     }
+    if (task.status === "In-Progress") {
+      saveMockVehicleStatus(task.vehicleId, vehicleMaintenanceStatus);
+    }
     return task;
   }
 
-  return updateMaintenanceSchedule(task);
+  const updatedTask = await updateMaintenanceSchedule(task);
+  if (updatedTask.status === "In-Progress") {
+    updateVehicleStatus(updatedTask.vehicleId, vehicleMaintenanceStatus).catch(
+      (error) => {
+        console.error("Failed to update vehicle status", error);
+      },
+    );
+  }
+
+  return updatedTask;
 }
 
 export async function getChecklistTemplates() {
@@ -552,21 +598,44 @@ export async function getTransactions() {
   return mockTransactions;
 }
 
-export async function getVehicles() {
-  if (!useBackend) return fallbackVehicleOptions;
+export async function getVehicles(): Promise<VehicleOption[]> {
+  if (!useBackend) {
+    const statuses = loadMockVehicleStatuses();
+    return fallbackVehicleOptions.map((vehicle) => ({
+      ...vehicle,
+      status: statuses[vehicle.value] ?? vehicle.status,
+    }));
+  }
 
   const vehicles = await fetchJSON<
     Array<{
       id: string;
       plateNumber: string;
       model: string;
+      status?: string;
     }>
   >("/vehicles");
 
   return vehicles.map((vehicle) => ({
     value: vehicle.plateNumber,
     label: `${vehicle.plateNumber} - ${vehicle.model}`,
+    status: vehicle.status,
   }));
+}
+
+export async function updateVehicleStatus(vehicleId: string, status: string) {
+  if (!useBackend) {
+    saveMockVehicleStatus(vehicleId, status);
+    return { vehicleId, status };
+  }
+
+  return fetchJSON<{ vehicleId: string; status: string }>(
+    `/vehicles/${encodeURIComponent(vehicleId)}/status`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    },
+  );
 }
 
 export async function createExpense(expense: {

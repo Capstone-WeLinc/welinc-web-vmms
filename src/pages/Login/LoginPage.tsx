@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { recordLoginActivity } from "../../lib/api/authService";
-import { setLoginTime, setLastActivity } from "../../lib/utils/session";
+import { clearSession, setLoginTime, setLastActivity } from "../../lib/utils/session";
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -29,6 +29,8 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     }
 
     try {
+      window.localStorage.removeItem("accessToken");
+      clearSession();
       window.localStorage.setItem("accessToken", ssoToken);
       
       // Session timestamps: login time and last activity
@@ -36,13 +38,17 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       setLastActivity(new Date());
       
       // Async notify activity (non-blocking)
-      recordLoginActivity().catch((err: any) => console.error("Failed to record activity", err));
+      recordLoginActivity().catch((err: unknown) =>
+        console.error("Failed to record activity", err),
+      );
 
       onLogin();
       navigate("/dashboard", { replace: true });
     } catch (err) {
       console.error("[SSO Login Error]", err);
-      setError("Invalid or expired authentication token.");
+      requestAnimationFrame(() => {
+        setError("Invalid or expired authentication token.");
+      });
       window.localStorage.removeItem("accessToken");
     }
   }, [searchParams, onLogin, navigate]);

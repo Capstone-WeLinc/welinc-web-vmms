@@ -283,6 +283,7 @@ const MaintenanceSchedulingCombined = () => {
   );
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<MaintenanceTask | null>(null);
+  const [isOdometerUpdateOpen, setIsOdometerUpdateOpen] = useState(false);
   const [selectedSchedules, setSelectedSchedules] = useState<MaintenanceTask[]>(
     [],
   );
@@ -449,6 +450,22 @@ const MaintenanceSchedulingCombined = () => {
   const selectedSchedule =
     selectedSchedules[selectedSchedulePage] ?? selectedSchedules[0] ?? null;
 
+  const openFullScheduleEdit = (task: MaintenanceTask) => {
+    setEditingTask(task);
+    setIsOdometerUpdateOpen(false);
+    setIsModalOpen(true);
+  };
+
+  const openOdometerUpdate = (task: MaintenanceTask) => {
+    setEditingTask(task);
+    setIsOdometerUpdateOpen(true);
+    setIsModalOpen(true);
+  };
+
+  const canShowScheduleUpdate = (task: MaintenanceTask) =>
+    task.status === "Pending" &&
+    (task.triggerType === "ODOMETER" || task.triggerType === "MANUAL");
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -461,7 +478,11 @@ const MaintenanceSchedulingCombined = () => {
         <Button
           variant="primary"
           className="flex items-center gap-2"
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            setEditingTask(null);
+            setIsOdometerUpdateOpen(false);
+            setIsModalOpen(true);
+          }}
         >
           <Plus className="w-4 h-4" />
           <span>{"Create Schedule"}</span>
@@ -702,13 +723,24 @@ const MaintenanceSchedulingCombined = () => {
                             type="button"
                             onClick={(event) => {
                               event.stopPropagation();
-                              setEditingTask(task);
-                              setIsModalOpen(true);
+                              openFullScheduleEdit(task);
                             }}
                             className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-2 text-xs font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
                           >
                             Edit
                           </button>
+                          {canShowScheduleUpdate(task) ? (
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openOdometerUpdate(task);
+                              }}
+                              className="rounded-xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 px-3 py-2 text-xs font-semibold text-[#0369a1] transition hover:bg-[var(--color-status-info)]/20 dark:text-[#7dd3fc]"
+                            >
+                              Update
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             onClick={(event) => {
@@ -954,16 +986,29 @@ const MaintenanceSchedulingCombined = () => {
                     {selectedSchedule.vehicleId} - {selectedSchedule.date}
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    setEditingTask(selectedSchedule);
-                    closeScheduleDetails();
-                    setIsModalOpen(true);
-                  }}
-                >
-                  Edit
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      closeScheduleDetails();
+                      openFullScheduleEdit(selectedSchedule);
+                    }}
+                  >
+                    Edit
+                  </Button>
+                  {canShowScheduleUpdate(selectedSchedule) ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        closeScheduleDetails();
+                        openOdometerUpdate(selectedSchedule);
+                      }}
+                    >
+                      Update
+                    </Button>
+                  ) : null}
+                </div>
               </div>
 
               <div className="grid gap-4 p-4 sm:grid-cols-2">
@@ -1061,10 +1106,12 @@ const MaintenanceSchedulingCombined = () => {
       <CreateSchedule
         isOpen={isModalOpen}
         editingTask={editingTask ?? undefined}
+        odometerOnly={isOdometerUpdateOpen}
         existingSchedules={tasks}
         onClose={() => {
           setIsModalOpen(false);
           setEditingTask(null);
+          setIsOdometerUpdateOpen(false);
         }}
         onSaved={(task) => {
           setTasks((current) =>
@@ -1078,6 +1125,7 @@ const MaintenanceSchedulingCombined = () => {
           );
           setIsModalOpen(false);
           setEditingTask(null);
+          setIsOdometerUpdateOpen(false);
         }}
       />
 

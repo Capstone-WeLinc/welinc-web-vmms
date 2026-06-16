@@ -59,6 +59,9 @@ function App() {
   const [currentUser, setCurrentUser] = useState<UserRecord | null>(null);
 
   const isAuthenticated = useBackend ? authenticated : true;
+  const hasIncomingSsoToken =
+    location.pathname === "/login" &&
+    new URLSearchParams(location.search).has("token");
   const isMechanic = isMechanicRole(currentUser);
   const isOperations = isOperationsRole(currentUser);
 
@@ -230,7 +233,7 @@ function App() {
           <Route
             path="/login"
             element={
-              isAuthenticated ? (
+              isAuthenticated && !hasIncomingSsoToken ? (
                 <Navigate to="/dashboard" replace />
               ) : (
                 <LoginPage onLogin={handleLogin} />

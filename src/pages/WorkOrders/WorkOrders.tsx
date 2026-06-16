@@ -27,7 +27,13 @@ import {
 import { getCurrentUser, type UserRecord } from "../../lib/api/authService";
 import { getGarages } from "../../lib/api/locationService";
 import { isMechanicRole } from "../../lib/utils/permissions";
-import { formatWorkOrderNumber } from "../../lib/utils/workOrders";
+import {
+  formatWorkOrderNumber,
+  getOdometerActivationRange,
+  getTimeBasedActivationDate,
+  isPendingOdometerScheduleReadyForMechanic,
+  isPendingTimeScheduleReadyForMechanic,
+} from "../../lib/utils/workOrders";
 
 type ItemStatus = "pass" | "fail" | "pending";
 
@@ -190,7 +196,9 @@ export default function WorkOrders() {
   };
 
   let activeTasks = tasks.filter(
-    (task) => task.status !== "Completed" && isAssignedToCurrentMechanic(task),
+    (task) =>
+      task.status !== "Completed" &&
+      isAssignedToCurrentMechanic(task),
   );
 
   if (statusFilter !== "All") {
@@ -309,6 +317,45 @@ export default function WorkOrders() {
         technicianSignature: "",
       }
     : { done: false, items: [] };
+
+  const canMechanicStartTask =
+    !selectedTask ||
+    !isMechanic ||
+    (isPendingOdometerScheduleReadyForMechanic(selectedTask) &&
+      isPendingTimeScheduleReadyForMechanic(selectedTask));
+  const canModifySelectedTask =
+    Boolean(selectedTask) &&
+    selectedTask?.status !== "Completed" &&
+    canMechanicStartTask;
+
+  const formatDateForDisplay = (date: Date) =>
+    new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(date);
+
+  const getStartLockMessage = (task: MaintenanceTask) => {
+    if (task.triggerType === "TIME") {
+      const activationDate = getTimeBasedActivationDate(task);
+
+      if (!activationDate) {
+        return "This time-based work order is available to view, but it cannot be started until its interval and start reference date are configured.";
+      }
+
+      return `This time-based work order can start on ${formatDateForDisplay(activationDate)} when the scheduled date matches the interval.`;
+    }
+
+    const activationRange = getOdometerActivationRange(task);
+    const currentReading = task.odometerReading?.trim();
+
+    if (!activationRange) {
+      return "This odometer-based work order is available to view, but it cannot be started until its active odometer stage is configured.";
+    }
+
+    const readingText = currentReading ? `${currentReading} km` : "not recorded";
+    return `Current odometer reading is ${readingText}. Mechanic work can start at ${activationRange.minimum} km to ${activationRange.maximum} km.`;
+  };
 
   const deriveTaskStatus = (
     task: MaintenanceTask,
@@ -617,6 +664,8 @@ export default function WorkOrders() {
     itemId: string,
     status: ExecutionStatus,
   ) => {
+    if (!canModifySelectedTask) return;
+
     setExecutions((prev) => {
       const next = new Map(prev);
       const cur = next.get(taskId) || {
@@ -646,6 +695,8 @@ export default function WorkOrders() {
     itemId: string,
     note: string,
   ) => {
+    if (!canModifySelectedTask) return;
+
     setExecutions((prev) => {
       const next = new Map(prev);
       const cur = next.get(taskId) || {
@@ -666,6 +717,8 @@ export default function WorkOrders() {
     field: keyof Pick<ExecutionItem, "partsUsed" | "partsCost">,
     value: string,
   ) => {
+    if (!canModifySelectedTask) return;
+
     setExecutions((prev) => {
       const next = new Map(prev);
       const cur = next.get(taskId) || {
@@ -685,6 +738,8 @@ export default function WorkOrders() {
     itemId: string,
     files: FileList | null,
   ) => {
+    if (!canModifySelectedTask) return;
+
     const names = files ? Array.from(files).map((file) => file.name) : [];
     setExecutions((prev) => {
       const next = new Map(prev);
@@ -701,7 +756,7 @@ export default function WorkOrders() {
   };
 
   const handleStatusChange = (id: string, newStatus: ItemStatus) => {
-    if (!selectedTask || selectedTask.status === "Completed") return;
+    if (!selectedTask || !canModifySelectedTask) return;
     setChecklists((prev) => {
       const next = new Map(prev);
       const items = next.get(selectedTask.id);
@@ -720,7 +775,7 @@ export default function WorkOrders() {
   };
 
   const handleNoteChange = (id: string, note: string) => {
-    if (!selectedTask || selectedTask.status === "Completed") return;
+    if (!selectedTask || !canModifySelectedTask) return;
     setChecklists((prev) => {
       const next = new Map(prev);
       const items = next.get(selectedTask.id);
@@ -748,13 +803,15 @@ export default function WorkOrders() {
     (item) => item.status === "pending",
   ).length;
   const canComplete =
+    canModifySelectedTask &&
     currentChecklist.length > 0 &&
     pendingCount === 0 &&
     currentExecution.done;
-  const showCannotCompleteWarning = pendingCount > 0 || !currentExecution.done;
+  const showCannotCompleteWarning =
+    canMechanicStartTask && (pendingCount > 0 || !currentExecution.done);
 
   const handleMarkComplete = () => {
-    if (!selectedTask) return;
+    if (!selectedTask || !canModifySelectedTask) return;
 
     const completedTask = { ...selectedTask, status: "Completed" as const };
     setTasks((prev) =>
@@ -768,6 +825,8 @@ export default function WorkOrders() {
   };
 
   const setExecutionDone = (taskId: string, done: boolean) => {
+    if (!canModifySelectedTask) return;
+
     setExecutions((prev) => {
       const next = new Map(prev);
       const cur = next.get(taskId) || { done: false, items: [] };
@@ -820,6 +879,8 @@ export default function WorkOrders() {
     field: keyof Omit<ExecutionRecord, "done" | "items">,
     value: string | string[],
   ) => {
+    if (!canModifySelectedTask) return;
+
     setExecutions((prev) => {
       const next = new Map(prev);
       const cur = next.get(taskId) || {
@@ -947,6 +1008,16 @@ export default function WorkOrders() {
                 onClick={() => handleSelectTask(task)}
                 className={taskCardClasses}
               >
+                {(() => {
+                  const isWaitingForOdometerStage =
+                    isMechanic &&
+                    !isPendingOdometerScheduleReadyForMechanic(task);
+                  const isWaitingForTimeStage =
+                    isMechanic &&
+                    !isPendingTimeScheduleReadyForMechanic(task);
+
+                  return (
+                    <>
                 <div className="mb-4 flex items-center justify-between">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex rounded-full border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
@@ -975,6 +1046,16 @@ export default function WorkOrders() {
                 <h3 className="mb-2 text-lg font-bold text-[var(--color-text-primary)] transition-colors group-hover:text-[var(--color-brand-primary)] dark:group-hover:text-[var(--color-brand-primary)]">
                   {task.title}
                 </h3>
+                {isWaitingForOdometerStage && (
+                  <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-700 dark:text-amber-200">
+                    Waiting for odometer stage
+                  </div>
+                )}
+                {isWaitingForTimeStage && (
+                  <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-700 dark:text-amber-200">
+                    Waiting for time interval
+                  </div>
+                )}
                 {task.triggerType && (
                   <p className="mb-2 text-sm text-[var(--color-text-secondary)]">
                     Trigger: {formatTriggerType(task.triggerType)}
@@ -996,6 +1077,9 @@ export default function WorkOrders() {
                     </span>
                   </div>
                 </div>
+                    </>
+                  );
+                })()}
               </div>
             ))}
 
@@ -1077,12 +1161,31 @@ export default function WorkOrders() {
 
           {renderScheduleDetails(selectedTask)}
 
+          {!canMechanicStartTask && (
+            <div className="mb-6 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-4 shadow-card">
+              <AlertTriangle
+                className="mt-0.5 text-amber-500"
+                size={20}
+              />
+              <div>
+                <h3 className="font-semibold text-amber-700 dark:text-amber-200">
+                  {"Work order cannot be started yet"}
+                </h3>
+                <p className="mt-1 text-sm text-amber-700/80 dark:text-amber-200/80">
+                  {getStartLockMessage(selectedTask)}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Execution Checklist - same format as inspection checklist */}
           {selectedTask && (
             <>
               <div
                 className={`mb-4 overflow-hidden rounded-xl px-6 py-4 ${
-                  !currentExecution.done
+                  !canMechanicStartTask
+                    ? "border border-amber-500/30 bg-amber-500/10 shadow-card"
+                    : !currentExecution.done
                     ? "border border-[var(--color-brand-primary)]/20 bg-[var(--color-brand-primary)]/10 shadow-card"
                     : "border border-[var(--color-status-success)]/30 bg-[var(--color-status-success)]/10 shadow-card"
                 }`}
@@ -1092,18 +1195,25 @@ export default function WorkOrders() {
                     <span>Execution Checklist</span>
                     <span
                       className={`ml-3 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        !currentExecution.done
+                        !canMechanicStartTask
+                          ? "border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-200"
+                          : !currentExecution.done
                           ? "border border-[var(--color-brand-primary)]/20 bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] dark:text-white"
                           : "border border-[var(--color-status-success)]/30 bg-[var(--color-status-success)]/10 text-[#047857] dark:text-[#a7f3d0]"
                       }`}
                     >
-                      {!currentExecution.done ? "Enabled" : "Completed"}
+                      {!canMechanicStartTask
+                        ? "Locked"
+                        : !currentExecution.done
+                          ? "Enabled"
+                          : "Completed"}
                     </span>
                   </div>
                 </h3>
                 <p className="text-sm text-[var(--color-text-secondary)]">
-                  Mechanics must select Checked, Changed, or Not Checked for
-                  each execution item before completing execution.
+                  {canMechanicStartTask
+                    ? "Mechanics must select Checked, Changed, or Not Checked for each execution item before completing execution."
+                    : "This checklist is read-only until the schedule reaches its active stage."}
                 </p>
               </div>
 
@@ -1139,7 +1249,7 @@ export default function WorkOrders() {
 
                           <div className="flex justify-center">
                             <button
-                              disabled={currentExecution.done}
+                              disabled={currentExecution.done || !canMechanicStartTask}
                               onClick={() =>
                                 updateExecutionItemStatus(
                                   selectedTask.id,
@@ -1151,7 +1261,7 @@ export default function WorkOrders() {
                                 item.status === "checked"
                                   ? "border-emerald-400 bg-emerald-400/20"
                                   : "border-[var(--color-border)] hover:border-emerald-500/60"
-                              } ${currentExecution.done ? "cursor-not-allowed opacity-60" : ""}`}
+                              } ${currentExecution.done || !canMechanicStartTask ? "cursor-not-allowed opacity-60" : ""}`}
                             >
                               {item.status === "checked" && (
                                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
@@ -1161,7 +1271,7 @@ export default function WorkOrders() {
 
                           <div className="flex justify-center">
                             <button
-                              disabled={currentExecution.done}
+                              disabled={currentExecution.done || !canMechanicStartTask}
                               onClick={() =>
                                 updateExecutionItemStatus(
                                   selectedTask.id,
@@ -1173,7 +1283,7 @@ export default function WorkOrders() {
                                 item.status === "changed"
                                   ? "border-sky-400 bg-sky-400/20"
                                   : "border-[var(--color-border)] hover:border-sky-500/60"
-                              } ${currentExecution.done ? "cursor-not-allowed opacity-60" : ""}`}
+                              } ${currentExecution.done || !canMechanicStartTask ? "cursor-not-allowed opacity-60" : ""}`}
                             >
                               {item.status === "changed" && (
                                 <span className="h-2.5 w-2.5 rounded-full bg-sky-400" />
@@ -1183,7 +1293,7 @@ export default function WorkOrders() {
 
                           <div className="flex justify-center">
                             <button
-                              disabled={currentExecution.done}
+                              disabled={currentExecution.done || !canMechanicStartTask}
                               onClick={() =>
                                 updateExecutionItemStatus(
                                   selectedTask.id,
@@ -1195,7 +1305,7 @@ export default function WorkOrders() {
                                 item.status === "notChecked"
                                   ? "border-amber-400 bg-amber-400/20"
                                   : "border-[var(--color-border)] hover:border-amber-500/60"
-                              } ${currentExecution.done ? "cursor-not-allowed opacity-60" : ""}`}
+                              } ${currentExecution.done || !canMechanicStartTask ? "cursor-not-allowed opacity-60" : ""}`}
                             >
                               {item.status === "notChecked" && (
                                 <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
@@ -1207,7 +1317,7 @@ export default function WorkOrders() {
                             <input
                               type="text"
                               value={item.note}
-                              disabled={currentExecution.done}
+                              disabled={currentExecution.done || !canMechanicStartTask}
                               onChange={(e) =>
                                 updateExecutionItemNote(
                                   selectedTask.id,
@@ -1216,7 +1326,7 @@ export default function WorkOrders() {
                                 )
                               }
                               placeholder="Add note"
-                              className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-1.5 text-sm outline-none transition-colors focus:border-[var(--color-brand-primary)] focus:bg-[var(--color-input-bg-hover)] text-[var(--color-text-primary)] ${currentExecution.done ? "opacity-70" : ""}`}
+                              className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-1.5 text-sm outline-none transition-colors focus:border-[var(--color-brand-primary)] focus:bg-[var(--color-input-bg-hover)] text-[var(--color-text-primary)] ${currentExecution.done || !canMechanicStartTask ? "opacity-70" : ""}`}
                             />
                           </div>
 
@@ -1225,7 +1335,7 @@ export default function WorkOrders() {
                               <input
                                 type="text"
                                 value={item.partsUsed || ""}
-                                disabled={currentExecution.done}
+                                disabled={currentExecution.done || !canMechanicStartTask}
                                 onChange={(e) =>
                                   updateExecutionItemField(
                                     selectedTask.id,
@@ -1235,7 +1345,7 @@ export default function WorkOrders() {
                                   )
                                 }
                                 placeholder="Part(s) used"
-                                className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-1.5 text-sm outline-none transition-colors focus:border-[var(--color-brand-primary)] focus:bg-[var(--color-input-bg-hover)] text-[var(--color-text-primary)] ${currentExecution.done ? "opacity-70" : ""}`}
+                                className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-1.5 text-sm outline-none transition-colors focus:border-[var(--color-brand-primary)] focus:bg-[var(--color-input-bg-hover)] text-[var(--color-text-primary)] ${currentExecution.done || !canMechanicStartTask ? "opacity-70" : ""}`}
                               />
                             ) : (
                               <span className="text-[var(--color-text-secondary)]">-</span>
@@ -1247,7 +1357,7 @@ export default function WorkOrders() {
                               <input
                                 type="text"
                                 value={item.partsCost || ""}
-                                disabled={currentExecution.done}
+                                disabled={currentExecution.done || !canMechanicStartTask}
                                 onChange={(e) =>
                                   updateExecutionItemField(
                                     selectedTask.id,
@@ -1257,7 +1367,7 @@ export default function WorkOrders() {
                                   )
                                 }
                                 placeholder="Cost"
-                                className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-1.5 text-sm outline-none transition-colors focus:border-[var(--color-brand-primary)] focus:bg-[var(--color-input-bg-hover)] text-[var(--color-text-primary)] ${currentExecution.done ? "opacity-70" : ""}`}
+                                className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-1.5 text-sm outline-none transition-colors focus:border-[var(--color-brand-primary)] focus:bg-[var(--color-input-bg-hover)] text-[var(--color-text-primary)] ${currentExecution.done || !canMechanicStartTask ? "opacity-70" : ""}`}
                               />
                             ) : (
                               <span className="text-[var(--color-text-secondary)]">-</span>
@@ -1274,7 +1384,7 @@ export default function WorkOrders() {
                                   type="file"
                                   accept="image/*"
                                   multiple
-                                  disabled={currentExecution.done}
+                                  disabled={currentExecution.done || !canMechanicStartTask}
                                   onChange={(e) =>
                                     updateExecutionItemAttachments(
                                       selectedTask.id,
@@ -1282,7 +1392,7 @@ export default function WorkOrders() {
                                       e.target.files,
                                     )
                                   }
-                                  className={`w-full text-xs text-[var(--color-text-secondary)] ${currentExecution.done ? "opacity-60 cursor-not-allowed" : ""}`}
+                                  className={`w-full text-xs text-[var(--color-text-secondary)] ${currentExecution.done || !canMechanicStartTask ? "opacity-60 cursor-not-allowed" : ""}`}
                                 />
                                 {item.attachments &&
                                   item.attachments.length > 0 && (
@@ -1330,7 +1440,7 @@ export default function WorkOrders() {
                         <input
                           type="text"
                           value={currentExecution.technicianSignature || ""}
-                          disabled={currentExecution.done}
+                          disabled={currentExecution.done || !canMechanicStartTask}
                           onChange={(e) =>
                             updateExecutionField(
                               selectedTask.id,
@@ -1338,13 +1448,13 @@ export default function WorkOrders() {
                               e.target.value,
                             )
                           }
-                          className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] ${currentExecution.done ? "opacity-70" : ""}`}
+                          className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] ${currentExecution.done || !canMechanicStartTask ? "opacity-70" : ""}`}
                           placeholder="Chief Mechanic name"
                         />
                       </div>
                     </div>
 
-                    {!canCompleteExecution && !currentExecution.done && (
+                    {canMechanicStartTask && !canCompleteExecution && !currentExecution.done && (
                       <div className="mt-6 flex items-start gap-3 rounded-lg border border-rose-500/20 bg-rose-500/10 px-5 py-4 shadow-[0_0_15px_rgba(244,63,94,0.1)]">
                         <AlertTriangle
                           className="mt-0.5 text-rose-400"
@@ -1373,11 +1483,11 @@ export default function WorkOrders() {
                     <div className="mt-4 border-t border-[var(--color-divider)] px-6 py-4">
                       <button
                         className={`no-print w-full rounded-lg px-4 py-3 text-sm font-medium transition ${
-                          canCompleteExecution
+                          canCompleteExecution && canMechanicStartTask
                             ? "bg-[var(--color-brand-primary)] text-white hover:bg-[var(--color-brand-dark)]"
                             : "bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] cursor-not-allowed"
                         }`}
-                        disabled={!canCompleteExecution}
+                        disabled={!canCompleteExecution || !canMechanicStartTask}
                         onClick={() => setExecutionDone(selectedTask.id, true)}
                       >
                         Mark Execution Complete
@@ -1406,21 +1516,29 @@ export default function WorkOrders() {
                 <span>Inspection Checklist</span>
                 <span
                   className={`ml-3 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    currentExecution.done
+                    !canMechanicStartTask
+                      ? "border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-200"
+                      : currentExecution.done
                       ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
                       : "border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-200"
                   }`}
                 >
-                  {currentExecution.done ? "Enabled" : "Disabled"}
+                  {!canMechanicStartTask
+                    ? "Locked"
+                    : currentExecution.done
+                      ? "Enabled"
+                      : "Disabled"}
                 </span>
               </div>
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)]">
-              Complete the inspection for each item after execution is finished.
+              {canMechanicStartTask
+                ? "Complete the inspection for each item after execution is finished."
+                : "This checklist is read-only until the schedule reaches its active stage."}
             </p>
           </div>
           <div
-            className={`overflow-auto overscroll-contain rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] lg:max-h-[min(40rem,calc(100vh-12rem))] ${!currentExecution.done ? "opacity-60 pointer-events-none" : ""}`}
+            className={`overflow-auto overscroll-contain rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] lg:max-h-[min(40rem,calc(100vh-12rem))] ${!currentExecution.done || !canMechanicStartTask ? "opacity-60 pointer-events-none" : ""}`}
           >
             <div className={checklistHeaderClasses}>
               <div>{"Checklist Item"}</div>
@@ -1453,12 +1571,12 @@ export default function WorkOrders() {
                   <div className="flex justify-center">
                     <button
                       onClick={() => handleStatusChange(item.id, "pass")}
-                      disabled={selectedTask?.status === "Completed"}
+                      disabled={!canModifySelectedTask}
                       className={`flex h-6 w-6 items-center justify-center rounded-full border-2 transition-all duration-200 ${
                         item.status === "pass"
                           ? "border-emerald-400 bg-emerald-400/20"
                           : "border-[var(--color-border)] hover:border-emerald-500/60"
-                      } ${selectedTask?.status === "Completed" ? "cursor-not-allowed opacity-50" : ""}`}
+                      } ${!canModifySelectedTask ? "cursor-not-allowed opacity-50" : ""}`}
                     >
                       {item.status === "pass" && (
                         <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
@@ -1469,12 +1587,12 @@ export default function WorkOrders() {
                   <div className="flex justify-center">
                     <button
                       onClick={() => handleStatusChange(item.id, "fail")}
-                      disabled={selectedTask?.status === "Completed"}
+                      disabled={!canModifySelectedTask}
                       className={`flex h-6 w-6 items-center justify-center rounded-full border-2 transition-all duration-200 ${
                         item.status === "fail"
                           ? "border-rose-400 bg-rose-400/20"
                           : "border-[var(--color-border)] hover:border-rose-500/60"
-                      } ${selectedTask?.status === "Completed" ? "cursor-not-allowed opacity-50" : ""}`}
+                      } ${!canModifySelectedTask ? "cursor-not-allowed opacity-50" : ""}`}
                     >
                       {item.status === "fail" && (
                         <span className="h-2.5 w-2.5 rounded-full bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,0.8)]" />
@@ -1486,7 +1604,7 @@ export default function WorkOrders() {
                     <input
                       type="text"
                       value={displayNote}
-                      disabled={selectedTask?.status === "Completed"}
+                      disabled={!canModifySelectedTask}
                       onChange={(e) =>
                         handleNoteChange(item.id, e.target.value)
                       }
@@ -1495,7 +1613,7 @@ export default function WorkOrders() {
                         item.status === "fail"
                           ? "text-rose-700 placeholder:text-rose-500/60 dark:text-rose-200 dark:placeholder:text-rose-300/50"
                           : "text-[var(--color-text-primary)]"
-                      } ${selectedTask?.status === "Completed" ? "cursor-not-allowed opacity-50" : ""}`}
+                      } ${!canModifySelectedTask ? "cursor-not-allowed opacity-50" : ""}`}
                     />
                     {item.status === "fail" && (
                       <span className="text-xs font-semibold text-rose-700 dark:text-rose-300">

@@ -21,8 +21,10 @@ import {
 } from "../../lib/api/locationService";
 import {
   getVehicles,
+  type VehicleOption,
 } from "../../lib/api/vehicleService";
 import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
+import { getOdometerActivationRange } from "../../lib/utils/workOrders";
 import type { MaintenanceTask } from "../../types/maintenance";
 
 type WorkOrderTemplate = string;
@@ -47,12 +49,14 @@ const sanitizeNonNegativeNumber = (value: string) => {
 export default function CreateScheduleModal({
   isOpen,
   editingTask,
+  odometerOnly = false,
   existingSchedules,
   onClose,
   onSaved,
 }: {
   isOpen: boolean;
   editingTask?: MaintenanceTask;
+  odometerOnly?: boolean;
   existingSchedules: MaintenanceTask[];
   onClose: () => void;
   onSaved?: (task: MaintenanceTask) => void;
@@ -69,9 +73,7 @@ export default function CreateScheduleModal({
   const [assignedMechanic, setAssignedMechanic] = useState("");
   const [mechanics, setMechanics] = useState<UserRecord[]>([]);
   const [garages, setGarages] = useState<{ id: string; name: string }[]>([]);
-  const [vehicles, setVehicles] = useState<{ value: string; label: string }[]>(
-    [],
-  );
+  const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
   const [garageId, setGarageId] = useState("");
   const [isOtherGarage, setIsOtherGarage] = useState(false);
   const [otherGarage, setOtherGarage] = useState("");
@@ -104,6 +106,7 @@ export default function CreateScheduleModal({
   const [isSaving, setIsSaving] = useState(false);
   const [duplicateSchedule, setDuplicateSchedule] =
     useState<MaintenanceTask | null>(null);
+  const isOdometerOnlyUpdate = Boolean(odometerOnly && editingTask);
 
   useEffect(() => {
     getChecklistTemplates()
@@ -259,16 +262,17 @@ export default function CreateScheduleModal({
       ? [intervalTypeState, startReferenceDate]
       : []),
   ];
-  const isFormComplete = requiredFieldValues.every(
-    (value) => value.trim().length > 0,
-  ) &&
-    isSelectedTemplateUsable &&
-    [
-      odometerReading,
-      ...(triggerType !== "TIME"
-        ? [intervalKm, bufferDistanceKm, startingReferenceReadingKm]
-        : []),
-    ].every((value) => NON_NEGATIVE_NUMBER_PATTERN.test(value));
+  const isFormComplete = isOdometerOnlyUpdate
+    ? odometerReading.trim().length > 0 &&
+      NON_NEGATIVE_NUMBER_PATTERN.test(odometerReading)
+    : requiredFieldValues.every((value) => value.trim().length > 0) &&
+      isSelectedTemplateUsable &&
+      [
+        odometerReading,
+        ...(triggerType !== "TIME"
+          ? [intervalKm, bufferDistanceKm, startingReferenceReadingKm]
+          : []),
+      ].every((value) => NON_NEGATIVE_NUMBER_PATTERN.test(value));
 
   const saveSchedule = async (scheduleToReplace?: MaintenanceTask) => {
     setIsSaving(true);
@@ -281,24 +285,29 @@ export default function CreateScheduleModal({
         const targetSchedule = scheduleToReplace ?? editingTask;
         if (!targetSchedule) return;
 
-        const updated: MaintenanceTask = {
-          ...targetSchedule,
-          vehicleId,
-          title: workOrderTemplate,
-          date: scheduledDate,
-          assignedDriver: assignedMechanic,
-          notes,
-          garageId: savedGarageId,
-          accountType,
-          systemAffected,
-          odometerReading,
-          triggerType,
-          startReferenceDate,
-          intervalKm,
-          bufferDistanceKm,
-          startingReferenceReadingKm,
-          intervalType: intervalTypeState,
-        };
+        const updated: MaintenanceTask = isOdometerOnlyUpdate
+          ? {
+              ...targetSchedule,
+              odometerReading,
+            }
+          : {
+              ...targetSchedule,
+              vehicleId,
+              title: workOrderTemplate,
+              date: scheduledDate,
+              assignedDriver: assignedMechanic,
+              notes,
+              garageId: savedGarageId,
+              accountType,
+              systemAffected,
+              odometerReading,
+              triggerType,
+              startReferenceDate,
+              intervalKm,
+              bufferDistanceKm,
+              startingReferenceReadingKm,
+              intervalType: intervalTypeState,
+            };
         try {
           const saved = await updateMaintenanceSchedule(updated);
           onSaved?.(saved);
@@ -362,7 +371,9 @@ export default function CreateScheduleModal({
   const handleSaveSchedule = async () => {
     if (!isFormComplete) return;
 
-    const duplicate = existingSchedules.find(
+    const duplicate = isOdometerOnlyUpdate
+      ? null
+      : existingSchedules.find(
       (schedule) =>
         schedule.id !== editingTask?.id &&
         schedule.vehicleId.trim().toLowerCase() ===
@@ -403,13 +414,17 @@ export default function CreateScheduleModal({
 
   const formatIsoDate = (date: Date) => formatLocalDate(date);
 
-  // Helpers to ensure values present in selects when editing
-  const vehicleExists = vehicles.some((v) => v.value === vehicleId);
+  const availableVehicles = vehicles.filter(
+    (vehicle) => (vehicle.status ?? "AVAILABLE").trim().toUpperCase() === "AVAILABLE",
+  );
   const templateExists = Object.prototype.hasOwnProperty.call(
     templates,
     workOrderTemplate,
   );
   const mechanicExists = mechanics.some((m) => m.name === assignedMechanic);
+  const activationRange = editingTask
+    ? getOdometerActivationRange(editingTask)
+    : null;
 
   const renderCalendar = (
     calendarDate: Date,
@@ -494,6 +509,71 @@ export default function CreateScheduleModal({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
+          {isOdometerOnlyUpdate ? (
+            <section className="card-base">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="rounded-2xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 p-2 text-[#0369a1] dark:text-[#7dd3fc]">
+                  <Wrench className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[var(--color-text-primary)]">
+                    Update Pending Schedule Odometer
+                  </h3>
+                  <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                    Pending schedules only allow odometer reading updates.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                {[
+                  { label: "Vehicle", value: editingTask?.vehicleId },
+                  { label: "Work Order Template", value: editingTask?.title },
+                  {
+                    label: "Assigned Mechanic",
+                    value: editingTask?.assignedDriver,
+                  },
+                  { label: "Status", value: editingTask?.status },
+                  {
+                    label: "Activation Range",
+                    value: activationRange
+                      ? `${activationRange.minimum} km - ${activationRange.maximum} km`
+                      : "Not available",
+                  },
+                ].map((detail) => (
+                  <div
+                    key={detail.label}
+                    className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4"
+                  >
+                    <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                      {detail.label}
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-[var(--color-text-primary)]">
+                      {detail.value || "Not specified"}
+                    </p>
+                  </div>
+                ))}
+                <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4 md:col-span-2">
+                  <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
+                    Odometer Reading (km)
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="km"
+                    value={odometerReading}
+                    onChange={(e) =>
+                      setOdometerReading(
+                        sanitizeNonNegativeNumber(e.target.value),
+                      )
+                    }
+                    className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
+                  />
+                </div>
+              </div>
+            </section>
+          ) : (
+            <>
           {/* Vehicle Information */}
           <section className="card-base">
             <div className="mb-4 flex items-center gap-3">
@@ -515,16 +595,12 @@ export default function CreateScheduleModal({
                     onChange={(e) => setVehicleId(e.target.value)}
                     className="select-dark w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
                   >
-                    {vehicles.length > 0 || vehicleId ? (
+                    {availableVehicles.length > 0 ? (
                       <>
                         <option value="" disabled>
                           Select vehicle
                         </option>
-                        {/* include current edited vehicle if it's not in the loaded list */}
-                        {vehicleId && !vehicleExists ? (
-                          <option value={vehicleId}>{vehicleId}</option>
-                        ) : null}
-                        {vehicles.map((vehicle) => (
+                        {availableVehicles.map((vehicle) => (
                           <option key={vehicle.value} value={vehicle.value}>
                             {vehicle.label}
                           </option>
@@ -1064,6 +1140,8 @@ export default function CreateScheduleModal({
               </div>
             </div>
           </section>
+            </>
+          )}
         </div>
 
         {/* Footer */}
@@ -1079,7 +1157,11 @@ export default function CreateScheduleModal({
             disabled={isSaving || !isFormComplete}
             className="btn-primary"
           >
-            {isSaving ? "Saving…" : "Save Schedule"}
+            {isSaving
+              ? "Saving…"
+              : isOdometerOnlyUpdate
+                ? "Update Odometer"
+                : "Save Schedule"}
           </button>
         </div>
       </div>
