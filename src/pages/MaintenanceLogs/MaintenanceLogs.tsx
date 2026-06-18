@@ -7,6 +7,7 @@ import type { UserRecord } from "../../lib/api/authService";
 import { getMaintenanceSchedules } from "../../lib/api/maintenanceService";
 import type { MaintenanceTask } from "../../lib/api/maintenanceService";
 import { isMechanicRole } from "../../lib/utils/permissions";
+import { formatLogNumber } from "../../lib/utils/workOrders";
 import {
   ActionButton,
   DataTable,
@@ -18,7 +19,7 @@ import {
   ToastNotification,
 } from "../../components/ui";
 
-type MaintenanceClass = "Maintenance" | "Repair" | "Inspection";
+type MaintenanceClass = "Maintenance" | "Repair";
 type MaintenanceStatus = "Completed" | "Flagged";
 
 interface MaintenanceLog {
@@ -51,11 +52,8 @@ const normalizeStatus = (status?: string): MaintenanceStatus | null => {
   return null;
 };
 
-const classifyMaintenance = (task: MaintenanceTask): MaintenanceClass => {
-  const source = `${task.title ?? ""} ${task.systemAffected ?? ""} ${task.notes ?? ""}`.toLowerCase();
-  if (source.includes("repair")) return "Repair";
-  if (source.includes("inspection")) return "Inspection";
-  return "Maintenance";
+const classifyMaintenance = (status: MaintenanceStatus): MaintenanceClass => {
+  return status === "Flagged" ? "Repair" : "Maintenance";
 };
 
 const readNumber = (task: MaintenanceTask, keys: string[]) => {
@@ -72,9 +70,7 @@ const readNumber = (task: MaintenanceTask, keys: string[]) => {
 };
 
 const buildLogNumber = (task: MaintenanceTask) => {
-  const compactDate = (task.date || new Date().toISOString().slice(0, 10)).replace(/-/g, "");
-  const suffix = task.id.replace(/[^a-zA-Z0-9]/g, "").slice(-4).padStart(4, "0").toUpperCase();
-  return `MLG-${compactDate}-${suffix}`;
+  return formatLogNumber(task.id);
 };
 
 const mapScheduleToLog = (task: MaintenanceTask): MaintenanceLog | null => {
@@ -86,7 +82,7 @@ const mapScheduleToLog = (task: MaintenanceTask): MaintenanceLog | null => {
     logNumber: buildLogNumber(task),
     plateNo: task.vehicleId || "Unassigned",
     workOrder: task.title || "Untitled work order",
-    class: classifyMaintenance(task),
+    class: classifyMaintenance(status),
     date: task.date || "",
     odometerReading: readNumber(task, ["odometerReading", "startingReferenceReadingKm"]),
     status,
@@ -99,9 +95,7 @@ const ClassBadge = ({ value }: { value: MaintenanceClass }) => {
   const classes =
     value === "Repair"
       ? "border-[#b50000] bg-[#ff8f94] text-[#8f1212]"
-      : value === "Inspection"
-        ? "border-[#64748b] bg-[#e2e8f0] text-[#334155]"
-        : "border-[#313a9f] bg-[#a9b5ff] text-[#111957]";
+      : "border-[#313a9f] bg-[#a9b5ff] text-[#111957]";
 
   return (
     <span className={`inline-flex min-w-[112px] justify-center rounded-full border-2 px-4 py-1 text-xs font-bold uppercase ${classes}`}>
@@ -388,7 +382,7 @@ export default function MaintenanceLogs() {
         <DataTable
           data={paginatedLogs}
           getRowKey={(log) => log.id}
-          minWidth="1180px"
+          minWidth="1000px"
           emptyMessage={
             <div>
               <FileText className="mx-auto mb-3 h-10 w-10 text-[#9aa3b2]" />
@@ -406,28 +400,28 @@ export default function MaintenanceLogs() {
             {
               key: "logNumber",
               header: "Log No.",
-              width: "12%",
+              width: "11%",
               render: (log) => <span className="font-medium text-[#2f3b52]">{log.logNumber}</span>,
             },
             {
               key: "plateNo",
               header: "Plate No.",
-              width: "10%",
+              width: "9%",
               render: (log) => <span className="font-medium">{log.plateNo}</span>,
             },
             {
               key: "workOrder",
               header: "Work Order",
-              width: "15%",
+              width: "14%",
               render: (log) => log.workOrder,
             },
             {
               key: "class",
               header: "Class",
-              width: "12%",
+              width: "10%",
               render: (log) => <ClassBadge value={log.class} />,
             },
-            { key: "date", header: "Date", width: "10%", render: (log) => log.date },
+            { key: "date", header: "Date", width: "8%", render: (log) => log.date },
             {
               key: "odometerReading",
               header: "Odometer Reading (km)",
@@ -437,14 +431,14 @@ export default function MaintenanceLogs() {
             {
               key: "status",
               header: "Status",
-              width: "12%",
+              width: "9%",
               render: (log) => <StatusBadge status={log.status} />,
             },
-            { key: "mechanic", header: "Mechanic", width: "11%", render: (log) => log.mechanic },
+            { key: "mechanic", header: "Mechanic", width: "13%", render: (log) => log.mechanic },
             {
               key: "cost",
               header: "Cost",
-              width: "8%",
+              width: "7%",
               render: (log) => <span className="font-bold">{formatCurrency(log.cost)}</span>,
             },
             {

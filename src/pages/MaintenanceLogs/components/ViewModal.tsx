@@ -2,7 +2,7 @@ import { X } from "lucide-react";
 import { useBodyScrollLock } from "../../../lib/hooks/useBodyScrollLock";
 
 type MaintenanceStatus = "Completed" | "Flagged";
-type MaintenanceClass = "Maintenance" | "Repair" | "Inspection";
+type MaintenanceClass = "Maintenance" | "Repair";
 
 interface MaintenanceLog {
   id: string;
@@ -64,9 +64,7 @@ const LogClassBadge = ({ value }: { value: MaintenanceClass }) => {
   const classes =
     value === "Repair"
       ? "border-[#b50000] bg-[#ff8f94] text-[#8f1212]"
-      : value === "Inspection"
-        ? "border-[#64748b] bg-[#e2e8f0] text-[#334155]"
-        : "border-[#313a9f] bg-[#a9b5ff] text-[#111957]";
+      : "border-[#313a9f] bg-[#a9b5ff] text-[#111957]";
 
   return (
     <span className={`inline-flex min-w-[112px] justify-center rounded-full border-2 px-4 py-1 text-xs font-bold uppercase ${classes}`}>

@@ -39,9 +39,9 @@ export const tableClasses =
 export const tableHeadClasses =
   "bg-[#070b45] text-white";
 export const tableHeaderCellClasses =
-  "px-4 py-3 text-xs font-bold uppercase tracking-wide align-middle";
+  "px-2.5 py-2 text-xs font-bold uppercase tracking-wide align-middle";
 export const tableCellClasses =
-  "border-b border-[#dde4ef] px-4 py-3 align-middle text-sm";
+  "border-b border-[#dde4ef] px-2.5 py-2 align-middle text-sm";
 export const tableRowClasses =
   "transition-colors hover:bg-[#f8fafc]";
 export const checkboxClasses =
@@ -347,12 +347,12 @@ export function DataTable<T>({
   data,
   getRowKey,
   emptyMessage = "No records found.",
-  minWidth = "900px",
+  minWidth = "760px",
   onRowClick,
 }: DataTableProps<T>) {
   return (
     <div className={`${tableShellClasses} overflow-x-auto`}>
-      <table className={tableClasses} style={{ minWidth }}>
+      <table className={tableClasses} style={{ minWidth, tableLayout: "fixed" }}>
         <thead className={tableHeadClasses}>
           <tr>
             {columns.map((column) => (
@@ -377,7 +377,7 @@ export function DataTable<T>({
             <tr>
               <td
                 colSpan={columns.length}
-                className="border-b border-[#dde4ef] px-6 py-10 text-center text-sm text-[#70747c]"
+                className="border-b border-[#dde4ef] px-4 py-8 text-center text-sm text-[#70747c]"
               >
                 {emptyMessage}
               </td>
@@ -398,7 +398,7 @@ export function DataTable<T>({
                         : column.align === "right"
                           ? "text-right"
                           : ""
-                    }`}
+                    } min-w-0 break-words leading-snug`}
                   >
                     {column.render(row)}
                   </td>

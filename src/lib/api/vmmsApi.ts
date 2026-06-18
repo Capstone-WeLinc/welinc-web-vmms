@@ -34,6 +34,7 @@ const fallbackVehicleOptions: VehicleOption[] = [
   { value: "HU 6789", label: "HU 6789 - Truck Lima", status: "AVAILABLE" },
 ];
 import type { MaintenanceTask, MaintenanceStatus } from "../../types/maintenance";
+import { getNextWorkOrderId, isInProgressStatus } from "../utils/workOrders";
 import type {
   WorkOrderTemplate,
   ChecklistItemTemplate,
@@ -445,14 +446,14 @@ export async function updateWorkOrder(task: MaintenanceTask) {
     if (index >= 0) {
       mockWorkOrders[index] = task;
     }
-    if (task.status === "In-Progress") {
+    if (isInProgressStatus(task.status)) {
       saveMockVehicleStatus(task.vehicleId, vehicleMaintenanceStatus);
     }
     return task;
   }
 
   const updatedTask = await updateMaintenanceSchedule(task);
-  if (updatedTask.status === "In-Progress") {
+  if (isInProgressStatus(updatedTask.status)) {
     updateVehicleStatus(updatedTask.vehicleId, vehicleMaintenanceStatus).catch(
       (error) => {
         console.error("Failed to update vehicle status", error);
@@ -520,7 +521,7 @@ export async function createMaintenanceSchedule(
   if (!useBackend) {
     const createdTask: MaintenanceTask = {
       ...schedule,
-      id: `task-${Date.now()}`,
+      id: getNextWorkOrderId(mockWorkOrders),
     };
     mockWorkOrders.unshift(createdTask);
     return createdTask;
@@ -536,6 +537,7 @@ export async function createMaintenanceSchedule(
     status: schedule.status,
     garageId: schedule.garageId,
     accountType: schedule.accountType,
+    outsourcedProvider: schedule.outsourcedProvider,
     odometerReading: schedule.odometerReading,
     systemAffected: schedule.systemAffected,
     triggerType: schedule.triggerType,
@@ -573,6 +575,7 @@ export async function updateMaintenanceSchedule(schedule: MaintenanceTask) {
     status: schedule.status,
     garageId: schedule.garageId,
     accountType: schedule.accountType,
+    outsourcedProvider: schedule.outsourcedProvider,
     odometerReading: schedule.odometerReading,
     systemAffected: schedule.systemAffected,
     triggerType: schedule.triggerType,

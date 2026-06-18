@@ -1,5 +1,17 @@
 import type { MaintenanceTask } from "../../types/maintenance";
 
+export const normalizeMaintenanceStatus = (status?: string | null) =>
+  (status ?? "").trim().toLowerCase().replace(/[\s_]+/g, "-");
+
+export const isPendingStatus = (status?: string | null) =>
+  normalizeMaintenanceStatus(status) === "pending";
+
+export const isInProgressStatus = (status?: string | null) =>
+  normalizeMaintenanceStatus(status) === "in-progress";
+
+export const isOverdueStatus = (status?: string | null) =>
+  normalizeMaintenanceStatus(status) === "overdue";
+
 export const formatWorkOrderNumber = (id: string) => {
   const numericSuffix = id.match(/^(?:task-)?(\d+)$/i)?.[1];
 
@@ -9,6 +21,27 @@ export const formatWorkOrderNumber = (id: string) => {
 
   const normalizedId = id.replace(/[^a-z0-9]/gi, "").toUpperCase();
   return `WO-${normalizedId.slice(0, 8).padEnd(8, "0")}`;
+};
+
+export const getNextWorkOrderId = (tasks: Pick<MaintenanceTask, "id">[]) => {
+  const nextNumber =
+    tasks.reduce((highest, task) => {
+      const match = task.id.match(/^(?:task-)?(\d+)$/i);
+      return match ? Math.max(highest, Number(match[1])) : highest;
+    }, 0) + 1;
+
+  return `task-${nextNumber}`;
+};
+
+export const formatLogNumber = (id: string) => {
+  const numericSuffix = id.match(/^(?:task-)?(\d+)$/i)?.[1];
+
+  if (numericSuffix) {
+    return `LOG-${numericSuffix.slice(-6).padStart(6, "0")}`;
+  }
+
+  const normalizedId = id.replace(/[^a-z0-9]/gi, "").toUpperCase();
+  return `LOG-${normalizedId.slice(0, 8).padEnd(8, "0")}`;
 };
 
 const parseKm = (value?: string | null) => {
@@ -94,7 +127,7 @@ export const getOdometerActivationRange = (task: MaintenanceTask) => {
 export const isPendingOdometerScheduleReadyForMechanic = (
   task: MaintenanceTask,
 ) => {
-  if (task.status !== "Pending" || task.triggerType !== "ODOMETER") {
+  if (!isPendingStatus(task.status) || task.triggerType !== "ODOMETER") {
     return true;
   }
 
@@ -122,7 +155,7 @@ export const isPendingTimeScheduleReadyForMechanic = (
   task: MaintenanceTask,
   currentDate = new Date(),
 ) => {
-  if (task.status !== "Pending" || task.triggerType !== "TIME") {
+  if (!isPendingStatus(task.status) || task.triggerType !== "TIME") {
     return true;
   }
 

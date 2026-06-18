@@ -68,7 +68,7 @@ export async function apiRequest<T>(
   });
 
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403 || response.status === 404) {
+    if (response.status === 401 || response.status === 403) {
       dispatchUnauthorizedEvent(response.status);
     }
     const responseText = await response.text().catch(() => "");

@@ -44,7 +44,12 @@ import {
 import { getVehicles } from "../../lib/api/vehicleService";
 import { getGarages } from "../../lib/api/locationService";
 import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
-import { formatWorkOrderNumber } from "../../lib/utils/workOrders";
+import {
+  formatWorkOrderNumber,
+  isInProgressStatus,
+  isOverdueStatus,
+  isPendingStatus,
+} from "../../lib/utils/workOrders";
 
 type GarageOption = { id: string; name: string };
 type ToastState = {
@@ -158,6 +163,7 @@ const StatusBadge = ({ status }: { status: MaintenanceStatus }) => {
       case "Flagged":
         return "text-[#92400e] bg-[var(--color-status-warning)]/15 border-[var(--color-status-warning)]/30";
       case "In-Progress":
+      case "In Progress":
         return "text-[#047857] bg-[var(--color-status-success)]/15 border-[var(--color-status-success)]/30";
       case "Completed":
         return "text-[var(--color-text-secondary)] bg-[var(--color-card-bg)] border-[var(--color-border)]";
@@ -239,6 +245,7 @@ const getTaskStyle = (status: MaintenanceStatus) => {
     case "Flagged":
       return "border border-amber-500/50 bg-amber-500/15 text-amber-800 shadow-sm";
     case "In-Progress":
+    case "In Progress":
       return "border border-emerald-500/40 bg-emerald-500/15 text-emerald-700 shadow-sm";
     case "Pending":
       return "border border-[var(--color-status-info)]/40 bg-[var(--color-status-info)]/15 text-[#0369a1] shadow-sm";
@@ -366,17 +373,25 @@ const MaintenanceSchedulingCombined = () => {
   const vehicleOptions = [{ value: "All", label: "All Vehicles" }, ...vehicles];
   const scheduleStatusOptions = [
     "Pending",
-    "In-Progress",
+    "In Progress",
     "Overdue",
-    "Flagged",
-    "Completed",
   ];
 
   const filteredTasks = tasks
     .filter((task) => {
+      const isActiveSchedule =
+        isPendingStatus(task.status) ||
+        isInProgressStatus(task.status) ||
+        isOverdueStatus(task.status);
       const statusMatches =
         selectedStatusFilters.length === 0 ||
-        selectedStatusFilters.includes(task.status);
+        selectedStatusFilters.some(
+          (status) =>
+            (status === "Pending" && isPendingStatus(task.status)) ||
+            (status === "In Progress" && isInProgressStatus(task.status)) ||
+            (status === "Overdue" && isOverdueStatus(task.status)) ||
+            status === task.status,
+        );
       const vehicleMatches =
         vehicleFilter === "All" || task.vehicleId === vehicleFilter;
       const templateMatches =
@@ -391,6 +406,7 @@ const MaintenanceSchedulingCombined = () => {
         task.vehicleId.toLowerCase().includes(searchQuery.toLowerCase()) ||
         task.assignedDriver.toLowerCase().includes(searchQuery.toLowerCase());
       return (
+        isActiveSchedule &&
         statusMatches &&
         vehicleMatches &&
         templateMatches &&
@@ -417,9 +433,9 @@ const MaintenanceSchedulingCombined = () => {
 
   const noTasks = tasks.length === 0;
 
-  const pendingCount = tasks.filter((task) => task.status === "Pending").length;
+  const pendingCount = tasks.filter((task) => isPendingStatus(task.status)).length;
   const inProgressCount = tasks.filter(
-    (task) => task.status === "In-Progress",
+    (task) => isInProgressStatus(task.status),
   ).length;
   const overdueCount = tasks.filter((task) => task.status === "Overdue").length;
   const flaggedCount = tasks.filter((task) => task.status === "Flagged").length;
@@ -488,7 +504,7 @@ const MaintenanceSchedulingCombined = () => {
   };
 
   const canShowScheduleUpdate = (task: MaintenanceTask) =>
-    task.status === "Pending" &&
+    isPendingStatus(task.status) &&
     (task.triggerType === "ODOMETER" || task.triggerType === "MANUAL");
 
   const confirmScheduleDelete = async () => {
@@ -596,7 +612,7 @@ const MaintenanceSchedulingCombined = () => {
                 Maintenance Schedules
               </h2>
               <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                Current and completed scheduled items for the fleet.
+                Pending, in-progress, and overdue scheduled items for the fleet.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
@@ -719,7 +735,7 @@ const MaintenanceSchedulingCombined = () => {
               <DataTable
                 data={paginatedTasks}
                 getRowKey={(task) => task.id}
-                minWidth="1080px"
+                minWidth="900px"
                 onRowClick={(task) => openScheduleDetails([task])}
                 emptyMessage={
                   noTasks
@@ -730,25 +746,25 @@ const MaintenanceSchedulingCombined = () => {
                   {
                     key: "workOrderNo",
                     header: "Work Order No.",
-                    width: "13%",
+                    width: "11%",
                     render: (task) => formatWorkOrderNumber(task.id),
                   },
                   {
                     key: "plateNo",
                     header: "Plate No.",
-                    width: "12%",
+                    width: "10%",
                     render: (task) => <span className="font-medium">{task.vehicleId}</span>,
                   },
                   {
                     key: "workOrder",
                     header: "Work Order",
-                    width: "19%",
+                    width: "24%",
                     render: (task) => task.title,
                   },
                   {
                     key: "trigger",
                     header: "Trigger",
-                    width: "11%",
+                    width: "10%",
                     render: (task) => (
                       <span className="inline-block rounded-full bg-[#f1f5f9] px-3 py-1 text-xs font-bold text-[#475569]">
                         {task.triggerType === "TIME"
@@ -780,7 +796,7 @@ const MaintenanceSchedulingCombined = () => {
                         )}
                       </button>
                     ),
-                    width: "15%",
+                    width: "12%",
                     render: (task) => task.date,
                   },
                   {
@@ -792,7 +808,7 @@ const MaintenanceSchedulingCombined = () => {
                   {
                     key: "status",
                     header: "Status",
-                    width: "10%",
+                    width: "11%",
                     render: (task) => <StandardStatusBadge status={task.status} />,
                   },
                   {
@@ -1094,6 +1110,10 @@ const MaintenanceSchedulingCombined = () => {
               { label: "Status", value: selectedSchedule.status },
               { label: "Garage/Cluster", value: getGarageName(selectedSchedule.garageId) },
               { label: "Account Type", value: selectedSchedule.accountType },
+              {
+                label: "Provider",
+                value: selectedSchedule.outsourcedProvider,
+              },
               {
                 label: "System Affected",
                 value: selectedSchedule.systemAffected,

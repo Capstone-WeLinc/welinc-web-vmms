@@ -37,6 +37,8 @@ import {
   formatWorkOrderNumber,
   getOdometerActivationRange,
   getTimeBasedActivationDate,
+  isInProgressStatus,
+  isPendingStatus,
   isPendingOdometerScheduleReadyForMechanic,
   isPendingTimeScheduleReadyForMechanic,
 } from "../../lib/utils/workOrders";
@@ -125,8 +127,8 @@ const headerSectionClasses = 'flex flex-col gap-4 border-b border-[var(--color-d
 const detailViewClasses = 'rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-xl backdrop-blur-sm transition-all';
 const backButtonClasses = 'mb-6 flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-brand-primary)]';
 const executionTableClasses = 'mb-6 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)]';
-const tableHeaderClasses = 'grid grid-cols-[1fr_80px_80px_100px_1.2fr_100px] items-center gap-4 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-6 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]';
-const checklistHeaderClasses = 'grid grid-cols-[1fr_80px_80px_1fr_100px] items-center gap-4 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-6 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]';
+const tableHeaderClasses = 'grid grid-cols-[minmax(12rem,1fr)_64px_64px_88px_minmax(10rem,1.1fr)_88px] items-center gap-2 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]';
+const checklistHeaderClasses = 'grid grid-cols-[minmax(12rem,1fr)_64px_64px_minmax(10rem,1fr)_88px] items-center gap-2 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]';
 const warningBannerClasses = 'mt-6 flex items-start gap-3 rounded-lg border border-[var(--color-status-error)]/20 bg-[var(--color-status-error)]/10 px-5 py-4 shadow-[0_0_15px_rgba(239,68,68,0.06)]';
 
 export default function WorkOrders() {
@@ -222,12 +224,19 @@ export default function WorkOrders() {
 
   let activeTasks = tasks.filter(
     (task) =>
-      task.status !== "Completed" &&
+      (isPendingStatus(task.status) || isInProgressStatus(task.status)) &&
       isAssignedToCurrentMechanic(task),
   );
 
   if (selectedStatusFilters.length > 0) {
-    activeTasks = activeTasks.filter((t) => selectedStatusFilters.includes(t.status));
+    activeTasks = activeTasks.filter((t) =>
+      selectedStatusFilters.some(
+        (status) =>
+          status === t.status ||
+          (status === "Pending" && isPendingStatus(t.status)) ||
+          (status === "In Progress" && isInProgressStatus(t.status)),
+      ),
+    );
   }
 
   if (dateFromFilter) {
@@ -406,9 +415,9 @@ export default function WorkOrders() {
       execution.items.some((item) => item.status !== "pending") ||
       checklist.some((item) => item.status !== "pending")
     ) {
-      return "In-Progress";
+      return "In Progress";
     }
-    return task.status === "In-Progress" ? "In-Progress" : "Pending";
+    return isInProgressStatus(task.status) ? "In Progress" : "Pending";
   };
 
   const persistTaskStatus = (
@@ -455,6 +464,7 @@ export default function WorkOrders() {
       { label: "Scheduled Date", value: task.date },
       { label: "Garage / Cluster", value: getGarageName(task.garageId) },
       { label: "Account Type", value: task.accountType },
+      { label: "Provider", value: task.outsourcedProvider },
       { label: "System Affected", value: task.systemAffected },
       { label: "Odometer Reading (km)", value: task.odometerReading },
       { label: "Schedule Trigger", value: formatTriggerType(task.triggerType) },
@@ -574,6 +584,7 @@ export default function WorkOrders() {
         value: getGarageName(selectedTask.garageId),
       },
       { label: "Account Type", value: selectedTask.accountType },
+      { label: "Provider", value: selectedTask.outsourcedProvider },
       { label: "System Affected", value: selectedTask.systemAffected },
       { label: "Odometer Reading (km)", value: selectedTask.odometerReading },
       { label: "Schedule Trigger", value: formatTriggerType(selectedTask.triggerType) },
@@ -729,7 +740,7 @@ export default function WorkOrders() {
       currency: "PHP",
       maximumFractionDigits: 2,
     }).format(value);
-  const workOrderStatusOptions = ["Pending", "In-Progress", "Flagged", "Overdue"];
+  const workOrderStatusOptions = ["Pending", "In Progress"];
 
   const updateExecutionItemStatus = (
     taskId: string,
@@ -1103,56 +1114,56 @@ export default function WorkOrders() {
           <DataTable
             data={paginatedTasks}
             getRowKey={(task) => task.id}
-            minWidth="1080px"
+            minWidth="900px"
             emptyMessage="No active work orders found."
             onRowClick={handleSelectTask}
             columns={[
               {
                 key: "workOrder",
                 header: "Work Order NO.",
-                width: "13%",
+                width: "11%",
                 render: (task) => formatWorkOrderNumber(task.id),
               },
               {
                 key: "plate no",
                 header: "Plate No.",
-                width: "12%",
+                width: "9%",
                 render: (task) => task.vehicleId,
               },
               {
                 key: "type",
                 header: "Maintenance Type",
-                width: "18%",
+                width: "25%",
                 render: (task) => task.title,
               },
               {
                 key: "mechanic",
                 header: "Mechanic",
-                width: "16%",
+                width: "13%",
                 render: (task) => task.assignedDriver,
               },
               {
                 key: "created",
                 header: "Date Created",
-                width: "12%",
+                width: "11%",
                 render: (task) => task.startReferenceDate || task.date,
               },
               {
                 key: "assigned",
                 header: "Assigned Date",
-                width: "12%",
+                width: "11%",
                 render: (task) => task.date,
               },
               {
                 key: "status",
                 header: "Status",
-                width: "11%",
+                width: "13%",
                 render: (task) => <StatusBadge status={task.status} />,
               },
               {
                 key: "actions",
                 header: "Actions",
-                width: "8%",
+                width: "6%",
                 align: "center",
                 render: (task) => (
                   <ActionMenu
@@ -1320,7 +1331,7 @@ export default function WorkOrders() {
                       {currentExecution.items.map((item) => (
                         <div
                           key={item.id}
-                          className={`grid grid-cols-[1fr_80px_80px_100px_1.2fr_100px] items-center gap-4 px-6 py-4 transition-colors duration-200 ${
+                          className={`grid grid-cols-[minmax(12rem,1fr)_64px_64px_88px_minmax(10rem,1.1fr)_88px] items-center gap-2 px-3 py-2.5 transition-colors duration-200 ${
                             item.status === "notChecked"
                               ? "bg-amber-500/10"
                               : item.status === "changed"
@@ -1344,14 +1355,14 @@ export default function WorkOrders() {
                                   "checked",
                                 )
                               }
-                              className={`flex h-6 w-6 items-center justify-center rounded-full border-2 transition-all duration-200 ${
+                              className={`flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-200 ${
                                 item.status === "checked"
                                   ? "border-emerald-400 bg-emerald-400/20"
                                   : "border-[var(--color-border)] hover:border-emerald-500/60"
                               } ${!canModifySelectedTask || currentExecution.done || !canMechanicStartTask ? "cursor-not-allowed opacity-60" : ""}`}
                             >
                               {item.status === "checked" && (
-                                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                                <span className="h-3.5 w-3.5 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.16)]" />
                               )}
                             </button>
                           </div>
@@ -1366,14 +1377,14 @@ export default function WorkOrders() {
                                   "changed",
                                 )
                               }
-                              className={`flex h-6 w-6 items-center justify-center rounded-full border-2 transition-all duration-200 ${
+                              className={`flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-200 ${
                                 item.status === "changed"
                                   ? "border-sky-400 bg-sky-400/20"
                                   : "border-[var(--color-border)] hover:border-sky-500/60"
                               } ${!canModifySelectedTask || currentExecution.done || !canMechanicStartTask ? "cursor-not-allowed opacity-60" : ""}`}
                             >
                               {item.status === "changed" && (
-                                <span className="h-2.5 w-2.5 rounded-full bg-sky-400" />
+                                <span className="h-3.5 w-3.5 rounded-full bg-sky-400 shadow-[0_0_0_4px_rgba(56,189,248,0.16)]" />
                               )}
                             </button>
                           </div>
@@ -1388,14 +1399,14 @@ export default function WorkOrders() {
                                   "notChecked",
                                 )
                               }
-                              className={`flex h-6 w-6 items-center justify-center rounded-full border-2 transition-all duration-200 ${
+                              className={`flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-200 ${
                                 item.status === "notChecked"
                                   ? "border-amber-400 bg-amber-400/20"
                                   : "border-[var(--color-border)] hover:border-amber-500/60"
                               } ${!canModifySelectedTask || currentExecution.done || !canMechanicStartTask ? "cursor-not-allowed opacity-60" : ""}`}
                             >
                               {item.status === "notChecked" && (
-                                <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+                                <span className="h-3.5 w-3.5 rounded-full bg-amber-400 shadow-[0_0_0_4px_rgba(251,191,36,0.18)]" />
                               )}
                             </button>
                           </div>
@@ -1704,7 +1715,7 @@ export default function WorkOrders() {
                 return (
                 <div
                   key={item.id}
-                  className={`grid grid-cols-[1fr_80px_80px_1fr_100px] items-center gap-4 px-6 py-4 transition-colors duration-200 ${
+                  className={`grid grid-cols-[minmax(12rem,1fr)_64px_64px_minmax(10rem,1fr)_88px] items-center gap-2 px-3 py-2.5 transition-colors duration-200 ${
                     item.status === "fail"
                       ? "bg-rose-500/10"
                       : "hover:bg-[var(--color-card-bg)]/80"
@@ -1718,14 +1729,14 @@ export default function WorkOrders() {
                     <button
                       onClick={() => handleStatusChange(item.id, "pass")}
                       disabled={!canModifySelectedTask}
-                      className={`flex h-6 w-6 items-center justify-center rounded-full border-2 transition-all duration-200 ${
+                      className={`flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-200 ${
                         item.status === "pass"
                           ? "border-emerald-400 bg-emerald-400/20"
                           : "border-[var(--color-border)] hover:border-emerald-500/60"
                       } ${!canModifySelectedTask ? "cursor-not-allowed opacity-50" : ""}`}
                     >
                       {item.status === "pass" && (
-                        <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                        <span className="h-3.5 w-3.5 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.16)]" />
                       )}
                     </button>
                   </div>
@@ -1734,14 +1745,14 @@ export default function WorkOrders() {
                     <button
                       onClick={() => handleStatusChange(item.id, "fail")}
                       disabled={!canModifySelectedTask}
-                      className={`flex h-6 w-6 items-center justify-center rounded-full border-2 transition-all duration-200 ${
+                      className={`flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-200 ${
                         item.status === "fail"
                           ? "border-rose-400 bg-rose-400/20"
                           : "border-[var(--color-border)] hover:border-rose-500/60"
                       } ${!canModifySelectedTask ? "cursor-not-allowed opacity-50" : ""}`}
                     >
                       {item.status === "fail" && (
-                        <span className="h-2.5 w-2.5 rounded-full bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,0.8)]" />
+                        <span className="h-3.5 w-3.5 rounded-full bg-rose-400 shadow-[0_0_0_4px_rgba(251,113,133,0.18)]" />
                       )}
                     </button>
                   </div>

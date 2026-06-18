@@ -2,6 +2,7 @@ export type MaintenanceStatus =
   | "Overdue"
   | "Pending"
   | "Flagged"
+  | "In Progress"
   | "In-Progress"
   | "Completed";
 
@@ -15,6 +16,7 @@ export interface MaintenanceTask {
   notes: string;
   garageId?: string;
   accountType?: string;
+  outsourcedProvider?: string;
   odometerReading?: string;
   systemAffected?: string;
   triggerType?: "ODOMETER" | "TIME" | "MANUAL";

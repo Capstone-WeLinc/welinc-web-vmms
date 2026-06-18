@@ -6,7 +6,7 @@ import {
   ShieldCheck,
   Clock3,
 } from "lucide-react";
-import { DatePicker } from "../../components/ui";
+import { DatePicker, ToastNotification } from "../../components/ui";
 import {
   createMaintenanceSchedule,
   updateMaintenanceSchedule,
@@ -36,6 +36,7 @@ interface ChecklistItemTemplate {
 
 const OTHER_GARAGE_VALUE = "__other__";
 const NON_NEGATIVE_NUMBER_PATTERN = /^\d+(?:\.\d+)?$/;
+const ACCOUNT_TYPE_OPTIONS = ["In-House", "Outsourced"] as const;
 
 const sanitizeNonNegativeNumber = (value: string) => {
   const sanitized = value.replace(/[^\d.]/g, "");
@@ -78,6 +79,7 @@ export default function CreateScheduleModal({
   const [isOtherGarage, setIsOtherGarage] = useState(false);
   const [otherGarage, setOtherGarage] = useState("");
   const [accountType, setAccountType] = useState("");
+  const [outsourcedProvider, setOutsourcedProvider] = useState("");
   const [systemAffected, setSystemAffected] = useState("");
   const [odometerReading, setOdometerReading] = useState("");
   const [intervalKm, setIntervalKm] = useState("");
@@ -94,6 +96,10 @@ export default function CreateScheduleModal({
 
   useBodyScrollLock(isOpen);
   const [isSaving, setIsSaving] = useState(false);
+  const [toast, setToast] = useState<{
+    type: "success" | "error" | "warning" | "info";
+    message: string;
+  } | null>(null);
   const [duplicateSchedule, setDuplicateSchedule] =
     useState<MaintenanceTask | null>(null);
   const isOdometerOnlyUpdate = Boolean(odometerOnly && editingTask);
@@ -138,7 +144,14 @@ export default function CreateScheduleModal({
           setGarageId(editingTask.garageId ?? "");
           setIsOtherGarage(false);
           setOtherGarage("");
-          setAccountType(editingTask.accountType ?? "");
+          setAccountType(
+            ACCOUNT_TYPE_OPTIONS.includes(
+              editingTask.accountType as (typeof ACCOUNT_TYPE_OPTIONS)[number],
+            )
+              ? (editingTask.accountType ?? "")
+              : "",
+          );
+          setOutsourcedProvider(editingTask.outsourcedProvider ?? "");
           setSystemAffected(editingTask.systemAffected ?? "");
           setOdometerReading(editingTask.odometerReading ?? "");
           setTriggerType(editingTask.triggerType ?? "ODOMETER");
@@ -167,6 +180,7 @@ export default function CreateScheduleModal({
           setIsOtherGarage(false);
           setOtherGarage("");
           setAccountType("");
+          setOutsourcedProvider("");
           setSystemAffected("");
           setOdometerReading("");
           setTriggerType("ODOMETER");
@@ -179,6 +193,16 @@ export default function CreateScheduleModal({
       });
     }
   }, [isOpen, editingTask]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
+  const notifyDisabledField = (message: string) => {
+    setToast({ type: "info", message });
+  };
 
   const isEditingGarageOther =
     Boolean(editingTask?.garageId) &&
@@ -200,6 +224,7 @@ export default function CreateScheduleModal({
     odometerReading,
     garageIsOther ? otherGarageValue : garageId,
     accountType,
+    ...(accountType === "Outsourced" ? [outsourcedProvider] : []),
     workOrderTemplate,
     scheduledDate,
     assignedMechanic,
@@ -247,6 +272,8 @@ export default function CreateScheduleModal({
               notes,
               garageId: savedGarageId,
               accountType,
+              outsourcedProvider:
+                accountType === "Outsourced" ? outsourcedProvider.trim() : "",
               systemAffected,
               odometerReading,
               triggerType,
@@ -274,6 +301,8 @@ export default function CreateScheduleModal({
           notes,
           garageId: savedGarageId,
           accountType,
+          outsourcedProvider:
+            accountType === "Outsourced" ? outsourcedProvider.trim() : "",
           systemAffected,
           odometerReading,
           triggerType,
@@ -296,6 +325,7 @@ export default function CreateScheduleModal({
       setIsOtherGarage(false);
       setOtherGarage("");
       setAccountType("");
+      setOutsourcedProvider("");
       setSystemAffected("");
       setOdometerReading("");
       setTriggerType("ODOMETER");
@@ -349,10 +379,10 @@ export default function CreateScheduleModal({
     ? getOdometerActivationRange(editingTask)
     : null;
   const modalTitle = isOdometerOnlyUpdate
-    ? "Update Odometer Reading"
+    ? "UPDATE ODOMETER READING"
     : editingTask
-      ? "Edit Maintenance Schedule"
-      : "Create Maintenance Schedule";
+      ? "EDIT MAINTENANCE SCHEDULE"
+      : "CREATE MAINTENANCE SCHEDULE";
   const modalSubtitle = isOdometerOnlyUpdate
     ? "Update the latest odometer reading for this pending schedule."
     : editingTask
@@ -430,6 +460,9 @@ export default function CreateScheduleModal({
 
   return (
     <div className="modal-overlay p-4 backdrop-blur-sm">
+      <div className="fixed right-6 top-6 z-[80] flex w-[340px] max-w-[calc(100vw-2rem)] flex-col gap-3">
+        {toast && <ToastNotification type={toast.type} message={toast.message} />}
+      </div>
       <div className="modal-content max-w-6xl w-full rounded-[30px] flex flex-col max-h-[92vh] overflow-hidden shadow-[0_30px_90px_rgba(0,0,0,0.35)]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-card-bg)] px-6 py-5 shrink-0">
@@ -531,7 +564,7 @@ export default function CreateScheduleModal({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-                  Vehicle
+                  VEHICLE
                 </label>
                 <div className="relative">
                   <select
@@ -566,7 +599,7 @@ export default function CreateScheduleModal({
               <div className="flex gap-4">
                 <div className="flex-1">
                   <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-                    Odometer Reading (km)
+                    ODOMETER READING (km)
                   </label>
                   <input
                     type="text"
@@ -585,7 +618,7 @@ export default function CreateScheduleModal({
 
               <div className="col-start-2 row-start-1">
                 <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-                  Garage
+                  GARAGE
                 </label>
                 <div className="relative">
                   <select
@@ -632,16 +665,50 @@ export default function CreateScheduleModal({
 
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-                  Account Type
+                  ACCOUNT TYPE
                 </label>
-                <input
-                  type="text"
-                  value={accountType}
-                  onChange={(e) => setAccountType(e.target.value)}
-                  placeholder="Enter account type"
-                  className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
-                />
+                <div className="relative">
+                  <select
+                    value={accountType}
+                    onChange={(e) => {
+                      setAccountType(e.target.value);
+                      if (e.target.value !== "Outsourced") {
+                        setOutsourcedProvider("");
+                      }
+                    }}
+                    className="select-control w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
+                  >
+                    <option value="" disabled>
+                      Select account type
+                    </option>
+                    {ACCOUNT_TYPE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--color-text-secondary)]">
+                    <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
+                      <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                    </svg>
+                  </div>
+                </div>
               </div>
+
+              {accountType === "Outsourced" ? (
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
+                    OUTSOURCED COMPANY / SERVICE PROVIDER
+                  </label>
+                  <input
+                    type="text"
+                    value={outsourcedProvider}
+                    onChange={(e) => setOutsourcedProvider(e.target.value)}
+                    placeholder="Enter company or service provider"
+                    className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
+                  />
+                </div>
+              ) : null}
 
             </div>
           </section>
@@ -666,10 +733,10 @@ export default function CreateScheduleModal({
               ).map((option) => (
                 <label
                   key={option.value}
-                  className={`flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition ${
+                  className={`group flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-sm font-semibold transition ${
                     triggerType === option.value
-                      ? "border-[var(--color-brand-primary)]/30 bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] shadow-[0_10px_30px_rgba(56,189,248,0.12)]"
-                      : "border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:bg-[var(--color-card-bg-hover)]"
+                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] shadow-[0_10px_24px_rgba(47,124,255,0.14)]"
+                      : "border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:border-[var(--color-brand-primary)]/50 hover:bg-[var(--color-card-bg-hover)]"
                   }`}
                 >
                   <input
@@ -678,17 +745,35 @@ export default function CreateScheduleModal({
                     value={option.value}
                     checked={triggerType === option.value}
                     onChange={() => setTriggerType(option.value)}
-                    className="h-3.5 w-3.5 accent-[var(--color-brand-primary)]"
+                    className="sr-only"
                   />
+                  <span
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition ${
+                      triggerType === option.value
+                        ? "border-[var(--color-brand-primary)] bg-white"
+                        : "border-[var(--color-border)] bg-[var(--color-input-bg)] group-hover:border-[var(--color-brand-primary)]/60"
+                    }`}
+                  >
+                    {triggerType === option.value ? (
+                      <span className="h-2.5 w-2.5 rounded-full bg-[var(--color-brand-primary)]" />
+                    ) : null}
+                  </span>
                   {option.label}
                 </label>
               ))}
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:items-start mb-4">
-              <div className="flex h-full flex-col">
+              <div
+                className="flex h-full flex-col"
+                onPointerDownCapture={() => {
+                  if (triggerType === "TIME") {
+                    notifyDisabledField("Interval is disabled for time-based schedules because distance rules do not apply.");
+                  }
+                }}
+              >
                 <label className="mb-1.5 min-h-[2.2rem] text-sm font-medium text-[var(--color-text-secondary)]">
-                  Interval (km)
+                  INTERVAL (km)
                 </label>
                 <input
                   type="text"
@@ -706,9 +791,16 @@ export default function CreateScheduleModal({
                   }`}
                 />
               </div>
-              <div className="flex h-full flex-col">
+              <div
+                className="flex h-full flex-col"
+                onPointerDownCapture={() => {
+                  if (triggerType === "TIME") {
+                    notifyDisabledField("Buffer distance is disabled for time-based schedules because odometer activation is not used.");
+                  }
+                }}
+              >
                 <label className="mb-1.5 min-h-[2.2rem] text-sm font-medium text-[var(--color-text-secondary)]">
-                  Buffer Distance (km)
+                  BUFFER DISTANCE(km)
                 </label>
                 <input
                   type="text"
@@ -728,9 +820,16 @@ export default function CreateScheduleModal({
                   }`}
                 />
               </div>
-              <div className="flex h-full flex-col">
+              <div
+                className="flex h-full flex-col"
+                onPointerDownCapture={() => {
+                  if (triggerType === "TIME") {
+                    notifyDisabledField("Starting reference reading is disabled for time-based schedules because mileage is not used.");
+                  }
+                }}
+              >
                 <label className="mb-1.5 min-h-[2.2rem] text-sm font-medium leading-tight text-[var(--color-text-secondary)]">
-                  Starting Reference Reading (km)
+                  STARTING REFERENCE READING(km)
                 </label>
                 <input
                   type="text"
@@ -753,11 +852,24 @@ export default function CreateScheduleModal({
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
+              <div
+                onPointerDownCapture={() => {
+                  if (triggerType === "ODOMETER") {
+                    notifyDisabledField("Interval type is disabled for odometer-based schedules because mileage rules determine activation.");
+                  }
+                }}
+              >
                 <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-                  Interval Type
+                  INTERVAL TYPE
                 </label>
-                <div className="relative">
+                <div
+                  className="relative"
+                  onPointerDownCapture={() => {
+                    if (isTemplatesLoading) {
+                      notifyDisabledField("Work order templates are disabled while checklist templates are loading.");
+                    }
+                  }}
+                >
                   <select
                     disabled={triggerType === "ODOMETER"}
                     value={intervalTypeState}
@@ -786,9 +898,15 @@ export default function CreateScheduleModal({
                   </div>
                 </div>
               </div>
-              <div>
+              <div
+                onPointerDownCapture={() => {
+                  if (triggerType === "ODOMETER") {
+                    notifyDisabledField("Start reference date is disabled for odometer-based schedules because mileage rules determine activation.");
+                  }
+                }}
+              >
                 <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-                  Start Reference Date
+                  START REFERENCE DATE
                 </label>
                 <DatePicker
                   value={startReferenceDate}
@@ -813,7 +931,7 @@ export default function CreateScheduleModal({
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-                  Work Order Template
+                  WORK ORDER TEMPLATE
                 </label>
                 <div className="relative">
                   <select
@@ -882,7 +1000,7 @@ export default function CreateScheduleModal({
               </div>
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-                  Scheduled Date
+                  SCHEDULED DATE
                 </label>
                 <DatePicker
                   value={scheduledDate}
@@ -893,9 +1011,16 @@ export default function CreateScheduleModal({
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-                Assigned Mechanic
+                ASSIGNED MECHANIC
               </label>
-              <div className="relative">
+              <div
+                className="relative"
+                onPointerDownCapture={() => {
+                  if (mechanics.length === 0 && !assignedMechanic) {
+                    notifyDisabledField("Assigned mechanic is disabled because no mechanic users are available.");
+                  }
+                }}
+              >
                 <select
                   value={assignedMechanic}
                   disabled={mechanics.length === 0 && !assignedMechanic}
