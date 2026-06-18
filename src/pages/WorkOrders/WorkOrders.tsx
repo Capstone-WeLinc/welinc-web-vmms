@@ -113,15 +113,15 @@ const filtersGridClasses = 'grid gap-4 border-b border-[var(--color-divider)] px
 const searchInputClasses = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-hidden';
 const selectInputClasses = 'w-full appearance-none rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-hidden';
 const taskGridClasses = 'grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-4';
-const taskCardClasses = 'group cursor-pointer rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card transition-all hover:-translate-y-1 hover:border-[var(--color-brand-primary)] hover:bg-[var(--color-card-bg-hover)] hover:shadow-[0_10px_28px_rgba(15,23,42,0.12)] dark:hover:border-[var(--color-brand-primary)] dark:hover:bg-[var(--color-card-bg-hover)] dark:hover:shadow-[0_14px_32px_rgba(26,31,110,0.18)]';
+const taskCardClasses = 'group cursor-pointer rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card transition-all hover:-translate-y-1 hover:border-[var(--color-brand-primary)] hover:bg-[var(--color-card-bg-hover)] hover:shadow-[0_10px_28px_rgba(15,23,42,0.12)]';
 const emptyStateClasses = 'col-span-full rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-8 text-center shadow-card';
 const detailViewClasses = 'rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-xl backdrop-blur-sm transition-all';
-const backButtonClasses = 'mb-6 flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-brand-primary)] dark:hover:text-[var(--color-brand-primary)]';
+const backButtonClasses = 'mb-6 flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-brand-primary)]';
 const executionTableClasses = 'mb-6 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)]';
 const tableHeaderClasses = 'grid grid-cols-[1fr_80px_80px_100px_1.2fr_100px_100px_140px_100px] items-center gap-4 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-6 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]';
 const checklistHeaderClasses = 'grid grid-cols-[1fr_80px_80px_1fr_1fr_100px] items-center gap-4 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-6 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]';
 const warningBannerClasses = 'mt-6 flex items-start gap-3 rounded-lg border border-[var(--color-status-error)]/20 bg-[var(--color-status-error)]/10 px-5 py-4 shadow-[0_0_15px_rgba(239,68,68,0.06)]';
-const actionButtonClasses = 'no-print flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-5 py-2.5 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-brand-primary)] dark:hover:bg-[var(--color-card-bg-hover)] dark:hover:text-[var(--color-text-primary)] dark:hover:border-[var(--color-brand-primary)]';
+const actionButtonClasses = 'no-print flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-5 py-2.5 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-brand-primary)]';
 const completeButtonClasses = 'no-print flex items-center gap-2 rounded-lg px-6 py-2.5 text-sm font-bold transition-all duration-300';
 
 export default function WorkOrders() {
@@ -1031,28 +1031,28 @@ export default function WorkOrders() {
                   <span
                     className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
                       task.status === "Overdue"
-                        ? "bg-[var(--color-status-error)]/10 text-[#c41c3b] border border-[var(--color-status-error)]/30 dark:text-[#fca5ac]"
+                        ? "bg-[var(--color-status-error)]/10 text-[#c41c3b] border border-[var(--color-status-error)]/30"
                         : task.status === "Flagged"
-                          ? "bg-[var(--color-status-warning)]/10 text-[#92400e] border border-[var(--color-status-warning)]/30 dark:text-[#fed7aa]"
+                          ? "bg-[var(--color-status-warning)]/10 text-[#92400e] border border-[var(--color-status-warning)]/30"
                           : task.status === "In-Progress"
-                            ? "bg-[var(--color-status-success)]/10 text-[#047857] border border-[var(--color-status-success)]/30 dark:text-[#a7f3d0]"
-                            : "bg-[var(--color-status-info)]/10 text-[#0369a1] border border-[var(--color-status-info)]/30 dark:text-[#7dd3fc]"
+                            ? "bg-[var(--color-status-success)]/10 text-[#047857] border border-[var(--color-status-success)]/30"
+                            : "bg-[var(--color-status-info)]/10 text-[#0369a1] border border-[var(--color-status-info)]/30"
                     }`}
                   >
                     {task.status}
                   </span>
                 </div>
 
-                <h3 className="mb-2 text-lg font-bold text-[var(--color-text-primary)] transition-colors group-hover:text-[var(--color-brand-primary)] dark:group-hover:text-[var(--color-brand-primary)]">
+                <h3 className="mb-2 text-lg font-bold text-[var(--color-text-primary)] transition-colors group-hover:text-[var(--color-brand-primary)]">
                   {task.title}
                 </h3>
                 {isWaitingForOdometerStage && (
-                  <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-700 dark:text-amber-200">
+                  <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-700">
                     Waiting for odometer stage
                   </div>
                 )}
                 {isWaitingForTimeStage && (
-                  <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-700 dark:text-amber-200">
+                  <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-700">
                     Waiting for time interval
                   </div>
                 )}
@@ -1168,10 +1168,10 @@ export default function WorkOrders() {
                 size={20}
               />
               <div>
-                <h3 className="font-semibold text-amber-700 dark:text-amber-200">
+                <h3 className="font-semibold text-amber-700">
                   {"Work order cannot be started yet"}
                 </h3>
-                <p className="mt-1 text-sm text-amber-700/80 dark:text-amber-200/80">
+                <p className="mt-1 text-sm text-amber-700/80">
                   {getStartLockMessage(selectedTask)}
                 </p>
               </div>
@@ -1196,10 +1196,10 @@ export default function WorkOrders() {
                     <span
                       className={`ml-3 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
                         !canMechanicStartTask
-                          ? "border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-200"
+                          ? "border border-amber-500/30 bg-amber-500/10 text-amber-700"
                           : !currentExecution.done
-                          ? "border border-[var(--color-brand-primary)]/20 bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] dark:text-white"
-                          : "border border-[var(--color-status-success)]/30 bg-[var(--color-status-success)]/10 text-[#047857] dark:text-[#a7f3d0]"
+                          ? "border border-[var(--color-brand-primary)]/20 bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)]"
+                          : "border border-[var(--color-status-success)]/30 bg-[var(--color-status-success)]/10 text-[#047857]"
                       }`}
                     >
                       {!canMechanicStartTask
@@ -1240,7 +1240,7 @@ export default function WorkOrders() {
                                 ? "bg-sky-500/10"
                                 : item.status === "checked"
                                   ? "bg-emerald-500/10"
-                                  : "hover:bg-[var(--color-card-bg-hover)] dark:hover:bg-slate-800/90"
+                                  : "hover:bg-[var(--color-card-bg-hover)]"
                           }`}
                         >
                           <div className="text-sm font-medium text-[var(--color-text-primary)]">
@@ -1408,17 +1408,17 @@ export default function WorkOrders() {
 
                           <div className="flex justify-center">
                             {item.status === "checked" && (
-                              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-200">
+                              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-emerald-700">
                                 Checked
                               </span>
                             )}
                             {item.status === "changed" && (
-                              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-200">
+                              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-sky-700">
                                 Changed
                               </span>
                             )}
                             {item.status === "notChecked" && (
-                              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-200">
+                              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-amber-700">
                                 Not Checked
                               </span>
                             )}
@@ -1461,10 +1461,10 @@ export default function WorkOrders() {
                           size={20}
                         />
                         <div>
-                          <h3 className="font-semibold text-rose-700 dark:text-rose-200">
+                          <h3 className="font-semibold text-rose-700">
                             {"Cannot complete execution"}
                           </h3>
-                          <p className="mt-1 text-sm text-rose-700/80 dark:text-rose-200/80">
+                          <p className="mt-1 text-sm text-rose-700/80">
                             {executionPendingCount > 0
                               ? `${executionPendingCount} item(s) still need proof of check/change. `
                               : ""}
@@ -1495,7 +1495,7 @@ export default function WorkOrders() {
                     </div>
                   ) : (
                     <div className="mt-4 border-t border-[var(--color-divider)] px-6 py-4">
-                      <p className="text-sm text-emerald-700 dark:text-emerald-200">
+                      <p className="text-sm text-emerald-700">
                         Execution checklist completed. The section remains visible for review until the work order is fully closed.
                       </p>
                     </div>
@@ -1517,10 +1517,10 @@ export default function WorkOrders() {
                 <span
                   className={`ml-3 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
                     !canMechanicStartTask
-                      ? "border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-200"
+                      ? "border border-amber-500/30 bg-amber-500/10 text-amber-700"
                       : currentExecution.done
-                      ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
-                      : "border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-200"
+                      ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+                      : "border border-amber-500/30 bg-amber-500/10 text-amber-700"
                   }`}
                 >
                   {!canMechanicStartTask
@@ -1611,12 +1611,12 @@ export default function WorkOrders() {
                       placeholder={displayPartsUsed ? `Parts used: ${displayPartsUsed} | Add inspection note` : "Add note"}
                       className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-1.5 text-sm outline-none transition-colors focus:border-[var(--color-brand-primary)] focus:bg-[var(--color-input-bg-hover)] ${
                         item.status === "fail"
-                          ? "text-rose-700 placeholder:text-rose-500/60 dark:text-rose-200 dark:placeholder:text-rose-300/50"
+                          ? "text-rose-700 placeholder:text-rose-500/60"
                           : "text-[var(--color-text-primary)]"
                       } ${!canModifySelectedTask ? "cursor-not-allowed opacity-50" : ""}`}
                     />
                     {item.status === "fail" && (
-                      <span className="text-xs font-semibold text-rose-700 dark:text-rose-300">
+                      <span className="text-xs font-semibold text-rose-700">
                         ⚠️ Recommended for repair
                       </span>
                     )}
@@ -1628,12 +1628,12 @@ export default function WorkOrders() {
 
                   <div className="flex justify-center">
                     {item.status === "pass" && (
-                      <span className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-200">
+                      <span className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-emerald-700">
                         {"Pass"}
                       </span>
                     )}
                     {item.status === "fail" && (
-                      <span className="flex items-center gap-1.5 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-rose-700 dark:text-rose-200">
+                      <span className="flex items-center gap-1.5 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-rose-700">
                         {"Fail"}
                       </span>
                     )}
@@ -1654,10 +1654,10 @@ export default function WorkOrders() {
             <div className={warningBannerClasses}>
               <AlertTriangle className="mt-0.5 text-rose-400" size={20} />
               <div>
-                <h3 className="font-semibold text-rose-700 dark:text-rose-200">
+                <h3 className="font-semibold text-rose-700">
                   {"Cannot mark as Complete"}
                 </h3>
-                <p className="mt-1 text-sm text-rose-700/80 dark:text-rose-200/80">
+                <p className="mt-1 text-sm text-rose-700/80">
                   {pendingCount > 0 ? `${pendingCount} item(s) pending. ` : ""}
                   {!currentExecution.done ? "Execution not completed. " : ""}
                   Resolve all before closing.
@@ -1667,7 +1667,7 @@ export default function WorkOrders() {
           )}
 
           {failedCount > 0 && canComplete && (
-            <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-700 shadow-card dark:text-amber-200">
+            <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-700 shadow-card">
               {`${failedCount} item(s) failed. You can still mark the inspection complete.`}
             </div>
           )}

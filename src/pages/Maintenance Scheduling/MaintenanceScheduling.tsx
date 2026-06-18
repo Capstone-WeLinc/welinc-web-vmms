@@ -94,11 +94,11 @@ const Button = ({
       break;
     case "danger":
       variantClass =
-        "bg-[var(--color-status-error)]/15 text-[#c41c3b] hover:bg-[var(--color-status-error)]/25 border border-[var(--color-status-error)]/30 dark:text-[#fca5ac]";
+        "bg-[var(--color-status-error)]/15 text-[#c41c3b] hover:bg-[var(--color-status-error)]/25 border border-[var(--color-status-error)]/30";
       break;
     case "warning":
       variantClass =
-        "bg-[var(--color-status-warning)]/15 text-[#92400e] hover:bg-[var(--color-status-warning)]/25 border border-[var(--color-status-warning)]/30 dark:text-[#fed7aa]";
+        "bg-[var(--color-status-warning)]/15 text-[#92400e] hover:bg-[var(--color-status-warning)]/25 border border-[var(--color-status-warning)]/30";
       break;
   }
 
@@ -132,16 +132,16 @@ const StatusBadge = ({ status }: { status: MaintenanceStatus }) => {
   const getStatusDetails = () => {
     switch (status) {
       case "Overdue":
-        return "text-[#c41c3b] bg-[var(--color-status-error)]/15 border-[var(--color-status-error)]/30 dark:text-[#fca5ac]";
+        return "text-[#c41c3b] bg-[var(--color-status-error)]/15 border-[var(--color-status-error)]/30";
       case "Flagged":
-        return "text-[#92400e] bg-[var(--color-status-warning)]/15 border-[var(--color-status-warning)]/30 dark:text-[#fed7aa]";
+        return "text-[#92400e] bg-[var(--color-status-warning)]/15 border-[var(--color-status-warning)]/30";
       case "In-Progress":
-        return "text-[#047857] bg-[var(--color-status-success)]/15 border-[var(--color-status-success)]/30 dark:text-[#a7f3d0]";
+        return "text-[#047857] bg-[var(--color-status-success)]/15 border-[var(--color-status-success)]/30";
       case "Completed":
         return "text-[var(--color-text-secondary)] bg-[var(--color-card-bg)] border-[var(--color-border)]";
       case "Pending":
       default:
-        return "text-[#0369a1] bg-[var(--color-status-info)]/15 border-[var(--color-status-info)]/30 dark:text-[#7dd3fc]";
+        return "text-[#0369a1] bg-[var(--color-status-info)]/15 border-[var(--color-status-info)]/30";
     }
   };
 
@@ -247,13 +247,13 @@ const formatDateStr = (year: number, month: number, day: number) => {
 const getTaskStyle = (status: MaintenanceStatus) => {
   switch (status) {
     case "Overdue":
-      return "border border-rose-500/40 bg-rose-500/15 text-rose-700 shadow-sm dark:border-rose-500/30 dark:bg-rose-500/20 dark:text-rose-200";
+      return "border border-rose-500/40 bg-rose-500/15 text-rose-700 shadow-sm";
     case "Flagged":
-      return "border border-amber-500/50 bg-amber-500/15 text-amber-800 shadow-sm dark:border-amber-500/30 dark:bg-amber-500/20 dark:text-amber-200";
+      return "border border-amber-500/50 bg-amber-500/15 text-amber-800 shadow-sm";
     case "In-Progress":
-      return "border border-emerald-500/40 bg-emerald-500/15 text-emerald-700 shadow-sm dark:border-emerald-500/30 dark:bg-emerald-500/20 dark:text-emerald-200";
+      return "border border-emerald-500/40 bg-emerald-500/15 text-emerald-700 shadow-sm";
     case "Pending":
-      return "border border-[var(--color-status-info)]/40 bg-[var(--color-status-info)]/15 text-[#0369a1] shadow-sm dark:border-[var(--color-status-info)]/30 dark:bg-[var(--color-status-info)]/20 dark:text-[#7dd3fc]";
+      return "border border-[var(--color-status-info)]/40 bg-[var(--color-status-info)]/15 text-[#0369a1] shadow-sm";
     default:
       return "border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-primary)] shadow-sm";
   }
@@ -559,7 +559,7 @@ const MaintenanceSchedulingCombined = () => {
                   aria-pressed={viewMode === "list"}
                   className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-warning)] ${
                     viewMode === "list"
-                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white shadow-md dark:border-[var(--color-brand-primary)]/40 dark:bg-[var(--color-brand-primary)]/20 dark:text-white"
+                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white shadow-md"
                       : "border-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"
                   }`}
                 >
@@ -572,7 +572,7 @@ const MaintenanceSchedulingCombined = () => {
                   aria-pressed={viewMode === "calendar"}
                   className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-warning)] ${
                     viewMode === "calendar"
-                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white shadow-md dark:border-[var(--color-brand-primary)]/40 dark:bg-[var(--color-brand-primary)]/20 dark:text-white"
+                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white shadow-md"
                       : "border-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"
                   }`}
                 >
@@ -736,7 +736,7 @@ const MaintenanceSchedulingCombined = () => {
                                 event.stopPropagation();
                                 openOdometerUpdate(task);
                               }}
-                              className="rounded-xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 px-3 py-2 text-xs font-semibold text-[#0369a1] transition hover:bg-[var(--color-status-info)]/20 dark:text-[#7dd3fc]"
+                              className="rounded-xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 px-3 py-2 text-xs font-semibold text-[#0369a1] transition hover:bg-[var(--color-status-info)]/20"
                             >
                               Update
                             </button>

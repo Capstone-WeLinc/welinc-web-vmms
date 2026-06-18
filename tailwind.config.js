@@ -4,7 +4,6 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
-  darkMode: 'class',
   theme: {
     extend: {
       colors: {
@@ -37,7 +36,7 @@ export default {
           'success': '#10b981',
           'info': '#1a1f6e',
         },
-        // Light Mode Surface Palette
+        // Surface Palette
         'surface': {
           'light': {
             'bg': 'var(--color-surface-light-bg, #f1f5f9)',
@@ -46,14 +45,6 @@ export default {
             'input-bg': 'var(--color-surface-light-input-bg, #ffffff)',
             'input-border': 'var(--color-surface-light-input-border, #cbd5e1)',
             'divider': 'var(--color-surface-light-divider, #e2e8f0)',
-          },
-          'dark': {
-            'bg': 'var(--color-surface-dark-bg, #0f172a)',
-            'card': 'var(--color-surface-dark-card, #1e293b)',
-            'border': 'var(--color-surface-dark-border, #475569)',
-            'input-bg': 'var(--color-surface-dark-input-bg, #1e293b)',
-            'input-border': 'var(--color-surface-dark-input-border, #64748b)',
-            'divider': 'var(--color-surface-dark-divider, #475569)',
           },
         },
       },

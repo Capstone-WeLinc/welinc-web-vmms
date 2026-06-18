@@ -11,10 +11,10 @@ const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
     const baseStyles = 'inline-flex items-center gap-2 font-medium rounded-full';
 
     const variantStyles = {
-      primary: 'bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] dark:text-blue-400',
+      primary: 'bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)]',
       danger: 'bg-[var(--color-brand-danger)]/10 text-[var(--color-brand-danger)]',
       warning: 'bg-[var(--color-brand-warning)]/10 text-[var(--color-brand-warning)]',
-      success: 'bg-[var(--color-brand-success)]/10 text-[var(--color-brand-success)] dark:text-emerald-400',
+      success: 'bg-[var(--color-brand-success)]/10 text-[var(--color-brand-success)]',
     };
 
     const sizeStyles = {

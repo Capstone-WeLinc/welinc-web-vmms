@@ -37,15 +37,15 @@ import type { MaintenanceTask } from "../../types/maintenance";
 const roleOptions: UserRole[] = ["ADMIN", "OPERATIONS", "MECHANIC"];
 
 const statusStyles: Record<UserRecord["status"], string> = {
-  Active: "text-[#047857] bg-[var(--color-status-success)]/15 border border-[var(--color-status-success)]/30 dark:text-[#a7f3d0]",
-  Inactive: "text-[#92400e] bg-[var(--color-status-warning)]/15 border border-[var(--color-status-warning)]/30 dark:text-[#fed7aa]",
-  Suspended: "text-[#c41c3b] bg-[var(--color-status-error)]/15 border border-[var(--color-status-error)]/30 dark:text-[#fca5ac]",
+  Active: "text-[#047857] bg-[var(--color-status-success)]/15 border border-[var(--color-status-success)]/30",
+  Inactive: "text-[#92400e] bg-[var(--color-status-warning)]/15 border border-[var(--color-status-warning)]/30",
+  Suspended: "text-[#c41c3b] bg-[var(--color-status-error)]/15 border border-[var(--color-status-error)]/30",
 };
 
 const roleStyles: Record<string, string> = {
-  ADMIN: "text-[#0369a1] bg-[var(--color-status-info)]/15 border border-[var(--color-status-info)]/30 dark:text-[#7dd3fc]",
-  OPERATIONS: "text-[#92400e] bg-[var(--color-status-warning)]/15 border border-[var(--color-status-warning)]/30 dark:text-[#fed7aa]",
-  MECHANIC: "text-[#047857] bg-[var(--color-status-success)]/15 border border-[var(--color-status-success)]/30 dark:text-[#a7f3d0]",
+  ADMIN: "text-[#0369a1] bg-[var(--color-status-info)]/15 border border-[var(--color-status-info)]/30",
+  OPERATIONS: "text-[#92400e] bg-[var(--color-status-warning)]/15 border border-[var(--color-status-warning)]/30",
+  MECHANIC: "text-[#047857] bg-[var(--color-status-success)]/15 border border-[var(--color-status-success)]/30",
 };
 
 function normalizeRole(role?: string | null) {
@@ -852,7 +852,7 @@ export default function UserManagement() {
                         <span
                           className={`${badgeClasses} ${
                             user.isLocked
-                              ? "border border-rose-500/30 bg-rose-500/15 text-rose-700 dark:text-rose-200"
+                              ? "border border-rose-500/30 bg-rose-500/15 text-rose-700"
                               : statusStyles[user.status] ??
                                 "border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]"
                           }`}
@@ -873,7 +873,7 @@ export default function UserManagement() {
                               type="button"
                               onClick={() => setConfirmUnlockUser(user)}
                               disabled={processingUserId === user.id}
-                              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-200"
+                              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               {processingUserId === user.id
                                 ? "Unlocking..."

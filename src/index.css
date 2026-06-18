@@ -23,7 +23,7 @@
   --color-status-special: #a855f7;
   --color-status-neutral: #64748b;
 
-  /* Light Mode Surface Palette */
+  /* Surface Palette */
   --color-surface-light-bg: #f1f5f9;
   --color-surface-light-card: #ffffff;
   --color-surface-light-border: #e2e8f0;
@@ -31,13 +31,13 @@
   --color-surface-light-input-border: #cbd5e1;
   --color-surface-light-divider: #e2e8f0;
 
-  /* Light Mode Text Hierarchy */
+  /* Text Hierarchy */
   --color-light-headline: #0f172a;
   --color-light-body: #334155;
   --color-light-label: #475569;
   --color-light-muted: #94a3b8;
 
-  /* Light Mode Defaults */
+  /* Theme Defaults */
   --color-page-bg: #f1f5f9;
   --color-card-bg: #ffffff;
   --color-text-primary: #0d0d0d;
@@ -48,46 +48,6 @@
   --color-divider: #e2e8f0;
   --color-card-bg-hover: #f1f5f9;
   --color-input-bg-hover: #f1f5f9;
-}
-
-/* Explicit Dark Mode Class Support */
-.dark {
-  /* Dark Mode Surface Palette */
-  --color-surface-dark-bg: #0f172a;
-  --color-surface-dark-card: #1e293b;
-  --color-surface-dark-border: #475569;
-  --color-surface-dark-input-bg: #1e293b;
-  --color-surface-dark-input-border: #64748b;
-  --color-surface-dark-divider: #475569;
-
-  /* Dark Mode Text Hierarchy */
-  --color-dark-headline: #ffffff;
-  --color-dark-body: #cbd5e1;
-  --color-dark-label: #94a3b8;
-  --color-dark-muted: #64748b;
-
-  /* Dark Mode Defaults */
-  --color-page-bg: #0f172a;
-  --color-card-bg: #1e293b;
-  --color-text-primary: #f1f5f9;
-  --color-text-secondary: #cbd5e1;
-  --color-border: #475569;
-  --color-input-bg: #1e293b;
-  --color-input-border: #64748b;
-  --color-divider: #475569;
-  --color-card-bg-hover: #334155;
-  --color-input-bg-hover: #334155;
-}
-
-html.light {
-  --color-page-bg: #f8fafc;
-  --color-card-bg: #ffffff;
-  --color-text-primary: #0d0d0d;
-  --color-text-secondary: #64748b;
-  --color-border: #e2e8f0;
-  --color-input-bg: #ffffff;
-  --color-input-border: #cbd5e1;
-  --color-divider: #e2e8f0;
 }
 
 /* Base Styles */
@@ -157,7 +117,7 @@ html.light {
   }
 
   thead {
-    @apply bg-[#1a1f6e] text-white dark:bg-slate-700;
+    @apply bg-[#1a1f6e] text-white;
   }
 
   tbody tr {
@@ -165,7 +125,7 @@ html.light {
   }
 
   tbody tr:hover {
-    @apply bg-slate-50/50 dark:bg-slate-600/50;
+    @apply bg-slate-50/50;
   }
 
   /* Dividers and Borders */
@@ -194,23 +154,23 @@ html.light {
 @layer components {
   /* Button Variants */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap bg-[#1a1f6e] hover:bg-[#151b4f] dark:bg-[#22305a] dark:hover:bg-[#18213f] text-white rounded-xl py-3 px-4 text-sm font-semibold transition-colors focus-ring;
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap bg-[#1a1f6e] hover:bg-[#151b4f] text-white rounded-xl py-3 px-4 text-sm font-semibold transition-colors focus-ring;
   }
 
   .btn-secondary {
-    @apply bg-slate-600 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-xl py-3 px-4 text-sm font-semibold transition-colors focus-ring;
+    @apply bg-slate-600 hover:bg-slate-700 text-white rounded-xl py-3 px-4 text-sm font-semibold transition-colors focus-ring;
   }
 
   .btn-danger {
-    @apply bg-[#c0392b] hover:bg-red-700 dark:bg-rose-600 dark:hover:bg-rose-500 text-white rounded-xl py-3 px-4 text-sm font-semibold transition-colors focus-ring;
+    @apply bg-[#c0392b] hover:bg-red-700 text-white rounded-xl py-3 px-4 text-sm font-semibold transition-colors focus-ring;
   }
 
   .btn-warning {
-    @apply bg-[#e8b800] hover:bg-[#d4a000] dark:bg-amber-500 dark:hover:bg-amber-400 text-[#0d0d0d] rounded-xl py-3 px-4 text-sm font-semibold transition-colors focus-ring;
+    @apply bg-[#e8b800] hover:bg-[#d4a000] text-[#0d0d0d] rounded-xl py-3 px-4 text-sm font-semibold transition-colors focus-ring;
   }
 
   .btn-icon {
-    @apply inline-flex items-center justify-center rounded-full p-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus-ring;
+    @apply inline-flex items-center justify-center rounded-full p-2 hover:bg-slate-100 transition-colors focus-ring;
   }
 
   .active-filter {
@@ -219,48 +179,42 @@ html.light {
     color: var(--color-brand-primary);
   }
 
-  .dark .active-filter {
-    border-color: rgb(148 163 184 / 35%);
-    background-color: rgb(30 41 59 / 75%);
-    color: #e2e8f0;
-  }
-
   .table-delete-button {
-    @apply rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-500 transition-colors hover:bg-rose-500/20 dark:border-rose-400/30 dark:bg-rose-500/15 dark:text-rose-200;
+    @apply rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-500 transition-colors hover:bg-rose-500/20;
   }
 
   /* Alert/Status Badges */
   .badge-danger {
-    @apply inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#c0392b]/10 text-[#c0392b] dark:bg-rose-500/15 dark:text-rose-200 text-sm font-medium;
+    @apply inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#c0392b]/10 text-[#c0392b] text-sm font-medium;
   }
 
   .badge-warning {
-    @apply inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#e8b800]/10 text-[#e8b800] dark:bg-amber-500/15 dark:text-amber-100 text-sm font-medium;
+    @apply inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#e8b800]/10 text-[#e8b800] text-sm font-medium;
   }
 
   .badge-success {
-    @apply inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300 text-sm font-medium;
+    @apply inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 text-sm font-medium;
   }
 
   .badge-primary {
-    @apply inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#1a1f6e]/10 text-[#1a1f6e] dark:bg-[#2a317d]/20 dark:text-sky-100 text-sm font-medium;
+    @apply inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#1a1f6e]/10 text-[#1a1f6e] text-sm font-medium;
   }
 
   /* Alert Cards */
   .alert-danger {
-    @apply bg-[#c0392b]/10 border border-[#c0392b] text-[#c0392b] dark:bg-rose-500/15 dark:border-rose-400/40 dark:text-rose-100 rounded-xl p-4;
+    @apply bg-[#c0392b]/10 border border-[#c0392b] text-[#c0392b] rounded-xl p-4;
   }
 
   .alert-warning {
-    @apply bg-[#e8b800]/10 border border-[#e8b800] text-[#0d0d0d] dark:bg-amber-500/15 dark:border-amber-400/40 dark:text-amber-100 rounded-xl p-4;
+    @apply bg-[#e8b800]/10 border border-[#e8b800] text-[#0d0d0d] rounded-xl p-4;
   }
 
   .alert-success {
-    @apply bg-emerald-500/10 border border-emerald-500 text-emerald-700 dark:bg-emerald-500/15 dark:border-emerald-400/40 dark:text-emerald-200 rounded-xl p-4;
+    @apply bg-emerald-500/10 border border-emerald-500 text-emerald-700 rounded-xl p-4;
   }
 
   .alert-info {
-    @apply bg-[#1a1f6e]/10 border border-[#1a1f6e] text-[#1a1f6e] dark:bg-[#22305a]/35 dark:border-sky-400/40 dark:text-sky-100 rounded-xl p-4;
+    @apply bg-[#1a1f6e]/10 border border-[#1a1f6e] text-[#1a1f6e] rounded-xl p-4;
   }
 
   /* Form Group */
@@ -311,7 +265,7 @@ html.light {
   }
 
   .tooltip::after {
-    @apply absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 rounded text-xs text-white bg-slate-900 dark:bg-white dark:text-slate-900 whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity;
+    @apply absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 rounded text-xs text-white bg-slate-900 whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity;
     content: attr(data-tooltip);
   }
 

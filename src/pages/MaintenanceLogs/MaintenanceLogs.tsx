@@ -185,14 +185,14 @@ const LogStatusBadge = ({ status }: StatusBadgeProps) => {
   const getStatusDetails = () => {
     switch (status) {
       case 'In Progress':
-        return 'text-sky-700 border-[var(--color-brand-primary)]/30 bg-[var(--color-brand-primary)]/10 dark:text-sky-200';
+        return 'text-sky-700 border-[var(--color-brand-primary)]/30 bg-[var(--color-brand-primary)]/10';
       case 'Completed':
-        return 'text-emerald-700 border-emerald-500/30 bg-emerald-500/10 dark:text-emerald-200';
+        return 'text-emerald-700 border-emerald-500/30 bg-emerald-500/10';
       case 'On Hold':
         return 'text-[var(--color-text-secondary)] border-[var(--color-border)]/50 bg-[var(--color-card-bg-hover)]';
       case 'Pending':
       default:
-        return 'text-amber-800 border-amber-500/30 bg-amber-500/10 dark:text-amber-200';
+        return 'text-amber-800 border-amber-500/30 bg-amber-500/10';
     }
   };
 
@@ -466,7 +466,7 @@ export default function MaintenanceLogs() {
             <div className={alertContentClasses}>
               <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm font-medium text-rose-700 dark:text-rose-200">
+                <p className="text-sm font-medium text-rose-700">
                   Delete {selectedIds.length} selected record{selectedIds.length > 1 ? 's' : ''}? This cannot be undone.
                 </p>
               </div>

@@ -189,8 +189,8 @@ export default function ExpenseTrackingPage() {
       {flaggedVehicles.length > 0 && (
         <div className="mx-3 mb-4 rounded-3xl border border-amber-400/20 bg-[var(--color-input-bg)]/80 p-4 shadow-[0_0_24px_rgba(26,31,110,0.12)]">
           <div className="flex flex-col gap-3 rounded-2xl border border-amber-300/15 bg-[var(--color-card-bg)] p-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-3 text-amber-800 font-semibold text-sm dark:text-amber-200">
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-amber-400/10 text-amber-700 dark:text-amber-200">⚠️</span>
+            <div className="flex items-center gap-3 text-amber-800 font-semibold text-sm">
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-amber-400/10 text-amber-700">⚠️</span>
               <span>Flagged Vehicles — Require Immediate Attention</span>
             </div>
             <p className="text-xs text-[var(--color-text-secondary)] md:ml-auto">Review and address high-priority fleet alerts immediately.</p>
@@ -203,7 +203,7 @@ export default function ExpenseTrackingPage() {
             <div className="text-base font-bold text-[var(--color-text-primary)]">{v.name}</div>
                     <div className="mt-1 text-xs text-[var(--color-text-secondary)]">{v.plate} • {v.model}</div>
                   </div>
-                  <div className="text-sm font-bold text-[#c41c3b] dark:text-[#fca5ac]">{v.netProfit}</div>
+                  <div className="text-sm font-bold text-[#c41c3b]">{v.netProfit}</div>
                 </div>
                 <div className="mt-4 text-sm leading-6 text-[var(--color-text-secondary)]">{v.flagReason}</div>
               </div>
@@ -275,7 +275,7 @@ export default function ExpenseTrackingPage() {
                     <td className="px-4 py-2">#{i + 1}</td>
                     <td className="px-4 py-2 font-medium text-[var(--color-text-primary)]">{r.vehicleName}</td>
                     <td className="px-4 py-2">{r.plate}</td>
-                    <td className="px-4 py-2 font-semibold text-[#0369a1] dark:text-[#7dd3fc]">{r.income}</td>
+                    <td className="px-4 py-2 font-semibold text-[#0369a1]">{r.income}</td>
                     <td className="px-4 py-2">{r.individual}</td>
                     <td className="px-4 py-2">{r.corporate}</td>
                     <td className="px-4 py-2">{r.fuel}</td>
@@ -309,7 +309,7 @@ export default function ExpenseTrackingPage() {
                 <tr key={t.id} className="hover:bg-[var(--color-input-bg-hover)] transition-colors">
                   <td className="px-4 py-4 text-[var(--color-text-primary)]">{t.date}</td>
                   <td className="px-4 py-4">
-                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${t.type === 'Income' ? 'bg-[var(--color-status-success)]/10 text-[#047857] dark:text-[#a7f3d0]' : 'bg-[var(--color-status-error)]/10 text-[#c41c3b] dark:text-[#fca5ac]'}`}>
+                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${t.type === 'Income' ? 'bg-[var(--color-status-success)]/10 text-[#047857]' : 'bg-[var(--color-status-error)]/10 text-[#c41c3b]'}`}>
                       {t.type}
                     </span>
                   </td>
@@ -319,7 +319,7 @@ export default function ExpenseTrackingPage() {
                   </td>
                   <td className="px-4 py-4 text-[var(--color-text-primary)]">{t.description}</td>
                   <td className="px-4 py-4 text-[var(--color-text-primary)]">{t.client}</td>
-                  <td className={`px-4 py-4 text-right font-semibold ${t.type === 'Income' ? 'text-[#047857] dark:text-[#a7f3d0]' : 'text-[#c41c3b] dark:text-[#fca5ac]'}`}>
+                  <td className={`px-4 py-4 text-right font-semibold ${t.type === 'Income' ? 'text-[#047857]' : 'text-[#c41c3b]'}`}>
                     {t.amount}
                   </td>
                 </tr>

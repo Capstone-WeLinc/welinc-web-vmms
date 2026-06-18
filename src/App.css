@@ -183,14 +183,14 @@
   }
 }
 
-.select-dark,
-.select-dark option {
-  background-color: #0f172a;
-  color: #e2e8f0;
+.select-control,
+.select-control option {
+  background-color: var(--color-input-bg);
+  color: var(--color-text-primary);
 }
 
-.select-dark option:hover,
-.select-dark option:checked {
-  background-color: #1e293b;
-  color: #e2e8f0;
+.select-control option:hover,
+.select-control option:checked {
+  background-color: var(--color-card-bg-hover);
+  color: var(--color-text-primary);
 }

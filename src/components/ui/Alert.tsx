@@ -25,8 +25,8 @@ const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
     ref
   ) => {
     const variantStyles = {
-      info: 'bg-[var(--color-brand-primary)]/10 border-[var(--color-brand-primary)] text-[var(--color-brand-primary)] dark:text-blue-400',
-      success: 'bg-[var(--color-brand-success)]/10 border-[var(--color-brand-success)] text-[var(--color-brand-success)] dark:text-emerald-400',
+      info: 'bg-[var(--color-brand-primary)]/10 border-[var(--color-brand-primary)] text-[var(--color-brand-primary)]',
+      success: 'bg-[var(--color-brand-success)]/10 border-[var(--color-brand-success)] text-[var(--color-brand-success)]',
       warning: 'bg-[var(--color-brand-warning)]/10 border-[var(--color-brand-warning)] text-[var(--color-brand-warning)]',
       danger: 'bg-[var(--color-brand-danger)]/10 border-[var(--color-brand-danger)] text-[var(--color-brand-danger)]',
     };

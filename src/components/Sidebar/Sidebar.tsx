@@ -17,15 +17,11 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   User,
-  Moon,
-  Sun,
 } from "lucide-react";
 
 interface SidebarProps {
   onCollapse?: (collapsed: boolean) => void;
   currentUser?: UserRecord | null;
-  darkMode?: boolean;
-  onToggleDarkMode?: () => void;
 }
 
 const navItems = [
@@ -71,12 +67,12 @@ const baseButtonClasses = 'w-full flex items-center gap-3 rounded-xl px-3 py-2 t
 const getNavLinkClass = (isActive: boolean, collapsed: boolean) => {
   const base = `${collapsed ? 'p-2 justify-center' : 'px-3 py-2 justify-start'} flex items-center gap-3 rounded-xl text-sm font-medium transition-colors`;
   if (isActive) {
-    return `${base} bg-[var(--color-brand-primary)] text-white border border-[var(--color-brand-primary)]/30 hover:bg-[var(--color-brand-dark)] hover:text-white dark:hover:bg-[var(--color-brand-dark)] dark:hover:text-white`;
+    return `${base} bg-[var(--color-brand-primary)] text-white border border-[var(--color-brand-primary)]/30 hover:bg-[var(--color-brand-dark)] hover:text-white`;
   }
   return `${base} text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]`;
 };
 
-export default function Sidebar({ onCollapse, currentUser, darkMode = false, onToggleDarkMode }: SidebarProps) {
+export default function Sidebar({ onCollapse, currentUser }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const collapsedWidth = collapsed ? "80px" : "256px";
   const isMechanic = isMechanicRole(currentUser);
@@ -174,16 +170,6 @@ export default function Sidebar({ onCollapse, currentUser, darkMode = false, onT
 
       <div className={buttonGroupClasses}>
         <div className={sectionDividerClasses} />
-        
-        <button
-          className={`${baseButtonClasses} ${collapsed ? 'justify-center' : 'justify-start'}`}
-          onClick={onToggleDarkMode}
-          title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
-          type="button"
-        >
-          {darkMode ? <Sun size={20} strokeWidth={1.7} /> : <Moon size={20} strokeWidth={1.7} />}
-          {!collapsed && <span>{darkMode ? "Light Mode" : "Dark Mode"}</span>}
-        </button>
 
         {hasMultipleSystems ? (
           <button

@@ -47,13 +47,6 @@ function App() {
     }
     return Boolean(window.localStorage.getItem("accessToken"));
   });
-  const [darkMode, setDarkMode] = useState(() => {
-    const saved = window.localStorage.getItem("darkMode");
-    if (saved !== null) {
-      return saved === "true";
-    }
-    return false; // Default to light mode
-  });
   const location = useLocation();
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState<UserRecord | null>(null);
@@ -64,22 +57,6 @@ function App() {
     new URLSearchParams(location.search).has("token");
   const isMechanic = isMechanicRole(currentUser);
   const isOperations = isOperationsRole(currentUser);
-
-  // Apply dark mode class to document
-  useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add("dark");
-      document.documentElement.classList.remove("light");
-    } else {
-      document.documentElement.classList.add("light");
-      document.documentElement.classList.remove("dark");
-    }
-    window.localStorage.setItem("darkMode", String(darkMode));
-  }, [darkMode]);
-
-  const toggleDarkMode = useCallback(() => {
-    setDarkMode((prev) => !prev);
-  }, []);
 
   const handleLogin = () => {
     setAuthenticated(true);
@@ -208,8 +185,6 @@ function App() {
         <Sidebar
           onCollapse={setSidebarCollapsed}
           currentUser={currentUser}
-          darkMode={darkMode}
-          onToggleDarkMode={toggleDarkMode}
         />
       )}
       <main

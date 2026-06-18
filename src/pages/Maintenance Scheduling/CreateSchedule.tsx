@@ -512,7 +512,7 @@ export default function CreateScheduleModal({
           {isOdometerOnlyUpdate ? (
             <section className="card-base">
               <div className="mb-4 flex items-center gap-3">
-                <div className="rounded-2xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 p-2 text-[#0369a1] dark:text-[#7dd3fc]">
+                <div className="rounded-2xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 p-2 text-[#0369a1]">
                   <Wrench className="h-4 w-4" />
                 </div>
                 <div>
@@ -577,7 +577,7 @@ export default function CreateScheduleModal({
           {/* Vehicle Information */}
           <section className="card-base">
             <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-2xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 p-2 text-[#0369a1] dark:text-[#7dd3fc]">
+              <div className="rounded-2xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 p-2 text-[#0369a1]">
                 <Wrench className="h-4 w-4" />
               </div>
               <div>
@@ -593,7 +593,7 @@ export default function CreateScheduleModal({
                   <select
                     value={vehicleId}
                     onChange={(e) => setVehicleId(e.target.value)}
-                    className="select-dark w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
+                    className="select-control w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
                   >
                     {availableVehicles.length > 0 ? (
                       <>
@@ -657,7 +657,7 @@ export default function CreateScheduleModal({
                       setIsOtherGarage(false);
                       setOtherGarage("");
                     }}
-                    className="select-dark w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
+                    className="select-control w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
                   >
                     <option value="" disabled>
                       Select garage
@@ -705,7 +705,7 @@ export default function CreateScheduleModal({
           {/* Schedule Trigger */}
           <section className="card-base">
             <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-2xl border border-violet-400/30 bg-violet-400/10 p-2 text-violet-700 dark:text-violet-200">
+              <div className="rounded-2xl border border-violet-400/30 bg-violet-400/10 p-2 text-violet-700">
                 <Clock3 className="h-4 w-4" />
               </div>
               <div>
@@ -724,7 +724,7 @@ export default function CreateScheduleModal({
                   key={option.value}
                   className={`flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition ${
                     triggerType === option.value
-                      ? "border-[var(--color-brand-primary)]/30 bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] shadow-[0_10px_30px_rgba(56,189,248,0.12)] dark:text-white"
+                      ? "border-[var(--color-brand-primary)]/30 bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] shadow-[0_10px_30px_rgba(56,189,248,0.12)]"
                       : "border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:bg-[var(--color-card-bg-hover)]"
                   }`}
                 >
@@ -822,7 +822,7 @@ export default function CreateScheduleModal({
                         e.target.value as "DAILY" | "WEEKLY" | "MONTHLY" | "",
                       )
                     }
-                    className={`select-dark w-full appearance-none rounded-md border px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 ${
+                    className={`select-control w-full appearance-none rounded-md border px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 ${
                       triggerType === "ODOMETER"
                         ? "border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] cursor-not-allowed opacity-80"
                         : "border-[var(--color-border)] bg-[var(--color-input-bg)]"
@@ -921,7 +921,7 @@ export default function CreateScheduleModal({
           {/* Maintenance Details */}
           <section className="card-base">
             <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-2 text-emerald-700 dark:text-emerald-200">
+              <div className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-2 text-emerald-700">
                 <ShieldCheck className="h-4 w-4" />
               </div>
               <div>
@@ -940,7 +940,7 @@ export default function CreateScheduleModal({
                     onChange={(e) =>
                       setWorkOrderTemplate(e.target.value as WorkOrderTemplate)
                     }
-                    className="select-dark w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
+                    className="select-control w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
                   >
                     <option value="" disabled>
                       {isTemplatesLoading
@@ -1066,7 +1066,7 @@ export default function CreateScheduleModal({
                   value={assignedMechanic}
                   disabled={mechanics.length === 0 && !assignedMechanic}
                   onChange={(e) => setAssignedMechanic(e.target.value)}
-                  className="select-dark w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
+                  className="select-control w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
                 >
                   {mechanics.length > 0 || assignedMechanic ? (
                     <>
@@ -1102,7 +1102,7 @@ export default function CreateScheduleModal({
           {/* Work Order Checklist Preview */}
           <section className="card-base">
             <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-2xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 p-2 text-[#0369a1] dark:text-[#7dd3fc]">
+              <div className="rounded-2xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 p-2 text-[#0369a1]">
                 <ClipboardCheck className="h-4 w-4" />
               </div>
               <div>
