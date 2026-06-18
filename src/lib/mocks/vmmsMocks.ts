@@ -87,7 +87,7 @@ export type UserStatus = "Active" | "Inactive" | "Suspended";
 export type UserRecord = {
   id: string;
   name: string;
-  username: string;
+  email: string;
   role: "ADMIN" | "MECHANIC" | "OPERATIONS";
   status: UserStatus;
   lastActive: string;
@@ -98,8 +98,8 @@ export type UserRecord = {
 export type UserRole = UserRecord["role"];
 export type UserCreateInput = {
   name: string;
-  username: string;
-  password: string;
+  email: string;
+  password?: string;
   role?: UserRole;
 };
 
@@ -575,7 +575,7 @@ export const mockUsers: UserRecord[] = [
   {
     id: "u1",
     name: "Alice Mendoza",
-    username: "alice.mendoza",
+    email: "alice.mendoza@welinc.com",
     role: "ADMIN",
     status: "Active",
     lastActive: "2026-05-28T10:15:00.000Z",
@@ -583,7 +583,7 @@ export const mockUsers: UserRecord[] = [
   {
     id: "u2",
     name: "Brian Santos",
-    username: "brian.santos",
+    email: "brian.santos@welinc.com",
     role: "OPERATIONS",
     status: "Active",
     lastActive: "2026-05-27T16:40:00.000Z",
@@ -591,7 +591,7 @@ export const mockUsers: UserRecord[] = [
   {
     id: "u3",
     name: "Cara Gomez",
-    username: "cara.gomez",
+    email: "cara.gomez@welinc.com",
     role: "MECHANIC",
     status: "Inactive",
     lastActive: "2026-05-20T08:10:00.000Z",
@@ -599,7 +599,7 @@ export const mockUsers: UserRecord[] = [
   {
     id: "u4",
     name: "Daniel Park",
-    username: "daniel.park",
+    email: "daniel.park@welinc.com",
     role: "OPERATIONS",
     status: "Suspended",
     lastActive: "2026-05-18T15:25:00.000Z",
@@ -607,7 +607,7 @@ export const mockUsers: UserRecord[] = [
   {
     id: "u5",
     name: "Erica Lopez",
-    username: "erica.lopez",
+    email: "erica.lopez@welinc.com",
     role: "MECHANIC",
     status: "Active",
     lastActive: "2026-05-29T09:05:00.000Z",

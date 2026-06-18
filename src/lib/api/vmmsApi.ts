@@ -109,14 +109,13 @@ function loadMockVehicleStatuses() {
 }
 
 export async function login(
-  username: string,
+  email: string,
   password: string,
-  system = "VMMS",
 ): Promise<{ accessToken: string }> {
   if (!useBackend) {
-    const matchingUser = mockUsers.find((user) => user.username === username);
+    const matchingUser = mockUsers.find((user) => user.email === email);
     if (!matchingUser) {
-      throw new Error("Invalid username or password.");
+      throw new Error("Invalid email or password.");
     }
 
     const now = new Date().toISOString();
@@ -128,7 +127,7 @@ export async function login(
 
   return fetchJSON<{ accessToken: string }>("/auth/login", {
     method: "POST",
-    body: JSON.stringify({ username, password, system }),
+    body: JSON.stringify({ email, password }),
   });
 }
 
@@ -294,7 +293,7 @@ export async function createUser(user: UserCreateInput) {
     const createdUser: UserRecord = {
       id: `u${Date.now()}`,
       name: user.name,
-      username: user.username,
+      email: user.email,
       role: user.role ?? "OPERATIONS",
       status: "Active",
       lastActive: new Date().toISOString(),
@@ -307,7 +306,7 @@ export async function createUser(user: UserCreateInput) {
     method: "POST",
     body: JSON.stringify({
       name: user.name,
-      username: user.username,
+      email: user.email,
       password: user.password,
       roleAssignments: [
         {
@@ -344,7 +343,7 @@ export async function updateUserRole(userId: string, role: UserRole) {
 
 export async function updateUser(
   userId: string,
-  data: { name?: string; username?: string; password?: string },
+  data: { name?: string; email?: string; password?: string },
 ) {
   if (!useBackend) {
     const index = mockUsers.findIndex((u) => u.id === userId);

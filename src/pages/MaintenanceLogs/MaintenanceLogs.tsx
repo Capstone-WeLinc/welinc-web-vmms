@@ -175,7 +175,7 @@ export default function MaintenanceLogs() {
   const isAssignedToCurrentMechanic = (log: MaintenanceLog) => {
     if (!isMechanic || !currentUser) return true;
 
-    const currentNames = [currentUser.name, currentUser.username]
+    const currentNames = [currentUser.name, currentUser.email]
       .map(normalizeText)
       .filter(Boolean);
     const mechanic = normalizeText(log.mechanic);

@@ -92,47 +92,15 @@ function hasSharedAdminAccess(user: unknown) {
   );
 }
 
-function normalizePortalUser(user: unknown): PortalUserRecord {
-  const source =
-    user && typeof user === "object"
-      ? (user as Partial<PortalUserRecord> & {
-          role?: string;
-          status?: string;
-        })
-      : {};
+function validatePassword(password: string) {
+  const trimmedPassword = password.trim();
 
-  const roles = Array.isArray(source.roles)
-    ? source.roles.map((role) => ({
-        system: normalizeSystem(role.system),
-        role: normalizeRole(role.role),
-      }))
-    : source.role
-      ? [{ system: "VMMS", role: normalizeRole(source.role) }]
-      : [];
+  if (!trimmedPassword) {
+    return "";
+  }
 
-  return {
-    id: String(source.id ?? ""),
-    name: String(source.name ?? ""),
-    username: String(source.username ?? ""),
-    isActive:
-      typeof source.isActive === "boolean"
-        ? source.isActive
-        : source.status !== "Inactive",
-    failedLoginAttempts: Number(source.failedLoginAttempts ?? 0),
-    lockedAt: source.lockedAt ?? null,
-    roles,
-  };
-}
-
-async function fetchUsers() {
-  const endpoint = useBackend ? "/auth/users" : "/users";
-  const users = await fetchJSON<unknown[]>(endpoint);
-  return users.map((user) => normalizePortalUser(user));
-}
-
-function validatePasswordStrength(password: string): string | null {
-  if (password.length < 12) {
-    return "Password must be at least 12 characters long.";
+  if (trimmedPassword.length < 8) {
+    return "Password must be at least 8 characters long.";
   }
   if (!/[A-Z]/.test(password)) {
     return "Password must include at least one uppercase letter.";
@@ -151,32 +119,79 @@ function validatePasswordStrength(password: string): string | null {
 
 export default function UserManagement() {
   const navigate = useNavigate();
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [users, setUsers] = useState<PortalUserRecord[]>([]);
-  const [usersSearch, setUsersSearch] = useState("");
-  const [usersLoading, setUsersLoading] = useState(false);
-  const [showUserModal, setShowUserModal] = useState(false);
-  const [modalMode, setModalMode] = useState<ModalMode>("create");
-  const [selectedUserId, setSelectedUserId] = useState("");
-  const [name, setName] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [vrmsRole, setVrmsRole] = useState("");
-  const [vmmsRole, setVmmsRole] = useState("");
-  const [bmsRole, setBmsRole] = useState("");
-  const [sharedRole, setSharedRole] = useState("");
-  const [formError, setFormError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
-  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
-  const [pendingUserAction, setPendingUserAction] =
-    useState<PendingUserAction>(null);
+  const [currentUser, setCurrentUser] = useState<UserRecord | null>(null);
+  const [users, setUsers] = useState<UserRecord[]>([]);
+  const [maintenanceSchedules, setMaintenanceSchedules] = useState<
+    MaintenanceTask[]
+  >([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [roleFilter, setRoleFilter] = useState<string>("All");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [sortField, setSortField] = useState<"name" | "role">("name");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
+  const [processingUserId, setProcessingUserId] = useState<string | null>(null);
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState<UserRecord | null>(null);
+  const [confirmUnlockUser, setConfirmUnlockUser] =
+    useState<UserRecord | null>(null);
+  const [blockedDeleteUser, setBlockedDeleteUser] =
+    useState<UserRecord | null>(null);
+  const [confirmCreateUser, setConfirmCreateUser] = useState(false);
+  const [duplicateUser, setDuplicateUser] = useState<UserRecord | null>(null);
 
-  const filteredUsers = useMemo(() => {
-    const normalizedSearch = usersSearch.toLowerCase();
-    return users.filter(
+  useBodyScrollLock(
+    Boolean(duplicateUser || confirmDeleteUser || blockedDeleteUser),
+  );
+
+  const [passwordError, setPasswordError] = useState("");
+  const [newUserForm, setNewUserForm] = useState<{
+    name: string;
+    email: string;
+    password: string;
+    role: UserRole | "";
+  }>({
+    name: "",
+    email: "",
+    password: "",
+    role: "",
+  });
+  const isCreateFormComplete =
+    newUserForm.name.trim().length > 0 &&
+    newUserForm.email.trim().length > 0 &&
+    newUserForm.password.trim().length > 0 &&
+    newUserForm.role !== "";
+  const nameValidationMessage = validateUserField(
+    newUserForm.name,
+    "Name",
+  );
+  const emailValidationMessage = validateUserField(
+    newUserForm.email,
+    "Email",
+  );
+  const isCreatePasswordValid =
+    validatePassword(newUserForm.password) === "";
+  const isCreateFormValid =
+    isCreateFormComplete &&
+    !nameValidationMessage &&
+    !emailValidationMessage &&
+    isCreatePasswordValid;
+  const userHasMaintenanceSchedule = (user: UserRecord) =>
+    maintenanceSchedules.some(
+      (schedule) =>
+        schedule.assignedDriver.trim().toLowerCase() ===
+        user.name.trim().toLowerCase(),
+    );
+  const findDuplicateUser = () => {
+    const normalizedName = normalizeUserIdentity(newUserForm.name);
+    const normalizedEmail = normalizeUserIdentity(newUserForm.email);
+
+    return users.find(
       (user) =>
-        user.name.toLowerCase().includes(normalizedSearch) ||
-        user.username.toLowerCase().includes(normalizedSearch),
+        normalizeUserIdentity(user.name) === normalizedName ||
+        normalizeUserIdentity(user.email) === normalizedEmail,
     );
   }, [users, usersSearch]);
 
@@ -219,40 +234,62 @@ export default function UserManagement() {
     };
   }, [navigate]);
 
-  useEffect(() => {
-    if (!isAdmin) return;
-    void loadUsers();
-  }, [isAdmin, loadUsers]);
+  const filteredUsers = useMemo(() => {
+    const normalizedSearch = searchQuery.toLowerCase();
 
-  useEffect(() => {
-    const closeActionMenu = () => setOpenActionMenuId(null);
-    document.addEventListener("click", closeActionMenu);
-    return () => document.removeEventListener("click", closeActionMenu);
-  }, []);
+    return users
+      .filter((user) => {
+        const matchesSearch = [user.name, user.email, normalizeRole(user.role)]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedSearch);
 
-  const buildRoleAssignments = () => {
-    const roleAssignments: SystemRole[] = [];
-    if (vrmsRole) roleAssignments.push({ system: "VRMS", role: vrmsRole });
-    if (vmmsRole) roleAssignments.push({ system: "VMMS", role: vmmsRole });
-    if (bmsRole) roleAssignments.push({ system: "BMS", role: bmsRole });
-    if (sharedRole) {
-      roleAssignments.push({ system: "SHARED", role: sharedRole });
-    }
-    return roleAssignments;
-  };
+        const matchesStatus =
+          statusFilter === "All" ? true : user.status === statusFilter;
 
-  const handleCreateOrUpdateUser = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setFormError("");
+        const matchesRole =
+          roleFilter === "All"
+            ? true
+            : normalizeRole(user.role) === normalizeRole(roleFilter);
 
-    if (!name.trim() || !username.trim()) {
-      setFormError("Name and Username are required.");
-      return;
-    }
+        return matchesSearch && matchesStatus && matchesRole;
+      })
+      .sort((a, b) => {
+        const left =
+          sortField === "name" ? a.name.toLowerCase() : a.role.toLowerCase();
+        const right =
+          sortField === "name" ? b.name.toLowerCase() : b.role.toLowerCase();
 
-    const roleAssignments = buildRoleAssignments();
-    if (roleAssignments.length === 0) {
-      setFormError("At least one role assignment is required.");
+        if (left < right) return sortDirection === "asc" ? -1 : 1;
+        if (left > right) return sortDirection === "asc" ? 1 : -1;
+        return 0;
+      });
+  }, [users, searchQuery, statusFilter, roleFilter, sortField, sortDirection]);
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / usersPerPage));
+  const activePage = Math.min(currentPage, totalPages);
+  const paginatedUsers = filteredUsers.slice(
+    (activePage - 1) * usersPerPage,
+    activePage * usersPerPage,
+  );
+
+  const stats = useMemo(() => {
+    const totalUsers = users.length;
+    const activeUsers = users.filter((user) => user.status === "Active").length;
+    const adminUsers = users.filter(
+      (user) => normalizeRole(user.role) === "ADMIN",
+    ).length;
+
+    return [
+      { label: "Total Users", value: totalUsers, icon: ShieldCheck },
+      { label: "Active Users", value: activeUsers, icon: UserCheck },
+      { label: "Admins", value: adminUsers, icon: Shield },
+    ];
+  }, [users]);
+
+  const handleDeleteUser = async (user: UserRecord) => {
+    if (!currentUser) return;
+    if (user.id === currentUser.id) {
+      alert("You cannot delete your own account.");
       return;
     }
 
@@ -323,50 +360,73 @@ export default function UserManagement() {
       return;
     }
 
-    try {
-      await fetchJSON(`/auth/users/${encodeURIComponent(selectedUserId)}/password`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
-      });
-      showToast(`Password reset successfully for ${username}!`);
-      setShowUserModal(false);
-      await loadUsers();
-    } catch (error) {
-      setFormError(getErrorMessage(error, "Failed to save user."));
+    if (!newUserForm.role) {
+      alert("Please select a role for the new user.");
+      setProcessingUserId(null);
+      return;
     }
-  };
 
-  const toggleUserStatus = async (userId: string, currentStatus: boolean) => {
-    try {
-      await fetchJSON(`/auth/users/${encodeURIComponent(userId)}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: !currentStatus }),
-      });
-      showToast("User status updated!");
-      await loadUsers();
-    } catch (error) {
-      console.error("Failed to toggle user status:", error);
+    const passwordValidationMessage = validatePassword(newUserForm.password);
+    if (passwordValidationMessage) {
+      setPasswordError(passwordValidationMessage);
+      setProcessingUserId(null);
+      return;
     }
-  };
 
-  const handleUnlockUser = async (userId: string) => {
-    try {
-      await fetchJSON(`/auth/users/${encodeURIComponent(userId)}/unlock`, {
-        method: "PATCH",
-      });
-      showToast("User account unlocked!");
-      await loadUsers();
-    } catch (error) {
-      console.error("Failed to unlock user:", error);
-    }
-  };
+    setPasswordError("");
+    const selectedRole = newUserForm.role;
 
-  const handleDeleteUser = async (userId: string) => {
     try {
-      await fetchJSON(`/auth/users/${encodeURIComponent(userId)}`, {
-        method: "DELETE",
+      const userInput: UserCreateInput = {
+        name: newUserForm.name.trim(),
+        email: newUserForm.email.trim(),
+        role: newUserForm.role || undefined,
+        ...(newUserForm.password.trim() ? { password: newUserForm.password.trim() } : {}),
+      };
+
+      if (userToReplace) {
+        if (userToReplace.id === currentUser.id) {
+          alert("You cannot replace your own account.");
+          return;
+        }
+
+        const updatedUser = await updateUser(userToReplace.id, {
+          name: userInput.name,
+          email: userInput.email,
+          ...(userInput.password ? { password: userInput.password } : {}),
+        });
+        const userWithRole =
+          userToReplace.role === selectedRole
+            ? updatedUser
+            : await updateUserRole(userToReplace.id, selectedRole);
+
+        if (userToReplace.name !== userInput.name) {
+          await updateScheduledMechanicName(
+            userToReplace.name,
+            userInput.name,
+          );
+        }
+
+        setUsers((currentUsers) =>
+          currentUsers.map((user) =>
+            user.id === userToReplace.id
+              ? { ...user, ...updatedUser, role: userWithRole.role }
+              : user,
+          ),
+        );
+      } else {
+        const createdUser = await createUser(userInput);
+        setUsers((currentUsers) => [createdUser, ...currentUsers]);
+      }
+
+      setIsCreateModalOpen(false);
+      setConfirmCreateUser(false);
+      setDuplicateUser(null);
+      setNewUserForm({
+        name: "",
+        email: "",
+        password: "",
+        role: "",
       });
       showToast("User deleted successfully!");
       await loadUsers();
@@ -385,425 +445,762 @@ export default function UserManagement() {
       return;
     }
 
-    if (type === "status") {
-      await toggleUserStatus(user.id, user.isActive);
+    // Handle self-edit: allow only display name change
+    if (isSelf) {
+      const nameChanged = editingUser.name !== newUserForm.name;
+      const emailChanged = editingUser.email !== newUserForm.email;
+      const roleChanged = editingUser.role !== newUserForm.role;
+
+      if (emailChanged || roleChanged) {
+        alert("You cannot change your email or role for your own account.");
+        return;
+      }
+
+      if (!nameChanged) {
+        setIsCreateModalOpen(false);
+        setEditingUser(null);
+        return;
+      }
+
+      setProcessingUserId(editingUser.id);
+      try {
+        const nextName = newUserForm.name.trim();
+        await updateUser(editingUser.id, { name: nextName });
+        await updateScheduledMechanicName(editingUser.name, nextName);
+        const fresh = await getUsers();
+        setUsers(fresh);
+        setIsCreateModalOpen(false);
+        setEditingUser(null);
+      } catch (error) {
+        console.error("Failed to edit own user", error);
+      } finally {
+        setProcessingUserId(null);
+      }
       return;
     }
 
-    await handleDeleteUser(user.id);
-  };
+    // Non-self edits
+    setProcessingUserId(editingUser.id);
+    try {
+      const nameChanged = editingUser.name !== newUserForm.name;
+      const emailChanged = editingUser.email !== newUserForm.email;
+      const roleChanged = editingUser.role !== newUserForm.role;
 
-  const openModal = (mode: ModalMode, user?: PortalUserRecord) => {
-    setModalMode(mode);
-    setFormError("");
+      // Persist name/email changes
+      if (nameChanged || emailChanged) {
+        const nextName = newUserForm.name.trim();
+        await updateUser(editingUser.id, {
+          name: newUserForm.name.trim(),
+          email: newUserForm.email.trim(),
+        });
+        if (nameChanged) {
+          await updateScheduledMechanicName(editingUser.name, nextName);
+        }
+      }
 
-    if (mode === "create") {
-      setSelectedUserId("");
-      setName("");
-      setUsername("");
-      setPassword("");
-      setVrmsRole(emptyRoleState.vrmsRole);
-      setVmmsRole(emptyRoleState.vmmsRole);
-      setBmsRole(emptyRoleState.bmsRole);
-      setSharedRole(emptyRoleState.sharedRole);
-    } else {
-      if (!user) return;
-      setSelectedUserId(user.id);
-      setName(user.name);
-      setUsername(user.username);
-      setPassword("");
+      // Persist role change
+      if (roleChanged) {
+        if (!newUserForm.role) {
+          alert("Please select a role for the user.");
+        } else {
+          const updated = await updateUserRole(
+            editingUser.id,
+            newUserForm.role,
+          );
+          setUsers((currentUsers) =>
+            currentUsers.map((u) =>
+              u.id === updated.id ? { ...u, role: updated.role } : u,
+            ),
+          );
+        }
+      }
 
-      const getRole = (system: (typeof roleSystems)[number]) =>
-        user.roles.find((role) => normalizeSystem(role.system) === system)
-          ?.role || "";
-
-      setVrmsRole(getRole("VRMS"));
-      setVmmsRole(getRole("VMMS"));
-      setBmsRole(getRole("BMS"));
-      setSharedRole(getRole("SHARED"));
+      // Refresh full user list to ensure backend canonical state
+      const fresh = await getUsers();
+      setUsers(fresh);
+      setIsCreateModalOpen(false);
+      setEditingUser(null);
+    } catch (error) {
+      console.error("Failed to edit user", error);
+    } finally {
+      setProcessingUserId(null);
     }
-
-    setShowUserModal(true);
   };
+
+  const handleSort = (field: "name" | "role") => {
+    setCurrentPage(1);
+    if (sortField === field) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  function canPerform(role: UserRecord["role"], action: string) {
+    const normalizedRole = normalizeRole(role);
+    const map: Record<string, Record<string, boolean>> = {
+      ADMIN: {
+        create: true,
+        edit: true,
+        suspend: true,
+        delete: true,
+      },
+      OPERATIONS: {
+        create: true,
+        edit: false,
+        suspend: true,
+        delete: false,
+      },
+      MECHANIC: {
+        create: false,
+        edit: false,
+        suspend: false,
+        delete: false,
+      },
+    };
+    return !!map[normalizedRole]?.[action];
+  }
 
   return (
-    <div className="space-y-6">
-      {successMessage && (
-        <div className="fixed right-8 top-8 z-[60] w-[390px] max-w-[calc(100vw-2rem)]">
-          <ToastNotification type="success" message={successMessage} />
-        </div>
-      )}
-
-      {!isAdmin ? (
-        <div className="flex min-h-[520px] items-center justify-center">
-          <div className="max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-8 text-center shadow-card">
-            <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-xl bg-red-500/10 text-red-600">
-              <Lock size={26} />
-            </div>
-            <h2 className="mb-2 text-2xl font-bold text-[var(--color-text-primary)]">
-              Access Restricted
-            </h2>
-            <p className="text-sm text-[var(--color-text-secondary)]">
-              User Accounts can only be managed by a Shared Portal
-              administrator.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div>
-          <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
-            <div>
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)]">
-                <Users size={24} />
-              </div>
-              <h2 className="mb-2 text-3xl font-bold text-[var(--color-text-primary)]">
-                USER ACCOUNT MANAGEMENT
-              </h2>
-              <p className="text-sm text-[var(--color-text-secondary)]">
-                Add or edit system roles and active/lockout configurations.
-              </p>
-            </div>
-            <ActionButton
-              onClick={() => openModal("create")}
-              className="cursor-pointer"
-              type="button"
-            >
-              <Plus size={16} />
-              Create New User
-            </ActionButton>
-          </div>
-
-          <section className="space-y-6">
-            <div className="mb-6">
-              <SearchInput
-                placeholder="Search user by username or name..."
-                value={usersSearch}
-                onChange={(event) => setUsersSearch(event.target.value)}
-              />
-            </div>
-
-            {usersLoading ? (
-              <div className="flex items-center justify-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-12 text-sm text-[var(--color-text-secondary)]">
-                <RefreshCw className="animate-spin" size={16} />
-                Loading user records...
-              </div>
-            ) : (
-              <DataTable
-                data={filteredUsers}
-                getRowKey={(user) => user.id}
-                minWidth="900px"
-                emptyMessage="No user accounts found."
-                columns={[
-                  {
-                    key: "name",
-                    header: "Full Name",
-                    width: "22%",
-                    render: (user) => <span className="font-bold">{user.name}</span>,
-                  },
-                  {
-                    key: "username",
-                    header: "Username",
-                    width: "18%",
-                    render: (user) => (
-                      <span className="font-semibold text-[#2f3b52]">{user.username}</span>
-                    ),
-                  },
-                  {
-                    key: "roles",
-                    header: "System Roles",
-                    width: "34%",
-                    render: (user) => (
-                      <div className="flex flex-wrap gap-1.5">
-                        {user.roles.map((role, index) => (
-                          <span
-                            key={`${role.system}-${role.role}-${index}`}
-                            className="rounded-full border border-[var(--color-brand-primary)]/20 bg-[var(--color-brand-primary)]/10 px-2 py-0.5 text-[10px] font-bold text-[var(--color-brand-primary)]"
-                          >
-                            {role.system}: {role.role}
-                          </span>
-                        ))}
-                      </div>
-                    ),
-                  },
-                  {
-                    key: "status",
-                    header: "Status",
-                    width: "14%",
-                    render: (user) =>
-                      user.lockedAt ? (
-                        <StatusBadge status="Failed" />
-                      ) : user.isActive ? (
-                        <StatusBadge status="Active" />
-                      ) : (
-                        <StatusBadge status="Inactive" />
-                      ),
-                  },
-                  {
-                    key: "actions",
-                    header: "Actions",
-                    width: "12%",
-                    align: "center",
-                    render: (user) => (
-                      <ActionMenu
-                        open={openActionMenuId === user.id}
-                        onToggle={(event) => {
-                          event.stopPropagation();
-                          setOpenActionMenuId((current) =>
-                            current === user.id ? null : user.id,
-                          );
-                        }}
-                        items={[
-                          ...(user.lockedAt
-                            ? [{
-                                label: "Unlock",
-                                icon: Unlock,
-                                onClick: () => {
-                                  setOpenActionMenuId(null);
-                                  setPendingUserAction({ type: "unlock", user });
-                                },
-                              }]
-                            : []),
-                          {
-                            label: user.isActive ? "Deactivate" : "Activate",
-                            icon: user.isActive ? XCircle : CheckCircle,
-                            onClick: () => {
-                              setOpenActionMenuId(null);
-                              setPendingUserAction({ type: "status", user });
-                            },
-                          },
-                          {
-                            label: "Reset Password",
-                            icon: Key,
-                            onClick: () => {
-                              setOpenActionMenuId(null);
-                              openModal("reset-pw", user);
-                            },
-                          },
-                          {
-                            label: "Edit",
-                            icon: Edit2,
-                            onClick: () => {
-                              setOpenActionMenuId(null);
-                              openModal("edit", user);
-                            },
-                          },
-                          {
-                            label: "Delete",
-                            icon: Trash2,
-                            danger: true,
-                            onClick: () => {
-                              setOpenActionMenuId(null);
-                              setPendingUserAction({ type: "delete", user });
-                            },
-                          },
-                        ]}
-                      />
-                    ),
-                  },
-                ]} 
-              />
-            )}
-          </section>
-        </div>
-      )}
-
-      <ConfirmationModal
-        isOpen={Boolean(pendingUserAction)}
-        variant={pendingUserAction?.type === "delete" ? "danger" : "primary"}
-        message={
-          pendingUserAction ? (
-            <>
-              Are you sure you want to{" "}
-              {pendingUserAction.type === "unlock"
-                ? "unlock"
-                : pendingUserAction.type === "status"
-                  ? pendingUserAction.user.isActive
-                    ? "deactivate"
-                    : "activate"
-                  : "delete"}{" "}
-              this user?
-              <span className="mt-2 block font-bold">
-                {pendingUserAction.user.username}
-              </span>
-            </>
-          ) : (
-            ""
-          )
-        }
-        confirmLabel="Yes"
-        onConfirm={() => void confirmUserAction()}
-        onCancel={() => setPendingUserAction(null)}
+    <div className={containerClasses}>
+      <PageHeader
+        icon={ShieldCheck}
+        title="User Management"
+        subtitle="Manage system users, roles, permissions, and account states"
       />
 
-      {showUserModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.5)] p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg overflow-hidden rounded-[30px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-[0_30px_90px_rgba(0,0,0,0.35)]">
-            <div className="flex items-center justify-between border-b border-[var(--color-border)] p-6">
-              <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
-                {modalMode === "create"
-                  ? "Create New User Account"
-                  : modalMode === "edit"
-                    ? "Edit User Roles"
-                    : "Reset Password"}
-              </h3>
-              <button
-                onClick={() => setShowUserModal(false)}
-                className="cursor-pointer text-xl font-bold text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
-                type="button"
-              >
-                ×
-              </button>
-            </div>
-
-            <form
-              onSubmit={
-                modalMode === "reset-pw"
-                  ? handleResetPassword
-                  : handleCreateOrUpdateUser
-              }
-              className="space-y-4 p-6"
+      <div className={statsGridClasses}>
+        {stats.map((stat) => {
+          const Icon = stat.icon;
+          return (
+            <div
+              key={stat.label}
+              className={cardClasses}
             >
-              {formError && (
-                <div className="flex gap-2 rounded-xl border border-red-500/20 bg-red-500/10 p-3.5 text-xs text-red-700">
-                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                  {formError}
-                </div>
-              )}
-
-              {modalMode !== "reset-pw" && (
-                <>
-                  <div>
-                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)]">
-                      Display Name
-                    </label>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(event) => setName(event.target.value)}
-                      placeholder="e.g. Maria Santos"
-                      className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-4 py-2.5 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-primary)]/20"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)]">
-                      Username
-                    </label>
-                    <input
-                      type="text"
-                      value={username}
-                      onChange={(event) => setUsername(event.target.value)}
-                      placeholder="e.g. msantos"
-                      disabled={modalMode === "edit"}
-                      className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-4 py-2.5 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-primary)]/20 disabled:opacity-50"
-                    />
-                  </div>
-                </>
-              )}
-
-              {(modalMode === "create" || modalMode === "reset-pw") && (
+              <div className="flex items-center justify-between">
                 <div>
-                  <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)]">
-                    {modalMode === "create" ? "Password" : "New Password"}
-                  </label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    placeholder="Enter password"
-                    className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-4 py-2.5 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-primary)]/20"
-                  />
+                  <p className="text-sm text-[var(--color-text-secondary)]">{stat.label}</p>
+                  <p className="mt-3 text-3xl font-bold text-[var(--color-text-primary)]">
+                    {stat.value}
+                  </p>
                 </div>
-              )}
-
-              {modalMode !== "reset-pw" && (
-                <div>
-                  <label className="mb-4 block border-b border-[var(--color-border)] pb-2 text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)]">
-                    Application Role Mappings
-                  </label>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-blue-400">
-                        VRMS Role
-                      </label>
-                      <select
-                        value={vrmsRole}
-                        onChange={(event) => setVrmsRole(event.target.value)}
-                        className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-2.5 text-xs text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
-                      >
-                        <option value="">None (No Access)</option>
-                        <option value="ADMIN">ADMIN</option>
-                        <option value="MECHANIC">MECHANIC</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-                        VMMS Role
-                      </label>
-                      <select
-                        value={vmmsRole}
-                        onChange={(event) => setVmmsRole(event.target.value)}
-                        className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-2.5 text-xs text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
-                      >
-                        <option value="">None (No Access)</option>
-                        <option value="ADMIN">ADMIN</option>
-                        <option value="MECHANIC">MECHANIC</option>
-                        <option value="OPERATIONS">OPERATIONS</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-amber-400">
-                        BMS Role
-                      </label>
-                      <select
-                        value={bmsRole}
-                        onChange={(event) => setBmsRole(event.target.value)}
-                        className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-2.5 text-xs text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
-                      >
-                        <option value="">None (No Access)</option>
-                        <option value="ADMIN">ADMIN</option>
-                        <option value="OPERATIONS">OPERATIONS</option>
-                        <option value="CUSTOMER_SUPPORT">
-                          CUSTOMER_SUPPORT
-                        </option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-secondary)]">
-                        SHARED Portal Role
-                      </label>
-                      <select
-                        value={sharedRole}
-                        onChange={(event) => setSharedRole(event.target.value)}
-                        className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-2.5 text-xs text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
-                      >
-                        <option value="">None</option>
-                        <option value="ADMIN">ADMIN</option>
-                      </select>
-                    </div>
-                  </div>
+                <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)]/80 p-3 text-[var(--color-text-secondary)] shadow-card">
+                  <Icon className="h-5 w-5" />
                 </div>
-              )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
-              <div className="flex justify-end gap-3 border-t border-[var(--color-border)] pt-4">
+      <div className={cardClasses}>
+        <div className={headerSectionClasses}>
+          <div>
+            <h2 className="text-lg font-bold text-[var(--color-text-primary)]">
+              System Users
+            </h2>
+            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+              Review users, update roles, suspend accounts, and remove access.
+            </p>
+          </div>
+          <Button
+            variant="primary"
+            className="flex items-center gap-2"
+            onClick={() => {
+              setEditingUser(null);
+              setNewUserForm({
+                name: "",
+                email: "",
+                password: "",
+                role: "",
+              });
+              setPasswordError("");
+              setIsCreateModalOpen(true);
+            }}
+            disabled={!currentUser || !canPerform(currentUser.role, "create")}
+          >
+            <Plus className="h-4 w-4" />
+            <span>Add User</span>
+          </Button>
+        </div>
+
+        <div className={filtersGridClasses}>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Search name, email, role..."
+              className={searchInputClasses}
+            />
+          </div>
+
+          <div className="relative">
+            <Filter className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" />
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className={selectInputClasses}
+            >
+              <option value="All">All Statuses</option>
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+              <option value="Suspended">Suspended</option>
+            </select>
+          </div>
+
+          <div className="relative">
+            <Filter className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" />
+            <select
+              value={roleFilter}
+              onChange={(e) => {
+                setRoleFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className={selectInputClasses}
+            >
+              <option value="All">All Roles</option>
+              {roleOptions.map((roleOption) => (
+                <option key={roleOption} value={roleOption}>
+                  {displayRole(roleOption)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className={loadingStateClasses}>
+            Loading users...
+          </div>
+        ) : filteredUsers.length === 0 ? (
+          <div className={emptyStateClasses}>
+            No users match your current filters.
+          </div>
+        ) : (
+          <div className={tableWrapperClasses}>
+            <div className="min-h-full overflow-x-auto">
+              <table className={tableClasses}>
+                <thead className={theadClasses}>
+                  <tr>
+                    <th className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => handleSort("name")}
+                        className={sortButtonClasses}
+                      >
+                        <span>User</span>
+                        {sortField === "name" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          ) : (
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          )
+                        ) : null}
+                      </button>
+                    </th>
+                    <th className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => handleSort("role")}
+                        className={sortButtonClasses}
+                      >
+                        <span>Role</span>
+                        {sortField === "role" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          ) : (
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          )
+                        ) : null}
+                      </button>
+                    </th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Last Active</th>
+                    <th className="px-4 py-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className={tbodyClasses}>
+                  {paginatedUsers.map((user) => (
+                    <tr key={user.id} className="bg-transparent align-top">
+                      <td className="px-4 py-3">
+                        <div className="space-y-0.5">
+                          <p className="font-semibold text-[var(--color-text-primary)]">
+                            {user.name}
+                          </p>
+                          <p className="text-sm text-[var(--color-text-secondary)]">
+                            {user.email}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`${badgeClasses} ${roleStyles[user.role] ?? "border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]"}`}
+                        >
+                          {displayRole(user.role)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`${badgeClasses} ${
+                            user.isLocked
+                              ? "border border-rose-500/30 bg-rose-500/15 text-rose-700 dark:text-rose-200"
+                              : statusStyles[user.status] ??
+                                "border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]"
+                          }`}
+                        >
+                          {user.isLocked ? "Locked" : user.status ?? "Unknown"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-[var(--color-text-secondary)]">
+                        {user.lastActive
+                          ? new Date(user.lastActive).toLocaleString()
+                          : "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className={actionButtonsGroupClasses}>
+                          {normalizeRole(currentUser?.role) === "ADMIN" &&
+                          user.isLocked ? (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmUnlockUser(user)}
+                              disabled={processingUserId === user.id}
+                              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-200"
+                            >
+                              {processingUserId === user.id
+                                ? "Unlocking..."
+                                : "Unlock"}
+                            </button>
+                          ) : null}
+
+                          {normalizeRole(currentUser?.role) === "ADMIN" ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingUser(user);
+                                setNewUserForm({
+                                  name: user.name,
+                                  email: user.email,
+                                  password: "",
+                                  role: user.role,
+                                });
+                                setIsCreateModalOpen(true);
+                              }}
+                              className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] ${processingUserId === user.id ? "cursor-not-allowed opacity-50" : ""}`}
+                            >
+                              Edit
+                            </button>
+                          ) : null}
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteUser(user)}
+                            disabled={
+                              processingUserId === user.id ||
+                              user.id === currentUser?.id ||
+                              normalizeRole(currentUser?.role) !== "ADMIN"
+                            }
+                            className={`table-delete-button !text-sm !font-medium ${
+                              processingUserId === user.id ||
+                              user.id === currentUser?.id ||
+                              currentUser?.role !== "ADMIN" ||
+                              userHasMaintenanceSchedule(user)
+                                ? "cursor-not-allowed opacity-50"
+                                : ""
+                            }`}
+                            title={
+                              userHasMaintenanceSchedule(user)
+                                ? "Cannot delete a user assigned to a maintenance schedule"
+                                : "Delete user"
+                            }
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex flex-col gap-3 border-t border-[var(--color-border)] px-4 py-3 text-sm text-[var(--color-text-secondary)] sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                Showing {paginatedUsers.length} of {filteredUsers.length} users
+              </span>
+              <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowUserModal(false)}
-                  className="cursor-pointer rounded-xl border border-[var(--color-border)] px-4 py-2 text-xs font-bold text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)]"
+                  onClick={() => setCurrentPage(Math.max(1, activePage - 1))}
+                  disabled={activePage === 1}
+                  className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  Cancel
+                  Previous
                 </button>
+                <span>Page {activePage} of {totalPages}</span>
                 <button
-                  type="submit"
-                  className="cursor-pointer rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-[var(--color-brand-dark)]"
+                  type="button"
+                  onClick={() => setCurrentPage(Math.min(totalPages, activePage + 1))}
+                  disabled={activePage === totalPages}
+                  className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {modalMode === "reset-pw" ? "Reset Password" : "Save Changes"}
+                  Next
                 </button>
+                {totalPages >= 20 ? (
+                  <label className="flex items-center gap-2">
+                    <span>Go to</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={totalPages}
+                      placeholder={String(activePage)}
+                      aria-label="Go to user page"
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        if (!event.currentTarget.value.trim()) return;
+                        const requestedPage = Number(event.currentTarget.value);
+                        if (!Number.isFinite(requestedPage)) return;
+                        setCurrentPage(
+                          Math.min(totalPages, Math.max(1, Math.trunc(requestedPage))),
+                        );
+                        event.currentTarget.value = "";
+                      }}
+                      className="w-16 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2 py-1.5 text-center text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
+                    />
+                  </label>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <Modal
+        isOpen={isCreateModalOpen}
+        title={editingUser ? "Edit user account" : "Create new user account"}
+        onClose={() => {
+          setIsCreateModalOpen(false);
+          setEditingUser(null);
+          setPasswordError("");
+        }}
+        size="lg"
+        className="rounded-[30px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-[0_30px_90px_rgba(0,0,0,0.35)]"
+        footer={(
+          <div className={buttonGroupClasses}>
+            <button
+              type="button"
+              onClick={() => {
+                setIsCreateModalOpen(false);
+                setEditingUser(null);
+                setPasswordError("");
+              }}
+              className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
+            >
+              Cancel
+            </button>
+            {editingUser ? (
+              <button
+                type="submit"
+                form="edit-user-form"
+                disabled={processingUserId === editingUser.id}
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-70"
+              >
+                {processingUserId === editingUser.id ? "Saving..." : "Save Changes"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  const passwordValidationMessage = validatePassword(newUserForm.password);
+                  if (passwordValidationMessage) {
+                    setPasswordError(passwordValidationMessage);
+                    return;
+                  }
+                  setPasswordError("");
+
+                  const duplicate = findDuplicateUser();
+                  if (duplicate) {
+                    setDuplicateUser(duplicate);
+                    return;
+                  }
+
+                  setConfirmCreateUser(true);
+                }}
+                disabled={
+                  processingUserId === "create" || !isCreateFormValid
+                }
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-70"
+              >
+                {processingUserId === "create" ? "Creating..." : "Create User"}
+              </button>
+            )}
+          </div>
+        )}
+      >
+        <form
+          id={editingUser ? "edit-user-form" : "create-user-form"}
+          onSubmit={editingUser ? handleEditUser : handleCreateUser}
+          className={formClasses}
+        >
+              <div>
+                <label className="mb-1 block text-sm font-medium text-[var(--color-text-secondary)]">
+                  Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  minLength={3}
+                  value={newUserForm.name}
+                  placeholder="Enter Name"
+                  onChange={(event) =>
+                    setNewUserForm((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                  className={inputClasses}
+                  aria-invalid={!editingUser && Boolean(nameValidationMessage)}
+                />
+                {!editingUser &&
+                  newUserForm.name.trim().length > 0 &&
+                  nameValidationMessage && (
+                    <p className="mt-1 text-xs text-[var(--color-brand-danger)]">
+                      {nameValidationMessage}
+                    </p>
+                  )}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-[var(--color-text-secondary)]">
+                  Email Address
+                </label>
+                <input
+                  type="text"
+                  required
+                  minLength={3}
+                  value={newUserForm.email}
+                  placeholder="Enter email address"
+                  name="new-user-email"
+                  autoComplete="off"
+                  spellCheck={false}
+                  onChange={(event) =>
+                    setNewUserForm((current) => ({
+                      ...current,
+                      email: event.target.value,
+                    }))
+                  }
+                  className={inputClasses}
+                  disabled={editingUser?.id === currentUser?.id}
+                  aria-invalid={
+                    !editingUser && Boolean(emailValidationMessage)
+                  }
+                />
+                {!editingUser &&
+                  newUserForm.email.trim().length > 0 &&
+                  emailValidationMessage && (
+                    <p className="mt-1 text-xs text-[var(--color-brand-danger)]">
+                      {emailValidationMessage}
+                    </p>
+                  )}
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                {editingUser && editingUser.id !== currentUser?.id ? (
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-[var(--color-text-secondary)]">
+                      New Password
+                    </label>
+                    <input
+                      type="password"
+                      value={newUserForm.password}
+                      name="new-user-password"
+                      autoComplete="new-password"
+                      spellCheck={false}
+                      placeholder="Leave blank to keep current password"
+                      onChange={(event) => {
+                        const nextPassword = event.target.value;
+                        setNewUserForm((current) => ({
+                          ...current,
+                          password: nextPassword,
+                        }));
+                      }}
+                      className={inputClasses}
+                    />
+                  </div>
+                ) : null}
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-[var(--color-text-secondary)]">
+                    Role
+                  </label>
+                  <select
+                    required
+                    value={newUserForm.role}
+                    onChange={(event) =>
+                      setNewUserForm((current) => ({
+                        ...current,
+                        role: event.target.value as UserRole,
+                      }))
+                    }
+                    className={inputClasses}
+                    disabled={editingUser?.id === currentUser?.id}
+                  >
+                    <option value="" disabled>
+                      Select role
+                    </option>
+                    {roleOptions.map((roleOption) => (
+                      <option key={roleOption} value={roleOption}>
+                        {displayRole(roleOption)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </form>
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(confirmUnlockUser)}
+        title="Unlock user account"
+        message={
+          confirmUnlockUser
+            ? `Unlock ${confirmUnlockUser.name} (${confirmUnlockUser.email})? Their failed login attempts will be reset.`
+            : ""
+        }
+        confirmLabel="Unlock Account"
+        cancelLabel="Cancel"
+        onConfirm={() => {
+          if (confirmUnlockUser) {
+            void performUnlockUser(confirmUnlockUser);
+          }
+        }}
+        onClose={() => setConfirmUnlockUser(null)}
+      />
+
+      <Modal
+        isOpen={confirmCreateUser}
+        title="Create user account"
+        message={`Create account for ${newUserForm.name || "this user"} (${newUserForm.email || "email"}) with the ${displayRole(newUserForm.role || "") || "selected"} role?`}
+        confirmLabel="Create User"
+        cancelLabel="Cancel"
+        onConfirm={async () => {
+          setConfirmCreateUser(false);
+          await confirmCreateUserAccount();
+        }}
+        onClose={() => setConfirmCreateUser(false)}
+      />
+
+      {duplicateUser && (
+        <div className={modalOverlayClasses}>
+          <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card">
+            <h3 className="mb-3 text-lg font-bold text-[var(--color-text-primary)]">
+              Existing User Account
+            </h3>
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              An account already exists with a similar name or email:{" "}
+              <span className="font-bold text-[var(--color-text-primary)]">
+                {duplicateUser.name} ({duplicateUser.email})
+              </span>
+              .
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDuplicateUser(null);
+                  setIsCreateModalOpen(false);
+                }}
+                disabled={processingUserId === "create"}
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => setDuplicateUser(null)}
+                disabled={processingUserId === "create"}
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition hover:bg-[var(--color-card-bg-hover)] disabled:opacity-50"
+              >
+                Continue Editing
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmCreateUserAccount(duplicateUser)}
+                disabled={
+                  processingUserId === "create" ||
+                  duplicateUser.id === currentUser?.id
+                }
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-50"
+              >
+                {processingUserId === "create" ? "Replacing..." : "Replace"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDeleteUser && (
+        <div className={modalOverlayClasses}>
+          <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card">
+            <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-4">
+              Confirm Delete
+            </h3>
+            <p className="text-sm text-[var(--color-text-secondary)] mb-6">
+              Are you sure you want to delete the user
+              <br />
+              <span className="mt-2 block font-bold text-[var(--color-text-primary)]">{confirmDeleteUser.name} ({confirmDeleteUser.email})</span>
+              <br />
+              This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteUser(null)}
+                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => performDeleteUser(confirmDeleteUser)}
+                className="rounded-xl bg-[var(--color-brand-danger)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] hover:bg-[var(--color-brand-danger)]/90"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {blockedDeleteUser && (
+        <div className={modalOverlayClasses}>
+          <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card">
+            <h3 className="mb-3 text-lg font-bold text-[var(--color-text-primary)]">
+              User Cannot Be Deleted
+            </h3>
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              <span className="font-semibold text-[var(--color-text-primary)]">
+                {blockedDeleteUser.name}
+              </span>{" "}
+              is assigned to an existing maintenance schedule. Remove or
+              reassign the schedule before deleting this user.
+            </p>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setBlockedDeleteUser(null)}
+                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

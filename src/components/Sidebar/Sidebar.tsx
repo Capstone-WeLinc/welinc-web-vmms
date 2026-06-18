@@ -99,14 +99,21 @@ export default function Sidebar({ currentUser }: SidebarProps) {
     } catch (e) {
       console.error(e);
     }
-    const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:5176";
+    const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:8000";
     window.location.href = `${portalUrl}/login?logout=true`;
   };
 
-  const handleBackToPortal = () => {
-    const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:5176";
-    window.location.href = portalUrl;
+  const handleSwitchToVrms = () => {
+    const token = window.localStorage.getItem('accessToken');
+    const vrmsUrl = import.meta.env.VITE_VRMS_URL || "http://localhost:8001";
+    if (token) {
+      window.location.href = `${vrmsUrl}/login?token=${token}`;
+    } else {
+      window.location.href = vrmsUrl;
+    }
   };
+
+  const resolvedAvatarClass = `${avatarClasses} ${collapsed ? 'mx-auto' : ''}`;
 
   const currentRole = currentUser ? roleLabelMap[currentUser.role] ?? currentUser.role : "Administrator";
   const currentInitials = currentUser
@@ -158,27 +165,32 @@ export default function Sidebar({ currentUser }: SidebarProps) {
           </div>
         </NavLink>
 
-        {hasMultipleSystems ? (
+        {hasMultipleSystems && (
           <button
-            className={`${baseButtonClasses} bg-[#f4c400] text-[#030737] hover:bg-[#ffd419]`}
-            onClick={handleBackToPortal}
-            title="Switch Subsystem"
+            className={`${baseButtonClasses} ${collapsed ? 'justify-center' : 'justify-start'} mb-1`}
+            onClick={handleSwitchToVrms}
+            title="Switch to VRMS"
             type="button"
           >
-            <LayoutGrid className="h-5 w-5 shrink-0" strokeWidth={1.9} />
-            <span className={labelRevealClasses}>Switch Subsystem</span>
-          </button>
-        ) : (
-          <button
-            className={`${baseButtonClasses} bg-[#b50000] text-white hover:bg-[#d00000]`}
-            onClick={handleSignOut}
-            title="Sign Out"
-            type="button"
-          >
-            <LogOut className="h-5 w-5 shrink-0" strokeWidth={1.9} />
-            <span className={labelRevealClasses}>Sign Out</span>
+            <LayoutGrid size={20} strokeWidth={1.7} />
+            {!collapsed && <span>Switch to VRMS</span>}
           </button>
         )}
+
+        <button
+          className={`${baseButtonClasses} ${collapsed ? 'justify-center' : 'justify-start'}`}
+          onClick={handleSignOut}
+          title="Sign Out"
+          type="button"
+          style={{ color: '#ef4444' }}
+        >
+          <LogOut size={20} strokeWidth={1.7} />
+          {!collapsed && <span>Sign Out</span>}
+        </button>
+
+        <button className={`${baseButtonClasses} ${collapsed ? 'justify-center' : 'justify-start'}`} onClick={toggleCollapse} title={collapsed ? "Expand sidebar" : "Collapse sidebar"} type="button">
+          {collapsed ? <PanelLeftOpen size={20} strokeWidth={1.7} /> : <><PanelLeftClose size={20} strokeWidth={1.7} /><span>Collapse</span></>}
+        </button>
       </div>
     </aside>
   );

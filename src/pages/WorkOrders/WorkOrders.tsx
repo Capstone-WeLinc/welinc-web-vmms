@@ -204,7 +204,7 @@ export default function WorkOrders() {
   const isAssignedToCurrentMechanic = (task: MaintenanceTask) => {
     if (!isMechanic || !currentUser) return true;
 
-    const currentNames = [currentUser.name, currentUser.username]
+    const currentNames = [currentUser.name, currentUser.email]
       .map(normalizeText)
       .filter(Boolean);
 
