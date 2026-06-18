@@ -23,7 +23,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         return;
       }
       // If no token is provided, redirect directly to the unified portal
-      const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:5176";
+      const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:8000";
       window.location.href = `${portalUrl}/login`;
       return;
     }
@@ -59,7 +59,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             <p className="text-[var(--color-text-secondary)] text-sm">{error}</p>
             <button
               onClick={() => {
-                const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:5176";
+                const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:8000";
                 window.location.href = `${portalUrl}/login`;
               }}
               className="mt-4 w-full bg-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary-hover)] text-white font-bold py-2.5 rounded-xl transition-all cursor-pointer"

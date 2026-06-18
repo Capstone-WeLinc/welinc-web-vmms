@@ -88,11 +88,11 @@ function validatePassword(password: string) {
   const trimmedPassword = password.trim();
 
   if (!trimmedPassword) {
-    return "Password is required when creating a user.";
+    return "";
   }
 
-  if (trimmedPassword.length < 12) {
-    return "Password must be at least 12 characters long.";
+  if (trimmedPassword.length < 8) {
+    return "Password must be at least 8 characters long.";
   }
 
   if (!/[A-Z]/.test(trimmedPassword)) {
@@ -169,34 +169,34 @@ export default function UserManagement() {
   const [passwordError, setPasswordError] = useState("");
   const [newUserForm, setNewUserForm] = useState<{
     name: string;
-    username: string;
+    email: string;
     password: string;
     role: UserRole | "";
   }>({
     name: "",
-    username: "",
+    email: "",
     password: "",
     role: "",
   });
   const isCreateFormComplete =
     newUserForm.name.trim().length > 0 &&
-    newUserForm.username.trim().length > 0 &&
+    newUserForm.email.trim().length > 0 &&
     newUserForm.password.trim().length > 0 &&
     newUserForm.role !== "";
   const nameValidationMessage = validateUserField(
     newUserForm.name,
     "Name",
   );
-  const usernameValidationMessage = validateUserField(
-    newUserForm.username,
-    "Username",
+  const emailValidationMessage = validateUserField(
+    newUserForm.email,
+    "Email",
   );
   const isCreatePasswordValid =
     validatePassword(newUserForm.password) === "";
   const isCreateFormValid =
     isCreateFormComplete &&
     !nameValidationMessage &&
-    !usernameValidationMessage &&
+    !emailValidationMessage &&
     isCreatePasswordValid;
   const userHasMaintenanceSchedule = (user: UserRecord) =>
     maintenanceSchedules.some(
@@ -206,12 +206,12 @@ export default function UserManagement() {
     );
   const findDuplicateUser = () => {
     const normalizedName = normalizeUserIdentity(newUserForm.name);
-    const normalizedUsername = normalizeUserIdentity(newUserForm.username);
+    const normalizedEmail = normalizeUserIdentity(newUserForm.email);
 
     return users.find(
       (user) =>
         normalizeUserIdentity(user.name) === normalizedName ||
-        normalizeUserIdentity(user.username) === normalizedUsername,
+        normalizeUserIdentity(user.email) === normalizedEmail,
     );
   };
 
@@ -286,7 +286,7 @@ export default function UserManagement() {
 
     return users
       .filter((user) => {
-        const matchesSearch = [user.name, user.username, normalizeRole(user.role)]
+        const matchesSearch = [user.name, user.email, normalizeRole(user.role)]
           .join(" ")
           .toLowerCase()
           .includes(normalizedSearch);
@@ -469,9 +469,9 @@ export default function UserManagement() {
     try {
       const userInput: UserCreateInput = {
         name: newUserForm.name.trim(),
-        username: newUserForm.username.trim(),
-        password: newUserForm.password,
-        role: selectedRole,
+        email: newUserForm.email.trim(),
+        role: newUserForm.role || undefined,
+        ...(newUserForm.password.trim() ? { password: newUserForm.password.trim() } : {}),
       };
 
       if (userToReplace) {
@@ -482,8 +482,8 @@ export default function UserManagement() {
 
         const updatedUser = await updateUser(userToReplace.id, {
           name: userInput.name,
-          username: userInput.username,
-          password: userInput.password,
+          email: userInput.email,
+          ...(userInput.password ? { password: userInput.password } : {}),
         });
         const userWithRole =
           userToReplace.role === selectedRole
@@ -514,7 +514,7 @@ export default function UserManagement() {
       setDuplicateUser(null);
       setNewUserForm({
         name: "",
-        username: "",
+        email: "",
         password: "",
         role: "",
       });
@@ -548,11 +548,11 @@ export default function UserManagement() {
     // Handle self-edit: allow only display name change
     if (isSelf) {
       const nameChanged = editingUser.name !== newUserForm.name;
-      const usernameChanged = editingUser.username !== newUserForm.username;
+      const emailChanged = editingUser.email !== newUserForm.email;
       const roleChanged = editingUser.role !== newUserForm.role;
 
-      if (usernameChanged || roleChanged) {
-        alert("You cannot change your username or role for your own account.");
+      if (emailChanged || roleChanged) {
+        alert("You cannot change your email or role for your own account.");
         return;
       }
 
@@ -583,15 +583,15 @@ export default function UserManagement() {
     setProcessingUserId(editingUser.id);
     try {
       const nameChanged = editingUser.name !== newUserForm.name;
-      const usernameChanged = editingUser.username !== newUserForm.username;
+      const emailChanged = editingUser.email !== newUserForm.email;
       const roleChanged = editingUser.role !== newUserForm.role;
 
-      // Persist name/username changes
-      if (nameChanged || usernameChanged) {
+      // Persist name/email changes
+      if (nameChanged || emailChanged) {
         const nextName = newUserForm.name.trim();
         await updateUser(editingUser.id, {
-          name: nextName,
-          username: newUserForm.username.trim(),
+          name: newUserForm.name.trim(),
+          email: newUserForm.email.trim(),
         });
         if (nameChanged) {
           await updateScheduledMechanicName(editingUser.name, nextName);
@@ -711,7 +711,7 @@ export default function UserManagement() {
               setEditingUser(null);
               setNewUserForm({
                 name: "",
-                username: "",
+                email: "",
                 password: "",
                 role: "",
               });
@@ -735,7 +735,7 @@ export default function UserManagement() {
                 setSearchQuery(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Search name, username, role..."
+              placeholder="Search name, email, role..."
               className={searchInputClasses}
             />
           </div>
@@ -837,7 +837,7 @@ export default function UserManagement() {
                             {user.name}
                           </p>
                           <p className="text-sm text-[var(--color-text-secondary)]">
-                            {user.username}
+                            {user.email}
                           </p>
                         </div>
                       </td>
@@ -888,7 +888,7 @@ export default function UserManagement() {
                                 setEditingUser(user);
                                 setNewUserForm({
                                   name: user.name,
-                                  username: user.username,
+                                  email: user.email,
                                   password: "",
                                   role: user.role,
                                 });
@@ -1079,81 +1079,62 @@ export default function UserManagement() {
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-[var(--color-text-secondary)]">
-                  Username
+                  Email Address
                 </label>
                 <input
                   type="text"
                   required
                   minLength={3}
-                  value={newUserForm.username}
-                  placeholder="Enter username"
-                  name="new-user-username"
+                  value={newUserForm.email}
+                  placeholder="Enter email address"
+                  name="new-user-email"
                   autoComplete="off"
                   spellCheck={false}
                   onChange={(event) =>
                     setNewUserForm((current) => ({
                       ...current,
-                      username: event.target.value,
+                      email: event.target.value,
                     }))
                   }
                   className={inputClasses}
                   disabled={editingUser?.id === currentUser?.id}
                   aria-invalid={
-                    !editingUser && Boolean(usernameValidationMessage)
+                    !editingUser && Boolean(emailValidationMessage)
                   }
                 />
                 {!editingUser &&
-                  newUserForm.username.trim().length > 0 &&
-                  usernameValidationMessage && (
+                  newUserForm.email.trim().length > 0 &&
+                  emailValidationMessage && (
                     <p className="mt-1 text-xs text-[var(--color-brand-danger)]">
-                      {usernameValidationMessage}
+                      {emailValidationMessage}
                     </p>
                   )}
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-[var(--color-text-secondary)]">
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    required={!editingUser}
-                    value={newUserForm.password}
-                    name="new-user-password"
-                    autoComplete="new-password"
-                    spellCheck={false}
-                    placeholder={
-                      editingUser
-                        ? editingUser.id === currentUser?.id
-                          ? "You can only change your display name here"
-                          : "Leave blank to keep current password"
-                        : "Enter Password"
-                    }
-                    disabled={editingUser?.id === currentUser?.id}
-                    onChange={(event) => {
-                      const nextPassword = event.target.value;
-
-                      setNewUserForm((current) => ({
-                        ...current,
-                        password: nextPassword,
-                      }));
-
-                      if (!editingUser) {
-                        setPasswordError(validatePassword(nextPassword));
-                      }
-                    }}
-                    className={inputClasses}
-                    aria-disabled={editingUser?.id === currentUser?.id}
-                  />
-                  {!editingUser && (
-                    <p className={`mt-1 text-xs ${passwordError ? "text-[var(--color-brand-danger)]" : "text-[var(--color-text-secondary)]"}`}>
-                      {newUserForm.password.trim().length > 0
-                        ? passwordError || "Password looks good."
-                        : ""}
-                    </p>
-                  )}
-                </div>
+                {editingUser && editingUser.id !== currentUser?.id ? (
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-[var(--color-text-secondary)]">
+                      New Password
+                    </label>
+                    <input
+                      type="password"
+                      value={newUserForm.password}
+                      name="new-user-password"
+                      autoComplete="new-password"
+                      spellCheck={false}
+                      placeholder="Leave blank to keep current password"
+                      onChange={(event) => {
+                        const nextPassword = event.target.value;
+                        setNewUserForm((current) => ({
+                          ...current,
+                          password: nextPassword,
+                        }));
+                      }}
+                      className={inputClasses}
+                    />
+                  </div>
+                ) : null}
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-[var(--color-text-secondary)]">
@@ -1190,7 +1171,7 @@ export default function UserManagement() {
         title="Unlock user account"
         message={
           confirmUnlockUser
-            ? `Unlock ${confirmUnlockUser.name} (${confirmUnlockUser.username})? Their failed login attempts will be reset.`
+            ? `Unlock ${confirmUnlockUser.name} (${confirmUnlockUser.email})? Their failed login attempts will be reset.`
             : ""
         }
         confirmLabel="Unlock Account"
@@ -1206,7 +1187,7 @@ export default function UserManagement() {
       <Modal
         isOpen={confirmCreateUser}
         title="Create user account"
-        message={`Create account for ${newUserForm.name || "this user"} (${newUserForm.username || "username"}) with the ${displayRole(newUserForm.role || "") || "selected"} role?`}
+        message={`Create account for ${newUserForm.name || "this user"} (${newUserForm.email || "email"}) with the ${displayRole(newUserForm.role || "") || "selected"} role?`}
         confirmLabel="Create User"
         cancelLabel="Cancel"
         onConfirm={async () => {
@@ -1223,9 +1204,9 @@ export default function UserManagement() {
               Existing User Account
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)]">
-              An account already exists with a similar name or username:{" "}
+              An account already exists with a similar name or email:{" "}
               <span className="font-bold text-[var(--color-text-primary)]">
-                {duplicateUser.name} ({duplicateUser.username})
+                {duplicateUser.name} ({duplicateUser.email})
               </span>
               .
             </p>
@@ -1274,7 +1255,7 @@ export default function UserManagement() {
             <p className="text-sm text-[var(--color-text-secondary)] mb-6">
               Are you sure you want to delete the user
               <br />
-              <span className="mt-2 block font-bold text-[var(--color-text-primary)]">{confirmDeleteUser.name} ({confirmDeleteUser.username})</span>
+              <span className="mt-2 block font-bold text-[var(--color-text-primary)]">{confirmDeleteUser.name} ({confirmDeleteUser.email})</span>
               <br />
               This action cannot be undone.
             </p>

@@ -130,13 +130,18 @@ export default function Sidebar({ onCollapse, currentUser, darkMode = false, onT
     } catch (e) {
       console.error(e);
     }
-    const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:5176";
+    const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:8000";
     window.location.href = `${portalUrl}/login?logout=true`;
   };
 
-  const handleBackToPortal = () => {
-    const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:5176";
-    window.location.href = portalUrl;
+  const handleSwitchToVrms = () => {
+    const token = window.localStorage.getItem('accessToken');
+    const vrmsUrl = import.meta.env.VITE_VRMS_URL || "http://localhost:8001";
+    if (token) {
+      window.location.href = `${vrmsUrl}/login?token=${token}`;
+    } else {
+      window.location.href = vrmsUrl;
+    }
   };
 
   const resolvedAvatarClass = `${avatarClasses} ${collapsed ? 'mx-auto' : ''}`;
@@ -185,28 +190,28 @@ export default function Sidebar({ onCollapse, currentUser, darkMode = false, onT
           {!collapsed && <span>{darkMode ? "Light Mode" : "Dark Mode"}</span>}
         </button>
 
-        {hasMultipleSystems ? (
+        {hasMultipleSystems && (
           <button
-            className={`${baseButtonClasses} ${collapsed ? 'justify-center' : 'justify-start'}`}
-            onClick={handleBackToPortal}
-            title="Switch Subsystem"
+            className={`${baseButtonClasses} ${collapsed ? 'justify-center' : 'justify-start'} mb-1`}
+            onClick={handleSwitchToVrms}
+            title="Switch to VRMS"
             type="button"
           >
             <LayoutGrid size={20} strokeWidth={1.7} />
-            {!collapsed && <span>Switch Subsystem</span>}
-          </button>
-        ) : (
-          <button
-            className={`${baseButtonClasses} ${collapsed ? 'justify-center' : 'justify-start'}`}
-            onClick={handleSignOut}
-            title="Sign Out"
-            type="button"
-            style={{ color: '#ef4444' }}
-          >
-            <LogOut size={20} strokeWidth={1.7} />
-            {!collapsed && <span>Sign Out</span>}
+            {!collapsed && <span>Switch to VRMS</span>}
           </button>
         )}
+
+        <button
+          className={`${baseButtonClasses} ${collapsed ? 'justify-center' : 'justify-start'}`}
+          onClick={handleSignOut}
+          title="Sign Out"
+          type="button"
+          style={{ color: '#ef4444' }}
+        >
+          <LogOut size={20} strokeWidth={1.7} />
+          {!collapsed && <span>Sign Out</span>}
+        </button>
 
         <button className={`${baseButtonClasses} ${collapsed ? 'justify-center' : 'justify-start'}`} onClick={toggleCollapse} title={collapsed ? "Expand sidebar" : "Collapse sidebar"} type="button">
           {collapsed ? <PanelLeftOpen size={20} strokeWidth={1.7} /> : <><PanelLeftClose size={20} strokeWidth={1.7} /><span>Collapse</span></>}
