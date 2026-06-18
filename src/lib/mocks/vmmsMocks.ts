@@ -88,6 +88,7 @@ export type UserRecord = {
   id: string;
   name: string;
   email: string;
+  username?: string;
   role: "ADMIN" | "MECHANIC" | "OPERATIONS";
   status: UserStatus;
   lastActive: string;
@@ -99,6 +100,7 @@ export type UserRole = UserRecord["role"];
 export type UserCreateInput = {
   name: string;
   email: string;
+  username?: string;
   password?: string;
   role?: UserRole;
 };

@@ -63,7 +63,7 @@ function App() {
     getCurrentUser()
       .then((u) => setCurrentUser(u))
       .catch(() => setCurrentUser(null));
-    navigate("/dashboard", { replace: true });
+    navigate("/users", { replace: true });
   };
 
   const handleLogout = useCallback(() => {
@@ -108,6 +108,7 @@ function App() {
     if (isOperations) {
       const allowedOperationsPaths = [
         "/dashboard",
+        "/users",
         "/maintenance-scheduling",
         "/work-orders",
         "/maintenance-logs",
@@ -117,7 +118,7 @@ function App() {
       ];
 
       if (!allowedOperationsPaths.includes(location.pathname)) {
-        navigate("/dashboard", { replace: true });
+        navigate("/users", { replace: true });
       }
     }
   }, [currentUser, isAuthenticated, isMechanic, isOperations, location.pathname, navigate]);
@@ -203,7 +204,7 @@ function App() {
             path="/"
             element={
               isAuthenticated ? (
-                <Navigate to="/dashboard" replace />
+                <Navigate to="/users" replace />
               ) : (
                 <Navigate to="/login" replace />
               )
@@ -213,7 +214,7 @@ function App() {
             path="/login"
             element={
               isAuthenticated && !hasIncomingSsoToken ? (
-                <Navigate to="/dashboard" replace />
+                <Navigate to="/users" replace />
               ) : (
                 <LoginPage onLogin={handleLogin} />
               )
@@ -337,7 +338,7 @@ function App() {
             path="*"
             element={
               isAuthenticated ? (
-                <Navigate to="/dashboard" replace />
+                <Navigate to="/users" replace />
               ) : (
                 <Navigate to="/login" replace />
               )

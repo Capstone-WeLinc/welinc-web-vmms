@@ -5,7 +5,6 @@ import logo from "../../assets/logo.png";
 import {
   LayoutGrid,
   LogOut,
-  LayoutDashboard,
   Users,
   CalendarClock,
   Wrench,
@@ -18,7 +17,7 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
+//  { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
   { label: "User Management", icon: Users, path: "/users" },
   { label: "Maintenance Scheduling", icon: CalendarClock, path: "/maintenance-scheduling" },
   { label: "Work Orders", icon: Wrench, path: "/work-orders" },
@@ -113,8 +112,6 @@ export default function Sidebar({ currentUser }: SidebarProps) {
     }
   };
 
-  const resolvedAvatarClass = `${avatarClasses} ${collapsed ? 'mx-auto' : ''}`;
-
   const currentRole = currentUser ? roleLabelMap[currentUser.role] ?? currentUser.role : "Administrator";
   const currentInitials = currentUser
     ? currentUser.name
@@ -126,7 +123,7 @@ export default function Sidebar({ currentUser }: SidebarProps) {
     : "AD";
 
   return (
-    <aside className={asideBaseClasses}>
+    <aside className={asideBaseClasses} data-sidebar-mode="hover-expand">
       <div className={headerClasses}>
         <div className={logoFrameClasses}>
           <img src={logo} alt="WeLinc Logistics" className="h-full w-full object-cover" />
@@ -167,29 +164,24 @@ export default function Sidebar({ currentUser }: SidebarProps) {
 
         {hasMultipleSystems && (
           <button
-            className={`${baseButtonClasses} ${collapsed ? 'justify-center' : 'justify-start'} mb-1`}
+            className={`${baseButtonClasses} mb-1 text-[#8e96cf] hover:bg-white/5 hover:text-white`}
             onClick={handleSwitchToVrms}
             title="Switch to VRMS"
             type="button"
           >
             <LayoutGrid size={20} strokeWidth={1.7} />
-            {!collapsed && <span>Switch to VRMS</span>}
+            <span className={labelRevealClasses}>Switch to VRMS</span>
           </button>
         )}
 
         <button
-          className={`${baseButtonClasses} ${collapsed ? 'justify-center' : 'justify-start'}`}
+          className={`${baseButtonClasses} text-[#ef4444] hover:bg-red-500/10`}
           onClick={handleSignOut}
           title="Sign Out"
           type="button"
-          style={{ color: '#ef4444' }}
         >
           <LogOut size={20} strokeWidth={1.7} />
-          {!collapsed && <span>Sign Out</span>}
-        </button>
-
-        <button className={`${baseButtonClasses} ${collapsed ? 'justify-center' : 'justify-start'}`} onClick={toggleCollapse} title={collapsed ? "Expand sidebar" : "Collapse sidebar"} type="button">
-          {collapsed ? <PanelLeftOpen size={20} strokeWidth={1.7} /> : <><PanelLeftClose size={20} strokeWidth={1.7} /><span>Collapse</span></>}
+          <span className={labelRevealClasses}>Sign Out</span>
         </button>
       </div>
     </aside>
