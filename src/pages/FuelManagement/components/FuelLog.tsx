@@ -1,8 +1,16 @@
-import type { FuelFillUp } from '../types';
-import { Edit, Trash2, Filter, Download, Droplet, Eye, AlertTriangle } from 'lucide-react';
-import { useState, useMemo } from 'react';
+﻿import type { FuelFillUp } from '../types';
+import { Edit, Filter, Droplet, Eye, AlertTriangle } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
 import { printToPDF } from "../../../lib/utils/fuelExport";
 import ViewFuelLogModal from './ViewFuelLogModal';
+import {
+  ActionMenu,
+  DataTable,
+  ExportButton,
+  Pagination,
+  SearchInput,
+  checkboxClasses,
+} from "../../../components/ui";
 
 interface InputFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
@@ -69,13 +77,8 @@ const actionsGroupClasses = 'flex flex-wrap gap-2 shrink-0';
 const actionButtonBase = 'flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200 active:scale-95 cursor-pointer';
 const actionButtonFilter = `${actionButtonBase} rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]`;
 const actionButtonActiveFilter = `${actionButtonFilter} active-filter hover:bg-[var(--color-brand-primary)]/20`;
-const secondaryActionButton = `${actionButtonBase} rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]`;
 const successActionButton = `${actionButtonBase} rounded-xl border border-[var(--color-brand-primary)]/20 bg-[var(--color-brand-primary)]/15 text-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary)]/25`;
 const filtersPanelClasses = 'grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card';
-const tableWrapperClasses = 'overflow-auto overscroll-contain rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card lg:max-h-[min(40rem,calc(100vh-12rem))]';
-const tableClasses = 'w-full text-left text-sm';
-const tableHeadRowClasses = 'sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]';
-const tableCellBase = 'px-4 py-3';
 
 interface FuelLogProps {
   fillUps: FuelFillUp[];
@@ -93,11 +96,13 @@ export default function FuelLog({ fillUps = [], onEdit, onDelete, onLogFillUp }:
   const [filledByFilter, setFilledByFilter] = useState('');
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [selectedViewRecord, setSelectedViewRecord] = useState<FuelFillUp | null>(null);
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const resetPagination = () => {
     setCurrentPage(1);
@@ -150,6 +155,15 @@ export default function FuelLog({ fillUps = [], onEdit, onDelete, onLogFillUp }:
     setIsViewOpen(true);
   };
 
+  useEffect(() => {
+    const closeActionMenu = () => {
+      setOpenActionMenuId(null);
+      setIsExportMenuOpen(false);
+    };
+    document.addEventListener('click', closeActionMenu);
+    return () => document.removeEventListener('click', closeActionMenu);
+  }, []);
+
   const handleExportXLSX = () => {
     if (filteredFillUps.length === 0) return;
     const headers = ['Vehicle', 'ID', 'Model', 'Date', 'Liters', 'Price/L', 'Total Cost', 'Odometer', 'Station', 'Filled By'];
@@ -176,9 +190,7 @@ export default function FuelLog({ fillUps = [], onEdit, onDelete, onLogFillUp }:
       {/* Search + Actions Row */}
       <div className={searchRowClasses}>
         <div className="flex-1">
-          <InputField
-            id="fuelLogSearch"
-            label=""
+          <SearchInput
             placeholder="Search by vehicle name, plate, or station..."
             value={search}
             onChange={(e) => {
@@ -195,20 +207,21 @@ export default function FuelLog({ fillUps = [], onEdit, onDelete, onLogFillUp }:
             <Filter size={16} strokeWidth={1.8} />
             Filters
           </button>
-          <button
-            onClick={handleExportXLSX}
-            className={secondaryActionButton}
-          >
-            <Download size={16} strokeWidth={1.8} />
-            Export .xlsx
-          </button>
-          <button
-            onClick={handleExportPDF}
-            className={secondaryActionButton}
-          >
-            <Download size={16} strokeWidth={1.8} />
-            Export PDF
-          </button>
+          <ExportButton
+            open={isExportMenuOpen}
+            onToggle={(event) => {
+                event.stopPropagation();
+                setIsExportMenuOpen((current) => !current);
+              }}
+            onPdf={() => {
+              setIsExportMenuOpen(false);
+              handleExportPDF();
+            }}
+            onExcel={() => {
+              setIsExportMenuOpen(false);
+              handleExportXLSX();
+            }}
+          />
           <button
             onClick={onLogFillUp}
             className={successActionButton}
@@ -258,7 +271,7 @@ export default function FuelLog({ fillUps = [], onEdit, onDelete, onLogFillUp }:
             }}
           />
 
-          {/* Filled‑by Filter */}
+          {/* Filledâ€‘by Filter */}
           <InputField
             id="fuelFilledByFilter"
             label="Filled By"
@@ -300,113 +313,134 @@ export default function FuelLog({ fillUps = [], onEdit, onDelete, onLogFillUp }:
       )}
 
       {/* Table Structure */}
-      <div id="fuel-log-table" className={tableWrapperClasses}>
-        <table className={tableClasses}>
-          <thead>
-            <tr className={tableHeadRowClasses}>
-              {/* Master Checkbox Header column */}
-                  <th className="px-4 py-3.5 w-8">
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 rounded border-[var(--color-border)] bg-[var(--color-input-bg)] cursor-pointer accent-[var(--color-brand-primary)]"
-                    checked={filteredFillUps.length > 0 && selectedIds.length === filteredFillUps.length}
-                    onChange={e => {
-                      if (e.target.checked) {
-                        setSelectedIds(filteredFillUps.map(f => f.id));
-                      } else {
-                        setSelectedIds([]);
-                      }
-                    }}
-                  />
-              </th>
-              <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider">Vehicle</th>
-              <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider">Date</th>
-              <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider">Liters</th>
-              <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider">Price/L</th>
-              <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider">Total Cost</th>
-              <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider">Odometer</th>
-              <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider">Efficiency</th>
-              <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider">Station</th>
-              <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider">Filled By</th>
-              <th className="px-4 py-3.5 font-semibold text-xs uppercase tracking-wider text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--color-divider)]">
-            {paginatedFillUps.length === 0 ? (
-              <tr>
-                <td colSpan={11} className="px-4 py-10 text-center text-sm text-[var(--color-text-secondary)]">
-                  No records found matching your filters.
-                </td>
-              </tr>
-            ) : (
-              paginatedFillUps.map((fillUp) => (
-                <tr key={fillUp.id} className="hover:bg-[var(--color-card-bg-hover)] transition-colors group">
-                  <td className={tableCellBase}>
-                    <input
-                        type="checkbox"
-                        className="w-4 h-4 rounded border-[var(--color-border)] bg-[var(--color-input-bg)] cursor-pointer accent-[var(--color-brand-primary)]"
-                      checked={selectedIds.includes(fillUp.id)}
-                      onChange={e => {
-                        if (e.target.checked) {
-                          setSelectedIds(prev => [...prev, fillUp.id]);
-                        } else {
-                          setSelectedIds(prev => prev.filter(id => id !== fillUp.id));
-                        }
-                      }}
-                    />
-                  </td>
-                    <td className={tableCellBase}>
-                      <div className="font-bold text-[var(--color-text-primary)]">{fillUp.vehicleName ?? 'N/A'}</div>
-                      <div className="text-xs text-[var(--color-text-secondary)] font-mono">{fillUp.vehicleId} · {fillUp.vehicleModel}</div>
-                    </td>
-                    <td className={`${tableCellBase} text-[var(--color-text-secondary)]`}>{fillUp.date}</td>
-                    <td className={`${tableCellBase} text-[var(--color-text-secondary)] font-medium font-mono`}>{fillUp.liters}L</td>
-                    <td className={`${tableCellBase} text-[var(--color-text-secondary)] font-mono`}>₱{fillUp.pricePerLiter?.toFixed(2)}</td>
-                    <td className={`${tableCellBase} text-[var(--color-text-primary)] font-bold font-mono`}>₱{fillUp.totalCost?.toLocaleString()}</td>
-                    <td className={`${tableCellBase} text-[var(--color-text-secondary)] font-mono`}>{fillUp.odometer?.toLocaleString()} km</td>
-                  <td className={`${tableCellBase} font-bold font-mono ${fillUp.trend === 'above' ? 'text-[var(--color-brand-success)]' : 'text-[var(--color-brand-danger)]'}`}>
-                    {fillUp.efficiency} km/L
-                  </td>
-                    <td className={`${tableCellBase} text-[var(--color-text-secondary)]`}>{fillUp.station ?? 'N/A'}</td>
-                    <td className={`${tableCellBase} text-[var(--color-text-secondary)]`}>{fillUp.filledBy ?? 'N/A'}</td>
-                  <td className={tableCellBase}>
-                    <div className="flex gap-1 justify-end">
-                      <button
-                        onClick={() => handleView(fillUp)}
-                        title="View record"
-                          className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-card-bg-hover)] transition cursor-pointer"
-                      >
-                        <Eye size={15} strokeWidth={1.8} />
-                      </button>
-                      <button
-                        onClick={() => onEdit?.(fillUp)}
-                        title="Edit record"
-                          className="p-1.5 rounded-lg text-[var(--color-brand-primary)] hover:text-[var(--color-brand-primary)]/70 hover:bg-[var(--color-brand-primary)]/10 transition cursor-pointer"
-                      >
-                        <Edit size={15} strokeWidth={1.8} />
-                      </button>
-                      <button
-                        onClick={() => onDelete?.(fillUp.id)}
-                        title="Delete record"
-                        className="table-delete-button !p-1.5"
-                      >
-                        <Trash2 size={15} strokeWidth={1.8} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      <div id="fuel-log-table">
+        <DataTable
+          data={paginatedFillUps}
+          getRowKey={(fillUp) => fillUp.id}
+          minWidth="1120px"
+          emptyMessage="No records found matching your filters."
+          columns={[
+            {
+              key: 'select',
+              header: (
+                <input
+                  type="checkbox"
+                  className={checkboxClasses}
+                  checked={filteredFillUps.length > 0 && selectedIds.length === filteredFillUps.length}
+                  onChange={e => {
+                    if (e.target.checked) {
+                      setSelectedIds(filteredFillUps.map(f => f.id));
+                    } else {
+                      setSelectedIds([]);
+                    }
+                  }}
+                />
+              ),
+              width: '4%',
+              render: (fillUp) => (
+                <input
+                  type="checkbox"
+                  className={checkboxClasses}
+                  checked={selectedIds.includes(fillUp.id)}
+                  onClick={(event) => event.stopPropagation()}
+                  onChange={e => {
+                    if (e.target.checked) {
+                      setSelectedIds(prev => [...prev, fillUp.id]);
+                    } else {
+                      setSelectedIds(prev => prev.filter(id => id !== fillUp.id));
+                    }
+                  }}
+                />
+              ),
+            },
+            {
+              key: 'vehicle',
+              header: 'Vehicle',
+              width: '17%',
+              render: (fillUp) => (
+                <div>
+                  <div className="font-bold text-[var(--color-text-primary)]">{fillUp.vehicleName ?? 'N/A'}</div>
+                  <div className="text-xs text-[var(--color-text-secondary)] font-mono">{fillUp.vehicleId} Â· {fillUp.vehicleModel}</div>
+                </div>
+              ),
+            },
+            { key: 'date', header: 'Date', width: '10%', render: (fillUp) => fillUp.date },
+            { key: 'liters', header: 'Liters', width: '8%', render: (fillUp) => <span className="font-mono">{fillUp.liters}L</span> },
+            { key: 'price', header: 'Price/L', width: '8%', render: (fillUp) => <span className="font-mono">â‚±{fillUp.pricePerLiter?.toFixed(2)}</span> },
+            { key: 'total', header: 'Total Cost', width: '10%', render: (fillUp) => <span className="font-bold font-mono">â‚±{fillUp.totalCost?.toLocaleString()}</span> },
+            { key: 'odometer', header: 'Odometer', width: '10%', render: (fillUp) => <span className="font-mono">{fillUp.odometer?.toLocaleString()} km</span> },
+            {
+              key: 'efficiency',
+              header: 'Efficiency',
+              width: '10%',
+              render: (fillUp) => (
+                <span className={`font-bold font-mono ${fillUp.trend === 'above' ? 'text-[var(--color-brand-success)]' : 'text-[var(--color-brand-danger)]'}`}>
+                  {fillUp.efficiency} km/L
+                </span>
+              ),
+            },
+            { key: 'station', header: 'Station', width: '10%', render: (fillUp) => fillUp.station ?? 'N/A' },
+            { key: 'filledBy', header: 'Filled By', width: '10%', render: (fillUp) => fillUp.filledBy ?? 'N/A' },
+            {
+              key: 'actions',
+              header: 'Actions',
+              width: '7%',
+              align: 'center',
+              render: (fillUp) => (
+                <ActionMenu
+                  open={openActionMenuId === fillUp.id}
+                  onToggle={(event) => {
+                    event.stopPropagation();
+                    setOpenActionMenuId((current) =>
+                      current === fillUp.id ? null : fillUp.id,
+                    );
+                  }}
+                  items={[
+                    {
+                      label: 'View',
+                      icon: Eye,
+                      onClick: () => {
+                        setOpenActionMenuId(null);
+                        handleView(fillUp);
+                      },
+                    },
+                    {
+                      label: 'Edit',
+                      icon: Edit,
+                      onClick: () => {
+                        setOpenActionMenuId(null);
+                        onEdit?.(fillUp);
+                      },
+                    },
+                    {
+                      label: 'Delete',
+                      danger: true,
+                      onClick: () => {
+                        setOpenActionMenuId(null);
+                        onDelete?.(fillUp.id);
+                      },
+                    },
+                  ]}
+                />
+              ),
+            },
+          ]}
+        />
       </div>
 
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pl-1">
-        <div className="text-xs text-[var(--color-text-secondary)] flex flex-col gap-1">
-          <span>
-            Showing <span className="text-[var(--color-text-primary)] font-medium">{paginatedFillUps.length}</span> of{' '}
-            <span className="text-[var(--color-text-primary)] font-medium">{filteredFillUps.length}</span> matching entries
-          </span>
+      <div className="pl-1">
+        <Pagination
+          page={Math.min(currentPage, Math.max(1, totalPages))}
+          totalPages={Math.max(1, totalPages)}
+          totalItems={filteredFillUps.length}
+          pageSize={itemsPerPage}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(pageSize) => {
+            setItemsPerPage(pageSize);
+            setCurrentPage(1);
+          }}
+        />
+        <div className="text-xs text-[var(--color-text-secondary)]">
           {filteredFillUps.length !== fillUps.length && (
             <div>
               <button
@@ -425,32 +459,6 @@ export default function FuelLog({ fillUps = [], onEdit, onDelete, onLogFillUp }:
             </div>
           )}
         </div>
-
-        {totalPages > 1 && (
-          <div className="flex items-center gap-3 self-end sm:self-center">
-            <button
-              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] disabled:opacity-20 disabled:hover:bg-[var(--color-input-bg)] cursor-pointer disabled:cursor-not-allowed transition"
-              aria-label="Previous Page"
-            >
-              &lt;
-            </button>
-
-            <span className="text-xs text-[var(--color-text-secondary)] select-none font-medium px-1">
-              Page {currentPage} of {totalPages || 1}
-            </span>
-
-            <button
-              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-              disabled={currentPage === totalPages || totalPages === 0}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] disabled:opacity-20 disabled:hover:bg-[var(--color-input-bg)] cursor-pointer disabled:cursor-not-allowed transition"
-              aria-label="Next Page"
-            >
-              &gt;
-            </button>
-          </div>
-        )}
       </div>
 
       {isViewOpen && selectedViewRecord && (

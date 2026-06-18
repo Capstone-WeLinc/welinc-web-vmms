@@ -70,7 +70,7 @@ export default function Dashboard() {
     <div className={containerClasses}>
       <PageHeader
         icon={LayoutDashboard}
-        title="Dashboard"
+        title="DASHBOARD"
         subtitle="Vehicle Maintenance Management Overview"
       />
 

@@ -491,10 +491,27 @@ export async function saveChecklistTemplates(
 
 export type CreateMaintenanceScheduleInput = Omit<MaintenanceTask, "id">;
 
-export async function getMaintenanceSchedules() {
-  if (!useBackend) return mockWorkOrders;
+export async function getMaintenanceSchedules(options?: { statuses?: string[] }) {
+  const allowedStatuses = options?.statuses?.map((status) => status.trim()).filter(Boolean);
 
-  return fetchJSON<MaintenanceTask[]>("/maintenance-schedules");
+  if (!useBackend) {
+    const schedules = mockWorkOrders;
+    return allowedStatuses?.length
+      ? schedules.filter((schedule) => allowedStatuses.includes(schedule.status))
+      : schedules;
+  }
+
+  const query =
+    allowedStatuses?.length
+      ? `?${new URLSearchParams(
+          allowedStatuses.map((status) => ["status", status]),
+        ).toString()}`
+      : "";
+
+  const schedules = await fetchJSON<MaintenanceTask[]>(`/maintenance-schedules${query}`);
+  return allowedStatuses?.length
+    ? schedules.filter((schedule) => allowedStatuses.includes(schedule.status))
+    : schedules;
 }
 
 export async function createMaintenanceSchedule(

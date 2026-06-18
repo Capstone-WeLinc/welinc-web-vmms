@@ -2,16 +2,22 @@ import { useEffect, useState, useRef } from "react";
 import {
   Wrench,
   FileDown,
-  CheckCircle,
   AlertTriangle,
   ChevronLeft,
-  Calendar as CalendarIcon,
-  Truck,
-  Search,
-  Filter,
+  CheckCircle2,
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
-import { Card } from "../../components/ui";
+import {
+  ActionButton,
+  ActionMenu,
+  ConfirmationModal,
+  DataTable,
+  FilterDropdown,
+  Pagination,
+  SearchInput,
+  StatusBadge,
+  ToastNotification,
+} from "../../components/ui";
 import {
   type MaintenanceTask,
   type MaintenanceStatus,
@@ -68,12 +74,20 @@ interface ExecutionRecord {
   attachments?: string[];
   remarks?: string;
   technicianSignature?: string;
+  laborCost?: string;
 }
 
 interface WorkOrderProgress {
   checklists: Record<string, ChecklistItem[]>;
   executions: Record<string, ExecutionRecord>;
 }
+
+type ToastState = {
+  type: "success" | "error" | "warning" | "info";
+  message: string;
+};
+
+type PendingWorkOrderAction = "executionComplete" | "inspectionComplete" | null;
 
 const progressStorageKey = "workOrderProgress";
 
@@ -107,25 +121,15 @@ const getTemplates = () => {
 
 // Layout & interaction classes
 const containerClasses = 'space-y-6';
-const listViewClasses = 'overflow-hidden';
 const headerSectionClasses = 'flex flex-col gap-4 border-b border-[var(--color-divider)] px-6 py-5 sm:flex-row sm:items-center sm:justify-between';
-const filtersGridClasses = 'grid gap-4 border-b border-[var(--color-divider)] px-6 py-5 md:grid-cols-4';
-const searchInputClasses = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-hidden';
-const selectInputClasses = 'w-full appearance-none rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-hidden';
-const taskGridClasses = 'grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-4';
-const taskCardClasses = 'group cursor-pointer rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card transition-all hover:-translate-y-1 hover:border-[var(--color-brand-primary)] hover:bg-[var(--color-card-bg-hover)] hover:shadow-[0_10px_28px_rgba(15,23,42,0.12)]';
-const emptyStateClasses = 'col-span-full rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-8 text-center shadow-card';
 const detailViewClasses = 'rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-xl backdrop-blur-sm transition-all';
 const backButtonClasses = 'mb-6 flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-brand-primary)]';
 const executionTableClasses = 'mb-6 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)]';
-const tableHeaderClasses = 'grid grid-cols-[1fr_80px_80px_100px_1.2fr_100px_100px_140px_100px] items-center gap-4 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-6 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]';
-const checklistHeaderClasses = 'grid grid-cols-[1fr_80px_80px_1fr_1fr_100px] items-center gap-4 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-6 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]';
+const tableHeaderClasses = 'grid grid-cols-[1fr_80px_80px_100px_1.2fr_100px] items-center gap-4 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-6 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]';
+const checklistHeaderClasses = 'grid grid-cols-[1fr_80px_80px_1fr_100px] items-center gap-4 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-6 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]';
 const warningBannerClasses = 'mt-6 flex items-start gap-3 rounded-lg border border-[var(--color-status-error)]/20 bg-[var(--color-status-error)]/10 px-5 py-4 shadow-[0_0_15px_rgba(239,68,68,0.06)]';
-const actionButtonClasses = 'no-print flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-5 py-2.5 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-brand-primary)]';
-const completeButtonClasses = 'no-print flex items-center gap-2 rounded-lg px-6 py-2.5 text-sm font-bold transition-all duration-300';
 
 export default function WorkOrders() {
-  const workOrdersPerPage = 8;
   const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
   const [selectedTask, setSelectedTask] = useState<MaintenanceTask | null>(
     null,
@@ -166,10 +170,31 @@ export default function WorkOrders() {
   );
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
+  const [showFilters, setShowFilters] = useState(false);
+  const [selectedStatusFilters, setSelectedStatusFilters] = useState<string[]>([]);
+  const [dateFromFilter, setDateFromFilter] = useState("");
+  const [dateToFilter, setDateToFilter] = useState("");
   const [sortField, setSortField] = useState<"date" | "workOrderId">("date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [currentPage, setCurrentPage] = useState(1);
+  const [workOrdersPerPage, setWorkOrdersPerPage] = useState(8);
+  const [workOrderStep, setWorkOrderStep] = useState(1);
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [pendingWorkOrderAction, setPendingWorkOrderAction] =
+    useState<PendingWorkOrderAction>(null);
+
+  useEffect(() => {
+    const closeActionMenu = () => setOpenActionMenuId(null);
+    document.addEventListener("click", closeActionMenu);
+    return () => document.removeEventListener("click", closeActionMenu);
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   const normalizeText = (value?: string | null) =>
     value?.trim().toLowerCase() ?? "";
@@ -201,8 +226,16 @@ export default function WorkOrders() {
       isAssignedToCurrentMechanic(task),
   );
 
-  if (statusFilter !== "All") {
-    activeTasks = activeTasks.filter((t) => t.status === statusFilter);
+  if (selectedStatusFilters.length > 0) {
+    activeTasks = activeTasks.filter((t) => selectedStatusFilters.includes(t.status));
+  }
+
+  if (dateFromFilter) {
+    activeTasks = activeTasks.filter((task) => task.date >= dateFromFilter);
+  }
+
+  if (dateToFilter) {
+    activeTasks = activeTasks.filter((task) => task.date <= dateToFilter);
   }
 
   if (searchQuery) {
@@ -242,6 +275,7 @@ export default function WorkOrders() {
 
   const handleSelectTask = (task: MaintenanceTask) => {
     setSelectedTask(task);
+    setWorkOrderStep(1);
     if (!checklists.has(task.id)) {
       setChecklists((prev) => {
         const next = new Map(prev);
@@ -287,6 +321,7 @@ export default function WorkOrders() {
           attachments: [],
           remarks: "",
           technicianSignature: "",
+          laborCost: "",
         });
         return next;
       });
@@ -315,6 +350,7 @@ export default function WorkOrders() {
         attachments: [],
         remarks: "",
         technicianSignature: "",
+        laborCost: "",
       }
     : { done: false, items: [] };
 
@@ -324,6 +360,7 @@ export default function WorkOrders() {
     (isPendingOdometerScheduleReadyForMechanic(selectedTask) &&
       isPendingTimeScheduleReadyForMechanic(selectedTask));
   const canModifySelectedTask =
+    isMechanic &&
     Boolean(selectedTask) &&
     selectedTask?.status !== "Completed" &&
     canMechanicStartTask;
@@ -501,6 +538,7 @@ export default function WorkOrders() {
             <td style="padding:8px;border:1px solid #e2e8f0">${(it.note || "").replace(/</g, "&lt;")}</td>
             <td style="padding:8px;border:1px solid #e2e8f0">${it.partsUsed || ""}</td>
             <td style="padding:8px;border:1px solid #e2e8f0;text-align:right">${it.partsCost || ""}</td>
+            <td style="padding:8px;border:1px solid #e2e8f0">${it.attachments?.join(", ") || ""}</td>
           </tr>`;
       })
       .join("");
@@ -573,6 +611,18 @@ export default function WorkOrders() {
           </div>
         `
       : "";
+    const costSummaryHtml = `
+      <div class="section">
+        <h2>Cost Summary</h2>
+        <table>
+          <tbody>
+            <tr><td style="font-weight:700">Labor Cost</td><td style="text-align:right">${formatCurrency(laborCostTotal)}</td></tr>
+            <tr><td style="font-weight:700">Material Cost</td><td style="text-align:right">${formatCurrency(materialCostTotal)}</td></tr>
+            <tr><td style="font-weight:700">Total Cost</td><td style="text-align:right;font-weight:700">${formatCurrency(workOrderCostTotal)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    `;
 
     const html = `<!doctype html>
       <html>
@@ -604,13 +654,15 @@ export default function WorkOrders() {
                   <th>Note</th>
                   <th>Parts Used</th>
                   <th style="text-align:right">Cost</th>
+                  <th>Photos / Attachments</th>
                 </tr>
               </thead>
               <tbody>
-                ${execRows || `<tr><td colspan=5 style="padding:12px;text-align:center;color:#64748b">No execution items</td></tr>`}
+                ${execRows || `<tr><td colspan=6 style="padding:12px;text-align:center;color:#64748b">No execution items</td></tr>`}
               </tbody>
             </table>
           </div>
+          ${costSummaryHtml}
 
           <div class="section">
             <h2>Inspection Checklist</h2>
@@ -626,6 +678,8 @@ export default function WorkOrders() {
                 ${checklistRows || `<tr><td colspan=3 style="padding:12px;text-align:center;color:#64748b">No checklist items</td></tr>`}
               </tbody>
             </table>
+            <p><strong>Inspector Remarks:</strong> ${currentExecution.remarks || ""}</p>
+            <p><strong>Approval / Verification:</strong> ${selectedTask.status}</p>
           </div>
         </body>
       </html>`;
@@ -658,6 +712,24 @@ export default function WorkOrders() {
     currentExecution.items.length > 0 &&
     executionPendingCount === 0 &&
     !!currentExecution.technicianSignature?.trim();
+  const parseCostValue = (value?: string) => {
+    if (!value) return 0;
+    const parsed = Number(value.replace(/[^\d.-]/g, ""));
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  const materialCostTotal = currentExecution.items.reduce(
+    (total, item) => total + parseCostValue(item.partsCost),
+    0,
+  );
+  const laborCostTotal = parseCostValue(currentExecution.laborCost);
+  const workOrderCostTotal = laborCostTotal + materialCostTotal;
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: "PHP",
+      maximumFractionDigits: 2,
+    }).format(value);
+  const workOrderStatusOptions = ["Pending", "In-Progress", "Flagged", "Overdue"];
 
   const updateExecutionItemStatus = (
     taskId: string,
@@ -874,6 +946,28 @@ export default function WorkOrders() {
     }
   };
 
+  const confirmWorkOrderAction = () => {
+    if (!selectedTask) return;
+
+    if (pendingWorkOrderAction === "executionComplete") {
+      setExecutionDone(selectedTask.id, true);
+      setToast({
+        type: "success",
+        message: "Execution checklist completed successfully.",
+      });
+    }
+
+    if (pendingWorkOrderAction === "inspectionComplete") {
+      handleMarkComplete();
+      setToast({
+        type: "success",
+        message: "Work order completed successfully.",
+      });
+    }
+
+    setPendingWorkOrderAction(null);
+  };
+
   const updateExecutionField = (
     taskId: string,
     field: keyof Omit<ExecutionRecord, "done" | "items">,
@@ -889,6 +983,7 @@ export default function WorkOrders() {
         attachments: [],
         remarks: "",
         technicianSignature: "",
+        laborCost: "",
       };
       // assign explicitly to avoid unsafe any usage
       if (field === "attachments") {
@@ -897,6 +992,8 @@ export default function WorkOrders() {
         (cur as ExecutionRecord).remarks = value as string;
       } else if (field === "technicianSignature") {
         (cur as ExecutionRecord).technicianSignature = value as string;
+      } else if (field === "laborCost") {
+        (cur as ExecutionRecord).laborCost = value as string;
       }
       next.set(taskId, cur);
       return next;
@@ -905,14 +1002,18 @@ export default function WorkOrders() {
 
   return (
     <div className={containerClasses}>
+      <div className="fixed right-6 top-6 z-50 flex w-[340px] max-w-[calc(100vw-2rem)] flex-col gap-3">
+        {toast && <ToastNotification type={toast.type} message={toast.message} />}
+      </div>
+
       <PageHeader
         icon={Wrench}
-        title="Work Orders"
+        title="WORK ORDERS"
         subtitle="Complete your assigned tasks and vehicle checklists"
       />
 
       {!selectedTask ? (
-        <Card padding="none" className={listViewClasses}>
+        <section className="overflow-visible">
           <div className={headerSectionClasses}>
             <div>
               <h2 className="text-lg font-bold text-[var(--color-text-primary)]">
@@ -924,227 +1025,170 @@ export default function WorkOrders() {
             </div>
           </div>
 
-          <div className={filtersGridClasses}>
-            <div className="relative col-span-2 md:col-span-2">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" />
-              <input
-                type="text"
+          <div className="flex flex-col gap-4 border-b border-[var(--color-divider)] px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+            <SearchInput
+              className="w-full max-w-xl"
                 placeholder="Search vehicle, task, or mechanic..."
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
                   setCurrentPage(1);
                 }}
-                className={searchInputClasses}
+              />
+            <div className="flex flex-wrap items-center gap-3">
+              <FilterDropdown
+                open={showFilters}
+                onToggle={() => setShowFilters((current) => !current)}
+                statuses={workOrderStatusOptions}
+                selectedStatuses={selectedStatusFilters}
+                onStatusChange={(statuses) => {
+                  setSelectedStatusFilters(statuses);
+                  setCurrentPage(1);
+                }}
+                dateFrom={dateFromFilter}
+                dateTo={dateToFilter}
+                onDateFromChange={(value) => {
+                  setDateFromFilter(value);
+                  setCurrentPage(1);
+                }}
+                onDateToChange={(value) => {
+                  setDateToFilter(value);
+                  setCurrentPage(1);
+                }}
+                onApply={() => setShowFilters(false)}
+                onClear={() => {
+                  setSelectedStatusFilters([]);
+                  setDateFromFilter("");
+                  setDateToFilter("");
+                  setSortField("date");
+                  setSortDirection("desc");
+                  setCurrentPage(1);
+                }}
+              >
+                <label className="block">
+                  <span className="text-sm font-semibold uppercase text-black">
+                    Sort By
+                  </span>
+                  <select
+                    value={`${sortField}-${sortDirection}`}
+                    onChange={(e) => {
+                      const [field, direction] = e.target.value.split("-") as [
+                        "date" | "workOrderId",
+                        "asc" | "desc",
+                      ];
+                      setSortField(field);
+                      setSortDirection(direction);
+                      setCurrentPage(1);
+                    }}
+                    className="mt-2 h-10 w-full rounded-lg border border-[#cbd3df] bg-white px-3 text-sm font-semibold text-[#141827] outline-none transition focus:border-[#070b45] focus:ring-2 focus:ring-[#070b45]/10"
+                  >
+                    <option value="date-asc">
+                      {"Date - Ascending"}
+                    </option>
+                    <option value="date-desc">
+                      {"Date - Descending"}
+                    </option>
+                    <option value="workOrderId-asc">
+                      {"Work Order ID - Ascending"}
+                    </option>
+                    <option value="workOrderId-desc">
+                      {"Work Order ID - Descending"}
+                    </option>
+                  </select>
+                </label>
+              </FilterDropdown>
+            </div>
+          </div>
+
+          <DataTable
+            data={paginatedTasks}
+            getRowKey={(task) => task.id}
+            minWidth="1080px"
+            emptyMessage="No active work orders found."
+            onRowClick={handleSelectTask}
+            columns={[
+              {
+                key: "workOrder",
+                header: "Work Order NO.",
+                width: "13%",
+                render: (task) => formatWorkOrderNumber(task.id),
+              },
+              {
+                key: "plate no",
+                header: "Plate No.",
+                width: "12%",
+                render: (task) => task.vehicleId,
+              },
+              {
+                key: "type",
+                header: "Maintenance Type",
+                width: "18%",
+                render: (task) => task.title,
+              },
+              {
+                key: "mechanic",
+                header: "Mechanic",
+                width: "16%",
+                render: (task) => task.assignedDriver,
+              },
+              {
+                key: "created",
+                header: "Date Created",
+                width: "12%",
+                render: (task) => task.startReferenceDate || task.date,
+              },
+              {
+                key: "assigned",
+                header: "Assigned Date",
+                width: "12%",
+                render: (task) => task.date,
+              },
+              {
+                key: "status",
+                header: "Status",
+                width: "11%",
+                render: (task) => <StatusBadge status={task.status} />,
+              },
+              {
+                key: "actions",
+                header: "Actions",
+                width: "8%",
+                align: "center",
+                render: (task) => (
+                  <ActionMenu
+                    open={openActionMenuId === task.id}
+                    onToggle={(event) => {
+                      event.stopPropagation();
+                      setOpenActionMenuId((current) =>
+                        current === task.id ? null : task.id,
+                      );
+                    }}
+                    onView={() => {
+                      setOpenActionMenuId(null);
+                      handleSelectTask(task);
+                    }}
+                  />
+                ),
+              },
+            ]}
+          />
+          {activeTasks.length > 0 ? (
+            <div className="px-6">
+              <Pagination
+                page={activePage}
+                totalPages={totalPages}
+                totalItems={activeTasks.length}
+                pageSize={workOrdersPerPage}
+                pageSizeOptions={[5, 8, 10, 15, 20]}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={(pageSize) => {
+                  setWorkOrdersPerPage(pageSize);
+                  setCurrentPage(1);
+                }}
               />
             </div>
-
-            <div className="relative">
-              <Filter className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" />
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className={selectInputClasses}
-              >
-                <option value="All" className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]">
-                  {"All Statuses"}
-                </option>
-                <option value="Pending" className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]">
-                  {"Pending"}
-                </option>
-                <option
-                  value="In-Progress"
-                  className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]"
-                >
-                  {"In-Progress"}
-                </option>
-                <option value="Flagged" className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]">
-                  {"Flagged"}
-                </option>
-                <option value="Overdue" className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]">
-                  {"Overdue"}
-                </option>
-              </select>
-            </div>
-
-            <div className="relative">
-              <Filter className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" />
-              <select
-                value={`${sortField}-${sortDirection}`}
-                onChange={(e) => {
-                  const [field, direction] = e.target.value.split("-") as [
-                    "date" | "workOrderId",
-                    "asc" | "desc",
-                  ];
-                  setSortField(field);
-                  setSortDirection(direction);
-                  setCurrentPage(1);
-                }}
-                className={selectInputClasses}
-              >
-                <option value="date-asc" className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]">
-                  {"Date - Ascending"}
-                </option>
-                <option value="date-desc" className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]">
-                  {"Date - Descending"}
-                </option>
-                <option value="workOrderId-asc" className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]">
-                  {"Work Order ID - Ascending"}
-                </option>
-                <option value="workOrderId-desc" className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]">
-                  {"Work Order ID - Descending"}
-                </option>
-              </select>
-            </div>
-          </div>
-
-          <div className={taskGridClasses}>
-            {paginatedTasks.map((task) => (
-              <div
-                key={task.id}
-                onClick={() => handleSelectTask(task)}
-                className={taskCardClasses}
-              >
-                {(() => {
-                  const isWaitingForOdometerStage =
-                    isMechanic &&
-                    !isPendingOdometerScheduleReadyForMechanic(task);
-                  const isWaitingForTimeStage =
-                    isMechanic &&
-                    !isPendingTimeScheduleReadyForMechanic(task);
-
-                  return (
-                    <>
-                <div className="mb-4 flex items-center justify-between">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex rounded-full border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
-                      {formatWorkOrderNumber(task.id)}
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
-                      <Truck size={14} />
-                      {task.vehicleId}
-                    </span>
-                  </div>
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                      task.status === "Overdue"
-                        ? "bg-[var(--color-status-error)]/10 text-[#c41c3b] border border-[var(--color-status-error)]/30"
-                        : task.status === "Flagged"
-                          ? "bg-[var(--color-status-warning)]/10 text-[#92400e] border border-[var(--color-status-warning)]/30"
-                          : task.status === "In-Progress"
-                            ? "bg-[var(--color-status-success)]/10 text-[#047857] border border-[var(--color-status-success)]/30"
-                            : "bg-[var(--color-status-info)]/10 text-[#0369a1] border border-[var(--color-status-info)]/30"
-                    }`}
-                  >
-                    {task.status}
-                  </span>
-                </div>
-
-                <h3 className="mb-2 text-lg font-bold text-[var(--color-text-primary)] transition-colors group-hover:text-[var(--color-brand-primary)]">
-                  {task.title}
-                </h3>
-                {isWaitingForOdometerStage && (
-                  <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-700">
-                    Waiting for odometer stage
-                  </div>
-                )}
-                {isWaitingForTimeStage && (
-                  <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-700">
-                    Waiting for time interval
-                  </div>
-                )}
-                {task.triggerType && (
-                  <p className="mb-2 text-sm text-[var(--color-text-secondary)]">
-                    Trigger: {formatTriggerType(task.triggerType)}
-                  </p>
-                )}
-                <p className="mb-4 text-sm text-[var(--color-text-secondary)] line-clamp-2">
-                  {task.notes}
-                </p>
-
-                <div className="flex items-center justify-between border-t border-[var(--color-divider)] pt-4 text-xs text-[var(--color-text-secondary)]">
-                  <div className="flex items-center gap-1.5">
-                    <CalendarIcon size={14} />
-                    {task.date}
-                  </div>
-                  <div>
-                    {"Mechanic"}:{" "}
-                    <span className="font-medium text-[var(--color-text-primary)]">
-                      {task.assignedDriver}
-                    </span>
-                  </div>
-                </div>
-                    </>
-                  );
-                })()}
-              </div>
-            ))}
-
-            {activeTasks.length === 0 && (
-              <div className={emptyStateClasses}>
-                <CheckCircle className="mx-auto mb-3 h-12 w-12 text-[var(--color-brand-primary)]/50" />
-                <h3 className="text-lg font-medium text-[var(--color-text-primary)]">
-                  {"No active work orders"}
-                </h3>
-                <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                  {"You're all caught up!"}
-                </p>
-              </div>
-            )}
-          </div>
-          {activeTasks.length > 0 ? (
-            <div className="flex flex-col gap-3 border-t border-[var(--color-border)] px-6 py-3 text-sm text-[var(--color-text-secondary)] sm:flex-row sm:items-center sm:justify-between">
-              <span>
-                Showing {paginatedTasks.length} of {activeTasks.length} work orders
-              </span>
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage(Math.max(1, activePage - 1))}
-                  disabled={activePage === 1}
-                  className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Previous
-                </button>
-                <span>Page {activePage} of {totalPages}</span>
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage(Math.min(totalPages, activePage + 1))}
-                  disabled={activePage === totalPages}
-                  className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Next
-                </button>
-                {totalPages >= 20 ? (
-                  <label className="flex items-center gap-2">
-                    <span>Go to</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={totalPages}
-                      placeholder={String(activePage)}
-                      aria-label="Go to work orders page"
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter") return;
-                        if (!event.currentTarget.value.trim()) return;
-                        const requestedPage = Number(event.currentTarget.value);
-                        if (!Number.isFinite(requestedPage)) return;
-                        setCurrentPage(
-                          Math.min(totalPages, Math.max(1, Math.trunc(requestedPage))),
-                        );
-                        event.currentTarget.value = "";
-                      }}
-                      className="w-16 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2 py-1.5 text-center text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
-                    />
-                  </label>
-                ) : null}
-              </div>
-            </div>
           ) : null}
-        </Card>
+        </section>
       ) : (
         <div
           ref={detailRef}
@@ -1152,14 +1196,60 @@ export default function WorkOrders() {
         >
           {/* Back Button */}
           <button
-            onClick={() => setSelectedTask(null)}
+            onClick={() => {
+              setSelectedTask(null);
+              setWorkOrderStep(1);
+            }}
             className={backButtonClasses}
           >
             <ChevronLeft size={16} />
             Back to Assigned Orders
           </button>
 
-          {renderScheduleDetails(selectedTask)}
+          {!isMechanic && (
+            <div className="mb-6 flex justify-end">
+              <ActionButton
+                onClick={exportPdf}
+                variant="primary"
+              >
+                <FileDown size={18} />
+                Export to PDF
+              </ActionButton>
+            </div>
+          )}
+
+          <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-[#070b45] bg-[#eef2ff] px-4 py-3 text-[#070b45]">
+            <CheckCircle2 className="h-5 w-5" />
+            <span className="text-sm font-bold uppercase tracking-wide">
+              Using Template
+            </span>
+            <span className="text-sm font-semibold">{selectedTask.title}</span>
+          </div>
+
+          {isMechanic && (
+            <div className="mb-6 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-1">
+              {[
+                { step: 1, label: "Details + Execution" },
+                { step: 2, label: "Parts, Cost + Photos" },
+                { step: 3, label: "Inspection" },
+              ].map((item) => (
+                <button
+                  key={item.step}
+                  type="button"
+                  onClick={() => setWorkOrderStep(item.step)}
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                    workOrderStep === item.step
+                      ? "bg-[var(--color-brand-primary)] text-white shadow-card"
+                      : "text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)]"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {(!isMechanic || workOrderStep === 1) && renderScheduleDetails(selectedTask)}
 
           {!canMechanicStartTask && (
             <div className="mb-6 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-4 shadow-card">
@@ -1179,7 +1269,7 @@ export default function WorkOrders() {
           )}
 
           {/* Execution Checklist - same format as inspection checklist */}
-          {selectedTask && (
+          {selectedTask && (!isMechanic || workOrderStep === 1) && (
             <>
               <div
                 className={`mb-4 overflow-hidden rounded-xl px-6 py-4 ${
@@ -1224,16 +1314,13 @@ export default function WorkOrders() {
                       <div className="text-center">Changed</div>
                       <div className="text-center">Not Checked</div>
                       <div>Note</div>
-                      <div>Parts Used</div>
-                      <div>Cost</div>
-                      <div>Photos</div>
                       <div className="text-center">Status</div>
                     </div>
                     <div className="divide-y divide-[var(--color-divider)]">
                       {currentExecution.items.map((item) => (
                         <div
                           key={item.id}
-                          className={`grid grid-cols-[1fr_80px_80px_100px_1.2fr_100px_100px_140px_100px] items-center gap-4 px-6 py-4 transition-colors duration-200 ${
+                          className={`grid grid-cols-[1fr_80px_80px_100px_1.2fr_100px] items-center gap-4 px-6 py-4 transition-colors duration-200 ${
                             item.status === "notChecked"
                               ? "bg-amber-500/10"
                               : item.status === "changed"
@@ -1249,7 +1336,7 @@ export default function WorkOrders() {
 
                           <div className="flex justify-center">
                             <button
-                              disabled={currentExecution.done || !canMechanicStartTask}
+                              disabled={!canModifySelectedTask || currentExecution.done || !canMechanicStartTask}
                               onClick={() =>
                                 updateExecutionItemStatus(
                                   selectedTask.id,
@@ -1261,7 +1348,7 @@ export default function WorkOrders() {
                                 item.status === "checked"
                                   ? "border-emerald-400 bg-emerald-400/20"
                                   : "border-[var(--color-border)] hover:border-emerald-500/60"
-                              } ${currentExecution.done || !canMechanicStartTask ? "cursor-not-allowed opacity-60" : ""}`}
+                              } ${!canModifySelectedTask || currentExecution.done || !canMechanicStartTask ? "cursor-not-allowed opacity-60" : ""}`}
                             >
                               {item.status === "checked" && (
                                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
@@ -1271,7 +1358,7 @@ export default function WorkOrders() {
 
                           <div className="flex justify-center">
                             <button
-                              disabled={currentExecution.done || !canMechanicStartTask}
+                              disabled={!canModifySelectedTask || currentExecution.done || !canMechanicStartTask}
                               onClick={() =>
                                 updateExecutionItemStatus(
                                   selectedTask.id,
@@ -1283,7 +1370,7 @@ export default function WorkOrders() {
                                 item.status === "changed"
                                   ? "border-sky-400 bg-sky-400/20"
                                   : "border-[var(--color-border)] hover:border-sky-500/60"
-                              } ${currentExecution.done || !canMechanicStartTask ? "cursor-not-allowed opacity-60" : ""}`}
+                              } ${!canModifySelectedTask || currentExecution.done || !canMechanicStartTask ? "cursor-not-allowed opacity-60" : ""}`}
                             >
                               {item.status === "changed" && (
                                 <span className="h-2.5 w-2.5 rounded-full bg-sky-400" />
@@ -1293,7 +1380,7 @@ export default function WorkOrders() {
 
                           <div className="flex justify-center">
                             <button
-                              disabled={currentExecution.done || !canMechanicStartTask}
+                              disabled={!canModifySelectedTask || currentExecution.done || !canMechanicStartTask}
                               onClick={() =>
                                 updateExecutionItemStatus(
                                   selectedTask.id,
@@ -1305,7 +1392,7 @@ export default function WorkOrders() {
                                 item.status === "notChecked"
                                   ? "border-amber-400 bg-amber-400/20"
                                   : "border-[var(--color-border)] hover:border-amber-500/60"
-                              } ${currentExecution.done || !canMechanicStartTask ? "cursor-not-allowed opacity-60" : ""}`}
+                              } ${!canModifySelectedTask || currentExecution.done || !canMechanicStartTask ? "cursor-not-allowed opacity-60" : ""}`}
                             >
                               {item.status === "notChecked" && (
                                 <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
@@ -1317,7 +1404,7 @@ export default function WorkOrders() {
                             <input
                               type="text"
                               value={item.note}
-                              disabled={currentExecution.done || !canMechanicStartTask}
+                              disabled={!canModifySelectedTask || currentExecution.done || !canMechanicStartTask}
                               onChange={(e) =>
                                 updateExecutionItemNote(
                                   selectedTask.id,
@@ -1326,84 +1413,8 @@ export default function WorkOrders() {
                                 )
                               }
                               placeholder="Add note"
-                              className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-1.5 text-sm outline-none transition-colors focus:border-[var(--color-brand-primary)] focus:bg-[var(--color-input-bg-hover)] text-[var(--color-text-primary)] ${currentExecution.done || !canMechanicStartTask ? "opacity-70" : ""}`}
+                              className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-1.5 text-sm outline-none transition-colors focus:border-[var(--color-brand-primary)] focus:bg-[var(--color-input-bg-hover)] text-[var(--color-text-primary)] ${!canModifySelectedTask || currentExecution.done || !canMechanicStartTask ? "opacity-70" : ""}`}
                             />
-                          </div>
-
-                          <div>
-                            {item.status === "changed" ? (
-                              <input
-                                type="text"
-                                value={item.partsUsed || ""}
-                                disabled={currentExecution.done || !canMechanicStartTask}
-                                onChange={(e) =>
-                                  updateExecutionItemField(
-                                    selectedTask.id,
-                                    item.id,
-                                    "partsUsed",
-                                    e.target.value,
-                                  )
-                                }
-                                placeholder="Part(s) used"
-                                className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-1.5 text-sm outline-none transition-colors focus:border-[var(--color-brand-primary)] focus:bg-[var(--color-input-bg-hover)] text-[var(--color-text-primary)] ${currentExecution.done || !canMechanicStartTask ? "opacity-70" : ""}`}
-                              />
-                            ) : (
-                              <span className="text-[var(--color-text-secondary)]">-</span>
-                            )}
-                          </div>
-
-                          <div>
-                            {item.status === "changed" ? (
-                              <input
-                                type="text"
-                                value={item.partsCost || ""}
-                                disabled={currentExecution.done || !canMechanicStartTask}
-                                onChange={(e) =>
-                                  updateExecutionItemField(
-                                    selectedTask.id,
-                                    item.id,
-                                    "partsCost",
-                                    e.target.value,
-                                  )
-                                }
-                                placeholder="Cost"
-                                className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-1.5 text-sm outline-none transition-colors focus:border-[var(--color-brand-primary)] focus:bg-[var(--color-input-bg-hover)] text-[var(--color-text-primary)] ${currentExecution.done || !canMechanicStartTask ? "opacity-70" : ""}`}
-                              />
-                            ) : (
-                              <span className="text-[var(--color-text-secondary)]">-</span>
-                            )}
-                          </div>
-
-                          <div>
-                            {item.status === "changed" ? (
-                              <div className="space-y-2">
-                                <label className="sr-only">
-                                  Upload images for {item.text}
-                                </label>
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  multiple
-                                  disabled={currentExecution.done || !canMechanicStartTask}
-                                  onChange={(e) =>
-                                    updateExecutionItemAttachments(
-                                      selectedTask.id,
-                                      item.id,
-                                      e.target.files,
-                                    )
-                                  }
-                                  className={`w-full text-xs text-[var(--color-text-secondary)] ${currentExecution.done || !canMechanicStartTask ? "opacity-60 cursor-not-allowed" : ""}`}
-                                />
-                                {item.attachments &&
-                                  item.attachments.length > 0 && (
-                                    <div className="text-xs text-[var(--color-text-secondary)]">
-                                      {item.attachments.join(", ")}
-                                    </div>
-                                  )}
-                              </div>
-                            ) : (
-                              <span className="text-[var(--color-text-secondary)]">-</span>
-                            )}
                           </div>
 
                           <div className="flex justify-center">
@@ -1440,7 +1451,7 @@ export default function WorkOrders() {
                         <input
                           type="text"
                           value={currentExecution.technicianSignature || ""}
-                          disabled={currentExecution.done || !canMechanicStartTask}
+                          disabled={!canModifySelectedTask || currentExecution.done || !canMechanicStartTask}
                           onChange={(e) =>
                             updateExecutionField(
                               selectedTask.id,
@@ -1448,13 +1459,13 @@ export default function WorkOrders() {
                               e.target.value,
                             )
                           }
-                          className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] ${currentExecution.done || !canMechanicStartTask ? "opacity-70" : ""}`}
+                          className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] ${!canModifySelectedTask || currentExecution.done || !canMechanicStartTask ? "opacity-70" : ""}`}
                           placeholder="Chief Mechanic name"
                         />
                       </div>
                     </div>
 
-                    {canMechanicStartTask && !canCompleteExecution && !currentExecution.done && (
+                    {isMechanic && canMechanicStartTask && !canCompleteExecution && !currentExecution.done && (
                       <div className="mt-6 flex items-start gap-3 rounded-lg border border-rose-500/20 bg-rose-500/10 px-5 py-4 shadow-[0_0_15px_rgba(244,63,94,0.1)]">
                         <AlertTriangle
                           className="mt-0.5 text-rose-400"
@@ -1479,31 +1490,164 @@ export default function WorkOrders() {
                     {/* Execution actions moved below the table to match inspection checklist */}
                   </div>
                   {/* Execution actions */}
-                  {!currentExecution.done ? (
+                  {isMechanic && !currentExecution.done ? (
                     <div className="mt-4 border-t border-[var(--color-divider)] px-6 py-4">
-                      <button
-                        className={`no-print w-full rounded-lg px-4 py-3 text-sm font-medium transition ${
-                          canCompleteExecution && canMechanicStartTask
-                            ? "bg-[var(--color-brand-primary)] text-white hover:bg-[var(--color-brand-dark)]"
-                            : "bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] cursor-not-allowed"
-                        }`}
+                      <ActionButton
+                        className="w-full"
+                        variant="primary"
                         disabled={!canCompleteExecution || !canMechanicStartTask}
-                        onClick={() => setExecutionDone(selectedTask.id, true)}
+                        onClick={() => setPendingWorkOrderAction("executionComplete")}
                       >
                         Mark Execution Complete
-                      </button>
+                      </ActionButton>
                     </div>
-                  ) : (
+                  ) : isMechanic ? (
                     <div className="mt-4 border-t border-[var(--color-divider)] px-6 py-4">
                       <p className="text-sm text-emerald-700">
                         Execution checklist completed. The section remains visible for review until the work order is fully closed.
                       </p>
                     </div>
-                  )}
+                  ) : null}
             </>
           )}
 
+          {selectedTask && (!isMechanic || workOrderStep === 2) && (
+            <div className="mb-6 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card">
+              <div className="border-b border-[var(--color-divider)] px-6 py-4">
+                <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
+                  Parts Used, Cost, and Photos
+                </h3>
+                <p className="text-sm text-[var(--color-text-secondary)]">
+                  Labor, materials, uploads, and supporting documentation for this work order.
+                </p>
+              </div>
+
+              <div className="divide-y divide-[var(--color-divider)]">
+                {currentExecution.items.map((item) => (
+                  <div key={item.id} className="grid gap-4 px-6 py-4 lg:grid-cols-[1.2fr_1fr_160px_1.2fr]">
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                        {item.text}
+                      </p>
+                      <p className="mt-1 text-xs uppercase tracking-wider text-[var(--color-text-secondary)]">
+                        {item.status === "changed" ? "Changed item" : "No part change recorded"}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-[var(--color-text-secondary)]">
+                        Parts Used
+                      </label>
+                      <input
+                        type="text"
+                        value={item.partsUsed || ""}
+                        disabled={!canModifySelectedTask || currentExecution.done || item.status !== "changed"}
+                        onChange={(event) =>
+                          updateExecutionItemField(
+                            selectedTask.id,
+                            item.id,
+                            "partsUsed",
+                            event.target.value,
+                          )
+                        }
+                        placeholder={item.status === "changed" ? "Part(s) used" : "Not applicable"}
+                        className={`mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)] ${!canModifySelectedTask || currentExecution.done || item.status !== "changed" ? "cursor-not-allowed opacity-70" : ""}`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-[var(--color-text-secondary)]">
+                        Material Cost
+                      </label>
+                      <input
+                        type="text"
+                        value={item.partsCost || ""}
+                        disabled={!canModifySelectedTask || currentExecution.done || item.status !== "changed"}
+                        onChange={(event) =>
+                          updateExecutionItemField(
+                            selectedTask.id,
+                            item.id,
+                            "partsCost",
+                            event.target.value,
+                          )
+                        }
+                        placeholder="0.00"
+                        className={`mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)] ${!canModifySelectedTask || currentExecution.done || item.status !== "changed" ? "cursor-not-allowed opacity-70" : ""}`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-[var(--color-text-secondary)]">
+                        Photos / Attachments
+                      </label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        disabled={!canModifySelectedTask || currentExecution.done || item.status !== "changed"}
+                        onChange={(event) =>
+                          updateExecutionItemAttachments(
+                            selectedTask.id,
+                            item.id,
+                            event.target.files,
+                          )
+                        }
+                        className={`mt-1 w-full text-xs text-[var(--color-text-secondary)] ${!canModifySelectedTask || currentExecution.done || item.status !== "changed" ? "cursor-not-allowed opacity-60" : ""}`}
+                      />
+                      {item.attachments && item.attachments.length > 0 ? (
+                        <div className="mt-2 text-xs text-[var(--color-text-secondary)]">
+                          {item.attachments.join(", ")}
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-xs text-[var(--color-text-secondary)]">
+                          No supporting documentation uploaded.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid gap-3 border-t border-[var(--color-divider)] bg-[var(--color-input-bg)] px-6 py-4 md:grid-cols-3">
+                <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                    Labor Cost
+                  </p>
+                  <input
+                    type="text"
+                    value={currentExecution.laborCost || ""}
+                    disabled={!canModifySelectedTask || currentExecution.done}
+                    onChange={(event) =>
+                      updateExecutionField(
+                        selectedTask.id,
+                        "laborCost",
+                        event.target.value,
+                      )
+                    }
+                    placeholder="0.00"
+                    className={`mt-2 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm font-semibold text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)] ${!canModifySelectedTask || currentExecution.done ? "cursor-not-allowed opacity-70" : ""}`}
+                  />
+                </div>
+                <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                    Material Cost
+                  </p>
+                  <p className="mt-2 text-lg font-bold text-[var(--color-text-primary)]">
+                    {formatCurrency(materialCostTotal)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                    Total Cost
+                  </p>
+                  <p className="mt-2 text-lg font-bold text-[var(--color-text-primary)]">
+                    {formatCurrency(workOrderCostTotal)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Checklist Table - gated by execution */}
+          {(!isMechanic || workOrderStep === 3) && (
+            <>
           <div
             className={`mb-4 rounded-xl px-6 py-4 ${
               currentExecution.done
@@ -1525,27 +1669,30 @@ export default function WorkOrders() {
                 >
                   {!canMechanicStartTask
                     ? "Locked"
-                    : currentExecution.done
+                    : !isMechanic
+                      ? "Review"
+                      : currentExecution.done
                       ? "Enabled"
                       : "Disabled"}
                 </span>
               </div>
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)]">
-              {canMechanicStartTask
+              {!isMechanic
+                ? "Review inspection results and remarks in read-only mode."
+                : canMechanicStartTask
                 ? "Complete the inspection for each item after execution is finished."
                 : "This checklist is read-only until the schedule reaches its active stage."}
             </p>
           </div>
           <div
-            className={`overflow-auto overscroll-contain rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] lg:max-h-[min(40rem,calc(100vh-12rem))] ${!currentExecution.done || !canMechanicStartTask ? "opacity-60 pointer-events-none" : ""}`}
+            className={`overflow-auto overscroll-contain rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] lg:max-h-[min(40rem,calc(100vh-12rem))] ${isMechanic && (!currentExecution.done || !canMechanicStartTask) ? "opacity-60 pointer-events-none" : ""}`}
           >
             <div className={checklistHeaderClasses}>
               <div>{"Checklist Item"}</div>
               <div className="text-center">{"Pass"}</div>
               <div className="text-center">{"Fail"}</div>
               <div>{"Note"}</div>
-              <div>{"Parts Used"}</div>
               <div className="text-center">{"Status"}</div>
             </div>
 
@@ -1553,12 +1700,11 @@ export default function WorkOrders() {
               {currentChecklist.map((item) => {
                 const executionData = getExecutionItemData(item.id);
                 const displayNote = item.note || (currentExecution.done ? executionData?.note || "" : "");
-                const displayPartsUsed = item.partsUsed || (currentExecution.done && executionData?.status === "changed" ? executionData?.partsUsed || "" : "");
                 
                 return (
                 <div
                   key={item.id}
-                  className={`grid grid-cols-[1fr_80px_80px_1fr_1fr_100px] items-center gap-4 px-6 py-4 transition-colors duration-200 ${
+                  className={`grid grid-cols-[1fr_80px_80px_1fr_100px] items-center gap-4 px-6 py-4 transition-colors duration-200 ${
                     item.status === "fail"
                       ? "bg-rose-500/10"
                       : "hover:bg-[var(--color-card-bg)]/80"
@@ -1608,7 +1754,7 @@ export default function WorkOrders() {
                       onChange={(e) =>
                         handleNoteChange(item.id, e.target.value)
                       }
-                      placeholder={displayPartsUsed ? `Parts used: ${displayPartsUsed} | Add inspection note` : "Add note"}
+                      placeholder="Add inspection note"
                       className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-1.5 text-sm outline-none transition-colors focus:border-[var(--color-brand-primary)] focus:bg-[var(--color-input-bg-hover)] ${
                         item.status === "fail"
                           ? "text-rose-700 placeholder:text-rose-500/60"
@@ -1620,10 +1766,6 @@ export default function WorkOrders() {
                         ⚠️ Recommended for repair
                       </span>
                     )}
-                  </div>
-
-                  <div className="text-sm text-[var(--color-text-secondary)]">
-                    {displayPartsUsed || "-"}
                   </div>
 
                   <div className="flex justify-center">
@@ -1649,8 +1791,55 @@ export default function WorkOrders() {
             </div>
           </div>
 
+          <div className="mt-4 grid gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 md:grid-cols-2">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                Inspector Remarks
+              </label>
+              <textarea
+                value={currentExecution.remarks || ""}
+                disabled={!canModifySelectedTask}
+                onChange={(event) =>
+                  updateExecutionField(
+                    selectedTask.id,
+                    "remarks",
+                    event.target.value,
+                  )
+                }
+                placeholder="Add inspection remarks"
+                className={`mt-2 min-h-24 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)] ${!canModifySelectedTask ? "cursor-not-allowed opacity-70" : ""}`}
+              />
+            </div>
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                  Inspection Results
+                </p>
+                <p className="mt-2 text-sm font-semibold text-[var(--color-text-primary)]">
+                  {failedCount > 0
+                    ? `${failedCount} item(s) flagged for verification`
+                    : pendingCount > 0
+                      ? `${pendingCount} item(s) pending`
+                      : "Inspection passed"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                  Approval / Verification
+                </p>
+                <p className="mt-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm font-semibold text-[var(--color-text-primary)]">
+                  {selectedTask.status === "Completed"
+                    ? "Verified and completed"
+                    : canComplete
+                      ? "Ready for completion"
+                      : "Pending verification"}
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Warning Banner */}
-          {showCannotCompleteWarning && (
+          {isMechanic && workOrderStep === 3 && showCannotCompleteWarning && (
             <div className={warningBannerClasses}>
               <AlertTriangle className="mt-0.5 text-rose-400" size={20} />
               <div>
@@ -1666,47 +1855,69 @@ export default function WorkOrders() {
             </div>
           )}
 
-          {failedCount > 0 && canComplete && (
+          {isMechanic && workOrderStep === 3 && failedCount > 0 && canComplete && (
             <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-700 shadow-card">
               {`${failedCount} item(s) failed. You can still mark the inspection complete.`}
             </div>
           )}
+            </>
+          )}
 
-          {/* Actions */}
-          <div className="mt-8 flex items-center justify-between border-t border-[var(--color-divider)] pt-6">
-            <button
-              onClick={exportPdf}
-              className={actionButtonClasses}
-            >
-              <FileDown size={18} />
-              Export as PDF
-            </button>
+          {isMechanic && (
+            <div className="mt-8 flex flex-col gap-3 border-t border-[var(--color-divider)] pt-6 sm:flex-row sm:items-center sm:justify-between">
+              <ActionButton
+                type="button"
+                onClick={() => setWorkOrderStep((step) => Math.max(1, step - 1))}
+                disabled={workOrderStep === 1}
+                variant="secondary"
+              >
+                Previous
+              </ActionButton>
 
-            {selectedTask?.status === "Completed" ? (
-              <div className="flex items-center gap-3">
+              <span className="text-sm font-semibold text-[var(--color-text-secondary)]">
+                Page {workOrderStep} of 3
+              </span>
+
+              {workOrderStep < 3 ? (
+                <ActionButton
+                  type="button"
+                  onClick={() => setWorkOrderStep((step) => Math.min(3, step + 1))}
+                  variant="primary"
+                >
+                  Next
+                </ActionButton>
+              ) : selectedTask?.status === "Completed" ? (
                 <button
                   className="no-print flex items-center gap-2 rounded-lg bg-emerald-500 px-6 py-2.5 text-sm font-bold text-white shadow-[0_0_10px_rgba(52,211,153,0.12)]"
                   disabled
                 >
                   Completed
                 </button>
-              </div>
-            ) : (
-              <button
-                className={`${completeButtonClasses} ${
-                  canComplete
-                    ? "bg-[var(--color-brand-primary)] text-white shadow-[0_0_20px_rgba(14,165,233,0.4)] hover:bg-[var(--color-brand-primary)]/90 hover:shadow-[0_0_25px_rgba(14,165,233,0.6)]"
-                    : "cursor-not-allowed bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]"
-                }`}
-                disabled={!canComplete}
-                onClick={handleMarkComplete}
-              >
-                {"Mark Inspection Complete"}
-              </button>
-            )}
-          </div>
+              ) : (
+                <ActionButton
+                  variant="primary"
+                  disabled={!canComplete}
+                  onClick={() => setPendingWorkOrderAction("inspectionComplete")}
+                >
+                  {"Mark Inspection Complete"}
+                </ActionButton>
+              )}
+            </div>
+          )}
         </div>
       )}
+      <ConfirmationModal
+        isOpen={Boolean(pendingWorkOrderAction)}
+        variant="primary"
+        message={
+          pendingWorkOrderAction === "executionComplete"
+            ? "Are you sure you want to mark this execution checklist complete?"
+            : "Are you sure you want to mark this inspection complete?"
+        }
+        confirmLabel="Yes"
+        onConfirm={confirmWorkOrderAction}
+        onCancel={() => setPendingWorkOrderAction(null)}
+      />
     </div>
   );
 }

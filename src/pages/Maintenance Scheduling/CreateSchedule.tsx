@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   X,
-  Calendar as CalendarIcon,
   ClipboardCheck,
   Wrench,
   ShieldCheck,
   Clock3,
 } from "lucide-react";
+import { DatePicker } from "../../components/ui";
 import {
   createMaintenanceSchedule,
   updateMaintenanceSchedule,
@@ -90,16 +90,6 @@ export default function CreateScheduleModal({
   const [triggerType, setTriggerType] = useState<
     "ODOMETER" | "TIME" | "MANUAL"
   >("ODOMETER");
-  const [isScheduledCalendarOpen, setIsScheduledCalendarOpen] = useState(false);
-  const [isStartReferenceCalendarOpen, setIsStartReferenceCalendarOpen] =
-    useState(false);
-  const [scheduledCalendarMonth, setScheduledCalendarMonth] = useState(
-    () => new Date(),
-  );
-  const [startReferenceCalendarMonth, setStartReferenceCalendarMonth] =
-    useState(() => new Date());
-  const scheduledCalendarRef = useRef<HTMLDivElement | null>(null);
-  const startReferenceCalendarRef = useRef<HTMLDivElement | null>(null);
   const [notes, setNotes] = useState("");
 
   useBodyScrollLock(isOpen);
@@ -137,34 +127,6 @@ export default function CreateScheduleModal({
   }, []);
 
   useEffect(() => {
-    if (!isOpen) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-
-      if (!target) return;
-
-      const clickedInsideScheduled = scheduledCalendarRef.current?.contains(target);
-      const clickedInsideStartReference =
-        startReferenceCalendarRef.current?.contains(target);
-
-      if (!clickedInsideScheduled) {
-        setIsScheduledCalendarOpen(false);
-      }
-
-      if (!clickedInsideStartReference) {
-        setIsStartReferenceCalendarOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-    };
-  }, [isOpen]);
-
-  useEffect(() => {
     if (isOpen) {
       requestAnimationFrame(() => {
         if (editingTask) {
@@ -194,11 +156,6 @@ export default function CreateScheduleModal({
             setIntervalTypeState("");
           }
 
-          if (editingTask.date) {
-            setScheduledCalendarMonth(
-              new Date(editingTask.date.replace(/-/g, "/")),
-            );
-          }
         } else {
           // Reset all fields for new schedule
           setVehicleId("");
@@ -218,16 +175,7 @@ export default function CreateScheduleModal({
           setBufferDistanceKm("");
           setStartingReferenceReadingKm("");
           setIntervalTypeState("");
-          setIsScheduledCalendarOpen(false);
-          setIsStartReferenceCalendarOpen(false);
-          setScheduledCalendarMonth(new Date());
-          setStartReferenceCalendarMonth(new Date());
         }
-      });
-    } else {
-      requestAnimationFrame(() => {
-        setIsScheduledCalendarOpen(false);
-        setIsStartReferenceCalendarOpen(false);
       });
     }
   }, [isOpen, editingTask]);
@@ -356,8 +304,6 @@ export default function CreateScheduleModal({
       setBufferDistanceKm("");
       setStartingReferenceReadingKm("");
       setIntervalTypeState("");
-      setIsScheduledCalendarOpen(false);
-      setIsStartReferenceCalendarOpen(false);
       setDuplicateSchedule(null);
 
       onClose();
@@ -391,29 +337,6 @@ export default function CreateScheduleModal({
     await saveSchedule();
   };
 
-  const formatCalendarLabel = (date: Date) =>
-    new Intl.DateTimeFormat("en-US", {
-      month: "long",
-      year: "numeric",
-    }).format(date);
-
-  const formatLocalDate = (date: Date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  };
-
-  const getCalendarDays = (date: Date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const firstDayOfWeek = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    return { year, month, firstDayOfWeek, daysInMonth };
-  };
-
-  const formatIsoDate = (date: Date) => formatLocalDate(date);
-
   const availableVehicles = vehicles.filter(
     (vehicle) => (vehicle.status ?? "AVAILABLE").trim().toUpperCase() === "AVAILABLE",
   );
@@ -425,7 +348,23 @@ export default function CreateScheduleModal({
   const activationRange = editingTask
     ? getOdometerActivationRange(editingTask)
     : null;
+  const modalTitle = isOdometerOnlyUpdate
+    ? "Update Odometer Reading"
+    : editingTask
+      ? "Edit Maintenance Schedule"
+      : "Create Maintenance Schedule";
+  const modalSubtitle = isOdometerOnlyUpdate
+    ? "Update the latest odometer reading for this pending schedule."
+    : editingTask
+      ? "Update schedule details, trigger rules, assignment, and checklist template."
+      : "Set up a new maintenance schedule with vehicle, trigger, assignment, and checklist details.";
+  const submitLabel = isOdometerOnlyUpdate
+    ? "Update Odometer"
+    : editingTask
+      ? "Update Schedule"
+      : "Create Schedule";
 
+  /*
   const renderCalendar = (
     calendarDate: Date,
     onDaySelect: (value: string) => void,
@@ -486,6 +425,7 @@ export default function CreateScheduleModal({
     );
   };
 
+  */
   if (!isOpen) return null;
 
   return (
@@ -494,8 +434,12 @@ export default function CreateScheduleModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-card-bg)] px-6 py-5 shrink-0">
           <div>
-            <h2 className="mt-2 text-lg font-bold text-[var(--color-text-primary)]">Create / Edit Maintenance Schedule</h2>
-
+            <h2 className="text-lg font-bold text-[var(--color-text-primary)]">
+              {modalTitle}
+            </h2>
+            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+              {modalSubtitle}
+            </p>
           </div>
           <button
             type="button"
@@ -510,7 +454,7 @@ export default function CreateScheduleModal({
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
           {isOdometerOnlyUpdate ? (
-            <section className="card-base">
+            <section className="space-y-4 border-b border-[var(--color-border)] pb-6">
               <div className="mb-4 flex items-center gap-3">
                 <div className="rounded-2xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 p-2 text-[#0369a1]">
                   <Wrench className="h-4 w-4" />
@@ -560,7 +504,7 @@ export default function CreateScheduleModal({
                   <input
                     type="text"
                     inputMode="decimal"
-                    placeholder="km"
+                    placeholder="e.g., 12000"
                     value={odometerReading}
                     onChange={(e) =>
                       setOdometerReading(
@@ -575,7 +519,7 @@ export default function CreateScheduleModal({
           ) : (
             <>
           {/* Vehicle Information */}
-          <section className="card-base">
+          <section className="space-y-4 border-b border-[var(--color-border)] pb-6">
             <div className="mb-4 flex items-center gap-3">
               <div className="rounded-2xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 p-2 text-[#0369a1]">
                 <Wrench className="h-4 w-4" />
@@ -627,7 +571,7 @@ export default function CreateScheduleModal({
                   <input
                     type="text"
                     inputMode="decimal"
-                    placeholder="km"
+                    placeholder="e.g., 12000"
                     value={odometerReading}
                     onChange={(e) =>
                       setOdometerReading(
@@ -641,7 +585,7 @@ export default function CreateScheduleModal({
 
               <div className="col-start-2 row-start-1">
                 <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-                  Garage / Cluster
+                  Garage
                 </label>
                 <div className="relative">
                   <select
@@ -680,7 +624,7 @@ export default function CreateScheduleModal({
                     type="text"
                     value={otherGarageValue}
                     onChange={(e) => setOtherGarage(e.target.value)}
-                    placeholder="Enter garage / cluster"
+                    placeholder="Enter garage"
                     className="mt-2 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
                   />
                 ) : null}
@@ -703,7 +647,7 @@ export default function CreateScheduleModal({
           </section>
 
           {/* Schedule Trigger */}
-          <section className="card-base">
+          <section className="space-y-4 border-b border-[var(--color-border)] pb-6">
             <div className="mb-4 flex items-center gap-3">
               <div className="rounded-2xl border border-violet-400/30 bg-violet-400/10 p-2 text-violet-700">
                 <Clock3 className="h-4 w-4" />
@@ -749,7 +693,7 @@ export default function CreateScheduleModal({
                 <input
                   type="text"
                   inputMode="decimal"
-                  placeholder="km"
+                  placeholder="e.g., 5000"
                   value={intervalKm}
                   onChange={(e) =>
                     setIntervalKm(sanitizeNonNegativeNumber(e.target.value))
@@ -769,7 +713,7 @@ export default function CreateScheduleModal({
                 <input
                   type="text"
                   inputMode="decimal"
-                  placeholder="km"
+                  placeholder="e.g., 500"
                   value={bufferDistanceKm}
                   onChange={(e) =>
                     setBufferDistanceKm(
@@ -791,7 +735,7 @@ export default function CreateScheduleModal({
                 <input
                   type="text"
                   inputMode="decimal"
-                  placeholder="km"
+                  placeholder="e.g., 12000"
                   value={startingReferenceReadingKm}
                   onChange={(e) =>
                     setStartingReferenceReadingKm(
@@ -846,80 +790,18 @@ export default function CreateScheduleModal({
                 <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
                   Start Reference Date
                 </label>
-                <div className="relative" ref={startReferenceCalendarRef}>
-                  <input
-                    value={startReferenceDate}
-                    onClick={() => {
-                      if (triggerType !== "ODOMETER") {
-                        setIsStartReferenceCalendarOpen(true);
-                        setIsScheduledCalendarOpen(false);
-                      }
-                    }}
-                    readOnly
-                    placeholder="YYYY-MM-DD"
-                    disabled={triggerType === "ODOMETER"}
-                    className={`w-full rounded-md border px-3 py-2 text-sm placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 ${
-                      triggerType === "ODOMETER"
-                        ? "border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] cursor-not-allowed opacity-80"
-                        : "border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-primary)] cursor-pointer"
-                    }`}
-                  />
-                  {startReferenceDate ? (
-                    <button
-                      type="button"
-                      onClick={() => setStartReferenceDate("")}
-                      className="absolute inset-y-0 right-8 flex items-center px-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-                    >
-                      <X size={16} />
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (triggerType !== "ODOMETER") {
-                        setIsStartReferenceCalendarOpen(true);
-                        setIsScheduledCalendarOpen(false);
-                      }
-                    }}
-                    disabled={triggerType === "ODOMETER"}
-                    className={`absolute inset-y-0 right-0 flex items-center px-3 ${
-                      triggerType === "ODOMETER"
-                        ? "text-[var(--color-text-secondary)] cursor-not-allowed opacity-80"
-                        : "text-[var(--color-text-secondary)]"
-                    }`}
-                  >
-                    <CalendarIcon className="w-4 h-4" />
-                  </button>
-                  {isStartReferenceCalendarOpen && (
-                    <div className="absolute top-full left-0 mt-2 z-50">
-                      {renderCalendar(
-                        startReferenceCalendarMonth,
-                        (value) => {
-                          setStartReferenceDate(value);
-                          setIsStartReferenceCalendarOpen(false);
-                          setStartReferenceCalendarMonth(
-                            new Date(value.replace(/-/g, "/")),
-                          );
-                        },
-                        (offset) => {
-                          const next = new Date(
-                            startReferenceCalendarMonth.getFullYear(),
-                            startReferenceCalendarMonth.getMonth() + offset,
-                            1,
-                          );
-                          setStartReferenceCalendarMonth(next);
-                        },
-                      )}
-                    </div>
-                  )}
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-[var(--color-text-secondary)]" />
-                </div>
+                <DatePicker
+                  value={startReferenceDate}
+                  onChange={setStartReferenceDate}
+                  disabled={triggerType === "ODOMETER"}
+                  placeholder="YYYY-MM-DD"
+                />
               </div>
             </div>
           </section>
 
           {/* Maintenance Details */}
-          <section className="card-base">
+          <section className="space-y-4 border-b border-[var(--color-border)] pb-6">
             <div className="mb-4 flex items-center gap-3">
               <div className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-2 text-emerald-700">
                 <ShieldCheck className="h-4 w-4" />
@@ -1002,59 +884,11 @@ export default function CreateScheduleModal({
                 <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
                   Scheduled Date
                 </label>
-                <div className="relative" ref={scheduledCalendarRef}>
-                  <input
-                    value={scheduledDate}
-                    onClick={() => {
-                      setIsScheduledCalendarOpen(true);
-                      setIsStartReferenceCalendarOpen(false);
-                    }}
-                    readOnly
-                    placeholder="YYYY-MM-DD"
-                    className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 cursor-pointer"
-                  />
-                  {scheduledDate ? (
-                    <button
-                      type="button"
-                      onClick={() => setScheduledDate("")}
-                      className="absolute inset-y-0 right-8 flex items-center px-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-                    >
-                      <X size={16} />
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsScheduledCalendarOpen(true);
-                      setIsStartReferenceCalendarOpen(false);
-                    }}
-                    className="absolute inset-y-0 right-0 flex items-center px-3 text-[var(--color-text-secondary)]"
-                  >
-                    <CalendarIcon className="w-4 h-4" />
-                  </button>
-                  {isScheduledCalendarOpen && (
-                    <div className="absolute top-full left-0 mt-2 z-50">
-                      {renderCalendar(
-                        scheduledCalendarMonth,
-                        (value) => {
-                          setScheduledDate(value);
-                          setIsScheduledCalendarOpen(false);
-                          setScheduledCalendarMonth(
-                            new Date(value.replace(/-/g, "/")),
-                          );
-                        },
-                        (offset) => {
-                          const next = new Date(
-                            scheduledCalendarMonth.getFullYear(),
-                            scheduledCalendarMonth.getMonth() + offset,
-                            1,
-                          );
-                          setScheduledCalendarMonth(next);
-                        },
-                      )}
-                    </div>
-                  )}
-                </div>
+                <DatePicker
+                  value={scheduledDate}
+                  onChange={setScheduledDate}
+                  placeholder="YYYY-MM-DD"
+                />
               </div>
             </div>
             <div>
@@ -1100,7 +934,7 @@ export default function CreateScheduleModal({
           </section>
 
           {/* Work Order Checklist Preview */}
-          <section className="card-base">
+          <section className="space-y-4">
             <div className="mb-4 flex items-center gap-3">
               <div className="rounded-2xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 p-2 text-[#0369a1]">
                 <ClipboardCheck className="h-4 w-4" />
@@ -1109,7 +943,7 @@ export default function CreateScheduleModal({
                 <h3 className="text-sm font-bold text-[var(--color-text-primary)]">Work Order Checklist Preview</h3>
               </div>
             </div>
-            <div className="card-base shadow-inner">
+            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4">
               <h3 className="text-sm font-bold text-[var(--color-text-primary)] mb-3">
                 Work Order Checklist
               </h3>
@@ -1157,11 +991,7 @@ export default function CreateScheduleModal({
             disabled={isSaving || !isFormComplete}
             className="btn-primary"
           >
-            {isSaving
-              ? "Saving…"
-              : isOdometerOnlyUpdate
-                ? "Update Odometer"
-                : "Save Schedule"}
+            {isSaving ? "Saving..." : submitLabel}
           </button>
         </div>
       </div>

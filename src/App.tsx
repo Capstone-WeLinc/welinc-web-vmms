@@ -20,6 +20,7 @@ import MaintenanceLogs from "./pages/MaintenanceLogs/MaintenanceLogs";
 import FuelManagement from "./pages/FuelManagement/FuelManagement";
 import UserManagement from "./pages/UserManagement/UserManagement";
 import LoginPage from "./pages/Login/LoginPage";
+import Profile from "./pages/Profile/Profile";
 import { useBackend } from "./lib/api/httpClient";
 
 import { FileBarChart2 } from "lucide-react";
@@ -40,7 +41,6 @@ function RequireAuthWrapper({
 }
 
 function App() {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [authenticated, setAuthenticated] = useState(() => {
     if (!useBackend) {
       return true;
@@ -95,7 +95,11 @@ function App() {
     if (!isAuthenticated || !currentUser) return;
 
     if (isMechanic) {
-      if (location.pathname !== "/work-orders" && location.pathname !== "/maintenance-logs") {
+      if (
+        location.pathname !== "/work-orders" &&
+        location.pathname !== "/maintenance-logs" &&
+        location.pathname !== "/profile"
+      ) {
         navigate("/work-orders", { replace: true });
       }
       return;
@@ -107,6 +111,7 @@ function App() {
         "/maintenance-scheduling",
         "/work-orders",
         "/maintenance-logs",
+        "/profile",
         "/maintenance-reports",
         "/fuel-management",
       ];
@@ -183,14 +188,13 @@ function App() {
     <div className="min-h-screen bg-[var(--color-page-bg)] text-[var(--color-text-primary)] transition-colors duration-300">
       {isAuthenticated && (
         <Sidebar
-          onCollapse={setSidebarCollapsed}
           currentUser={currentUser}
         />
       )}
       <main
         className={`transition-all duration-300 ease-in-out ${
           isAuthenticated
-            ? `px-6 py-8 md:px-8 lg:px-10 ${sidebarCollapsed ? "ml-20" : "ml-64"}`
+            ? "ml-20 px-6 py-8 md:px-8 lg:px-10"
             : "h-screen"
         }`}
       >
@@ -278,6 +282,17 @@ function App() {
                 location={location}
               >
                 <WorkOrderTemplates />
+              </RequireAuthWrapper>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <RequireAuthWrapper
+                isAuthenticated={isAuthenticated}
+                location={location}
+              >
+                <Profile />
               </RequireAuthWrapper>
             }
           />

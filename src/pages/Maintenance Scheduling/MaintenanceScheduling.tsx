@@ -14,9 +14,24 @@ import {
   AlertCircle,
   ArrowUp,
   ArrowDown,
+  Edit2,
+  RefreshCw,
+  Trash2,
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
-import { Card, Modal } from "../../components/ui";
+import {
+  Card,
+  ActionMenu,
+  ActionButton,
+  ConfirmationModal,
+  DataTable,
+  FilterDropdown,
+  Modal,
+  Pagination,
+  SearchInput,
+  StatusBadge as StandardStatusBadge,
+  ToastNotification,
+} from "../../components/ui";
 import CreateSchedule from "./CreateSchedule";
 import {
   type MaintenanceStatus,
@@ -27,8 +42,15 @@ import {
   deleteMaintenanceSchedule,
 } from "../../lib/api/maintenanceService";
 import { getVehicles } from "../../lib/api/vehicleService";
+import { getGarages } from "../../lib/api/locationService";
 import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
 import { formatWorkOrderNumber } from "../../lib/utils/workOrders";
+
+type GarageOption = { id: string; name: string };
+type ToastState = {
+  type: "success" | "error" | "warning" | "info";
+  message: string;
+};
 
 interface KPIStatCardProps {
   icon: ReactNode;
@@ -153,40 +175,6 @@ const StatusBadge = ({ status }: { status: MaintenanceStatus }) => {
     </span>
   );
 };
-const InputField = ({
-  label,
-  id,
-  className = "",
-  onChange,
-  value,
-  placeholder,
-  type = "text",
-  disabled,
-}: {
-  label: string;
-  id: string;
-  className?: string;
-} & React.InputHTMLAttributes<HTMLInputElement>) => (
-  <div className="w-full text-left">
-      {label && (
-      <label
-        htmlFor={id}
-        className="block text-sm font-medium mb-1.5 text-[var(--color-text-secondary)]"
-      >
-        {label}
-      </label>
-    )}
-    <input
-      id={id}
-      className={`w-full px-4 py-2.5 rounded-xl border font-normal text-sm transition-colors duration-200 bg-[var(--color-input-bg)] border-[var(--color-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 focus:outline-hidden ${className}`}
-      onChange={onChange}
-      value={value}
-      placeholder={placeholder}
-      type={type}
-      disabled={disabled}
-    />
-  </div>
-);
 const SelectField = ({
   label,
   id,
@@ -260,7 +248,6 @@ const getTaskStyle = (status: MaintenanceStatus) => {
 };
 
 const MaintenanceSchedulingCombined = () => {
-  const schedulesPerPage = 8;
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -268,19 +255,24 @@ const MaintenanceSchedulingCombined = () => {
   const today = useMemo(() => new Date(), []);
   const [viewMode, setViewMode] = useState<"calendar" | "list">("list");
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [selectedStatusFilters, setSelectedStatusFilters] = useState<string[]>([]);
   const [vehicleFilter, setVehicleFilter] = useState<string>("All");
   const [workOrderTemplateFilter, setWorkOrderTemplateFilter] =
     useState<string>("All");
   const [dateRangeFilter, setDateRangeFilter] = useState<string>("All");
+  const [dateFromFilter, setDateFromFilter] = useState("");
+  const [dateToFilter, setDateToFilter] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [dateSortDirection, setDateSortDirection] = useState<"asc" | "desc">(
     "desc",
   );
   const [currentPage, setCurrentPage] = useState(1);
+  const [schedulesPerPage, setSchedulesPerPage] = useState(8);
   const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
   const [vehicles, setVehicles] = useState<{ value: string; label: string }[]>(
     [],
   );
+  const [garages, setGarages] = useState<GarageOption[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<MaintenanceTask | null>(null);
   const [isOdometerUpdateOpen, setIsOdometerUpdateOpen] = useState(false);
@@ -290,6 +282,8 @@ const MaintenanceSchedulingCombined = () => {
   const [selectedSchedulePage, setSelectedSchedulePage] = useState(0);
   const [confirmDeleteTask, setConfirmDeleteTask] =
     useState<MaintenanceTask | null>(null);
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
   useBodyScrollLock(Boolean(confirmDeleteTask));
 
@@ -302,7 +296,22 @@ const MaintenanceSchedulingCombined = () => {
     getVehicles()
       .then((loadedVehicles) => setVehicles(loadedVehicles))
       .catch(() => console.error("Failed to load vehicles"));
+    getGarages()
+      .then((loadedGarages) => setGarages(loadedGarages))
+      .catch(() => console.error("Failed to load garages"));
   }, []);
+
+  useEffect(() => {
+    const closeActionMenu = () => setOpenActionMenuId(null);
+    document.addEventListener("click", closeActionMenu);
+    return () => document.removeEventListener("click", closeActionMenu);
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   const formatLocalDate = (date: Date) => {
     const year = date.getFullYear();
@@ -355,17 +364,28 @@ const MaintenanceSchedulingCombined = () => {
   ];
 
   const vehicleOptions = [{ value: "All", label: "All Vehicles" }, ...vehicles];
+  const scheduleStatusOptions = [
+    "Pending",
+    "In-Progress",
+    "Overdue",
+    "Flagged",
+    "Completed",
+  ];
 
   const filteredTasks = tasks
     .filter((task) => {
       const statusMatches =
-        statusFilter === "All" || task.status === statusFilter;
+        selectedStatusFilters.length === 0 ||
+        selectedStatusFilters.includes(task.status);
       const vehicleMatches =
         vehicleFilter === "All" || task.vehicleId === vehicleFilter;
       const templateMatches =
         workOrderTemplateFilter === "All" ||
         task.title === workOrderTemplateFilter;
-      const dateMatches = dateFilter(new Date(task.date));
+      const dateMatches =
+        dateFilter(new Date(task.date)) &&
+        (!dateFromFilter || task.date >= dateFromFilter) &&
+        (!dateToFilter || task.date <= dateToFilter);
       const searchMatches =
         task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         task.vehicleId.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -450,6 +470,11 @@ const MaintenanceSchedulingCombined = () => {
   const selectedSchedule =
     selectedSchedules[selectedSchedulePage] ?? selectedSchedules[0] ?? null;
 
+  const getGarageName = (garageId?: string) => {
+    if (!garageId) return undefined;
+    return garages.find((garage) => garage.id === garageId)?.name ?? garageId;
+  };
+
   const openFullScheduleEdit = (task: MaintenanceTask) => {
     setEditingTask(task);
     setIsOdometerUpdateOpen(false);
@@ -466,16 +491,39 @@ const MaintenanceSchedulingCombined = () => {
     task.status === "Pending" &&
     (task.triggerType === "ODOMETER" || task.triggerType === "MANUAL");
 
+  const confirmScheduleDelete = async () => {
+    if (!confirmDeleteTask) return;
+    const taskId = confirmDeleteTask.id;
+
+    try {
+      await deleteMaintenanceSchedule(taskId);
+      setToast({ type: "error", message: "Record deleted successfully." });
+    } catch (err) {
+      console.error("Failed to delete schedule", err);
+      setToast({
+        type: "warning",
+        message: "Schedule removed locally. Server delete failed.",
+      });
+    } finally {
+      setTasks((current) => current.filter((task) => task.id !== taskId));
+      setConfirmDeleteTask(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      <div className="fixed right-6 top-6 z-50 flex w-[340px] max-w-[calc(100vw-2rem)] flex-col gap-3">
+        {toast && <ToastNotification type={toast.type} message={toast.message} />}
+      </div>
+
       <PageHeader
         icon={CalendarIcon}
-        title="Maintenance Scheduling"
+        title="MAINTENANCE SCHEDULING"
         subtitle="Manage and track fleet maintenance schedules and tasks"
       />
 
       <div className="flex justify-end mb-4">
-        <Button
+        <ActionButton
           variant="primary"
           className="flex items-center gap-2"
           onClick={() => {
@@ -486,7 +534,7 @@ const MaintenanceSchedulingCombined = () => {
         >
           <Plus className="w-4 h-4" />
           <span>{"Create Schedule"}</span>
-        </Button>
+        </ActionButton>
       </div>
 
       <div className="space-y-6">
@@ -541,7 +589,7 @@ const MaintenanceSchedulingCombined = () => {
           />
         </div>
 
-        <div className="card-base p-6 transition duration-200 hover:-translate-y-0.5">
+        <section className="overflow-visible">
           <div className="mb-5 flex flex-col gap-5 border-b border-[var(--color-border)] pb-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-lg font-bold text-[var(--color-text-primary)]">
@@ -583,89 +631,137 @@ const MaintenanceSchedulingCombined = () => {
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-5 mb-6">
-            <InputField
-              label="Search"
-              id="searchF"
-              placeholder="Search tasks..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
-            />
-            <SelectField
-              label="Vehicle"
-              id="vehicleF"
-              options={vehicleOptions}
-              value={vehicleFilter}
-              onChange={(e) => {
-                setVehicleFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-            />
-            <SelectField
-              label="Work Order Template"
-              id="typeF"
-              options={workOrderTemplateOptions}
-              value={workOrderTemplateFilter}
-              onChange={(e) => {
-                setWorkOrderTemplateFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-            />
-            <SelectField
-              label="Status"
-              id="statusF"
-              options={[
-                { value: "All", label: "All Statuses" },
-                { value: "Pending", label: "Pending" },
-                { value: "Overdue", label: "Overdue" },
-                { value: "In-Progress", label: "In-Progress" },
-                { value: "Flagged", label: "Flagged" },
-                { value: "Completed", label: "Completed" },
-              ]}
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-            />
-            <SelectField
-              label="Date Range"
-              id="dateRF"
-              options={[
-                { value: "All", label: "All Time" },
-                { value: "Today", label: "Today" },
-                { value: "This Week", label: "This Week" },
-                { value: "This Month", label: "This Month" },
-              ]}
-              value={dateRangeFilter}
-              onChange={(e) => {
-                setDateRangeFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-            />
+          <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div className="flex-1">
+              <SearchInput
+                placeholder="Search tasks..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+              />
+            </div>
+            <div className="flex gap-3">
+              <FilterDropdown
+                open={showFilters}
+                onToggle={() => setShowFilters((current) => !current)}
+                statuses={scheduleStatusOptions}
+                selectedStatuses={selectedStatusFilters}
+                onStatusChange={(statuses) => {
+                  setSelectedStatusFilters(statuses);
+                  setCurrentPage(1);
+                }}
+                dateFrom={dateFromFilter}
+                dateTo={dateToFilter}
+                onDateFromChange={(value) => {
+                  setDateFromFilter(value);
+                  setCurrentPage(1);
+                }}
+                onDateToChange={(value) => {
+                  setDateToFilter(value);
+                  setCurrentPage(1);
+                }}
+                onApply={() => setShowFilters(false)}
+                onClear={() => {
+                  setSelectedStatusFilters([]);
+                  setDateFromFilter("");
+                  setDateToFilter("");
+                  setVehicleFilter("All");
+                  setWorkOrderTemplateFilter("All");
+                  setDateRangeFilter("All");
+                  setCurrentPage(1);
+                }}
+              >
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <SelectField
+                    label="Vehicle"
+                    id="vehicleF"
+                    options={vehicleOptions}
+                    value={vehicleFilter}
+                    onChange={(e) => {
+                      setVehicleFilter(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                  />
+                  <SelectField
+                    label="Work Order Template"
+                    id="typeF"
+                    options={workOrderTemplateOptions}
+                    value={workOrderTemplateFilter}
+                    onChange={(e) => {
+                      setWorkOrderTemplateFilter(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                  />
+                  <SelectField
+                    label="Quick Date"
+                    id="dateRF"
+                    options={[
+                      { value: "All", label: "All Time" },
+                      { value: "Today", label: "Today" },
+                      { value: "This Week", label: "This Week" },
+                      { value: "This Month", label: "This Month" },
+                    ]}
+                    value={dateRangeFilter}
+                    onChange={(e) => {
+                      setDateRangeFilter(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                  />
+                </div>
+              </FilterDropdown>
+            </div>
           </div>
 
           {viewMode === "list" ? (
-            <Card
-              padding="none"
-              className="overflow-hidden"
-            >
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left text-sm text-[var(--color-text-primary)]">
-                <thead className="sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-card-bg)] text-xs uppercase tracking-[0.16em] text-[var(--color-text-secondary)]">
-                  <tr>
-                    <th className="px-5 py-3 font-medium">
-                      {"Work Order No."}
-                    </th>
-                    <th className="px-5 py-3 font-medium">{"Plate No."}</th>
-                    <th className="px-5 py-3 font-medium">
-                      {"Work Order Template"}
-                    </th>
-                    <th className="px-5 py-3 font-medium">{"Trigger"}</th>
-                    <th className="px-5 py-3 font-medium">
+            <div className="overflow-visible">
+              <DataTable
+                data={paginatedTasks}
+                getRowKey={(task) => task.id}
+                minWidth="1080px"
+                onRowClick={(task) => openScheduleDetails([task])}
+                emptyMessage={
+                  noTasks
+                    ? "No maintenance schedules exist."
+                    : "No maintenance schedules match the current filters."
+                }
+                columns={[
+                  {
+                    key: "workOrderNo",
+                    header: "Work Order No.",
+                    width: "13%",
+                    render: (task) => formatWorkOrderNumber(task.id),
+                  },
+                  {
+                    key: "plateNo",
+                    header: "Plate No.",
+                    width: "12%",
+                    render: (task) => <span className="font-medium">{task.vehicleId}</span>,
+                  },
+                  {
+                    key: "workOrder",
+                    header: "Work Order",
+                    width: "19%",
+                    render: (task) => task.title,
+                  },
+                  {
+                    key: "trigger",
+                    header: "Trigger",
+                    width: "11%",
+                    render: (task) => (
+                      <span className="inline-block rounded-full bg-[#f1f5f9] px-3 py-1 text-xs font-bold text-[#475569]">
+                        {task.triggerType === "TIME"
+                          ? "Time-Based"
+                          : task.triggerType === "MANUAL"
+                            ? "Manual"
+                            : "Odometer"}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "scheduledDate",
+                    header: (
                       <button
                         type="button"
                         onClick={() => {
@@ -674,191 +770,141 @@ const MaintenanceSchedulingCombined = () => {
                           );
                           setCurrentPage(1);
                         }}
-                        className="inline-flex items-center gap-2 uppercase tracking-[0.16em] hover:text-[var(--color-text-primary)]"
+                        className="inline-flex items-center gap-2 uppercase tracking-wide hover:text-white/80"
                       >
-                        <span>Scheduled Date</span>
+                        <span>Date Created</span>
                         {dateSortDirection === "asc" ? (
                           <ArrowUp className="h-3.5 w-3.5" />
                         ) : (
                           <ArrowDown className="h-3.5 w-3.5" />
                         )}
                       </button>
-                    </th>
-                    <th className="px-5 py-3 font-medium">{"Mechanic"}</th>
-                    <th className="px-5 py-3 font-medium">{"Status"}</th>
-                    <th className="px-5 py-3 font-medium">{"Actions"}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--color-divider)]">
-                  {filteredTasks.length > 0 ? (
-                    paginatedTasks.map((task) => (
-                      <tr
-                        key={task.id}
-                        onClick={() => openScheduleDetails([task])}
-                        className="cursor-pointer hover:bg-[var(--color-card-bg-hover)] transition-colors"
-                      >
-                        <td className="px-5 py-3 font-medium text-[var(--color-text-primary)]">
-                          {formatWorkOrderNumber(task.id)}
-                        </td>
-                        <td className="px-5 py-3 font-medium text-[var(--color-text-primary)]">
-                          {task.vehicleId}
-                        </td>
-                        <td className="px-5 py-3 text-[var(--color-text-secondary)]">{task.title}</td>
-                        <td className="px-5 py-3">
-                          <span className="inline-block rounded-full bg-[var(--color-card-bg)] px-2.5 py-1 text-xs font-medium text-[var(--color-text-secondary)]">
-                            {task.triggerType === "TIME"
-                              ? "Time-Based"
-                              : task.triggerType === "MANUAL"
-                                ? "Manual"
-                                : "Odometer"}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3 text-[var(--color-text-secondary)]">{task.date}</td>
-                        <td className="px-5 py-3 text-[var(--color-text-secondary)]">{task.assignedDriver}</td>
-                        <td className="px-5 py-3">
-                          <StatusBadge status={task.status} />
-                        </td>
-                        <td className="flex gap-2 px-5 py-3">
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
+                    ),
+                    width: "15%",
+                    render: (task) => task.date,
+                  },
+                  {
+                    key: "mechanic",
+                    header: "Mechanic",
+                    width: "12%",
+                    render: (task) => task.assignedDriver,
+                  },
+                  {
+                    key: "status",
+                    header: "Status",
+                    width: "10%",
+                    render: (task) => <StandardStatusBadge status={task.status} />,
+                  },
+                  {
+                    key: "actions",
+                    header: "Actions",
+                    width: "8%",
+                    align: "center",
+                    render: (task) => (
+                      <ActionMenu
+                        open={openActionMenuId === task.id}
+                        onToggle={(event) => {
+                          event.stopPropagation();
+                          setOpenActionMenuId((current) =>
+                            current === task.id ? null : task.id,
+                          );
+                        }}
+                        items={[
+                          {
+                            label: "Edit",
+                            icon: Edit2,
+                            onClick: () => {
+                              setOpenActionMenuId(null);
                               openFullScheduleEdit(task);
-                            }}
-                            className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-2 text-xs font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
-                          >
-                            Edit
-                          </button>
-                          {canShowScheduleUpdate(task) ? (
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                openOdometerUpdate(task);
-                              }}
-                              className="rounded-xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 px-3 py-2 text-xs font-semibold text-[#0369a1] transition hover:bg-[var(--color-status-info)]/20"
-                            >
-                              Update
-                            </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
+                            },
+                          },
+                          ...(canShowScheduleUpdate(task)
+                            ? [{
+                                label: "Update",
+                                icon: RefreshCw,
+                                onClick: () => {
+                                  setOpenActionMenuId(null);
+                                  openOdometerUpdate(task);
+                                },
+                              }]
+                            : []),
+                          {
+                            label: "Delete",
+                            icon: Trash2,
+                            danger: true,
+                            onClick: () => {
+                              setOpenActionMenuId(null);
                               setConfirmDeleteTask(task);
-                            }}
-                            className="table-delete-button"
-                          >
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td
-                        colSpan={8}
-                        className="px-6 py-12 text-center text-sm text-[var(--color-text-secondary)]"
-                      >
-                        {noTasks ? (
-                          <>No maintenance schedules exist.</>
-                        ) : (
-                          <>
-                            No maintenance schedules match the current filters.
-                            Try adjusting your search or status selection.
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-                </table>
-              </div>
+                            },
+                          },
+                        ]}
+                      />
+                    ),
+                  },
+                ]}
+              />
               {filteredTasks.length > 0 ? (
-                <div className="flex flex-col gap-3 border-t border-[var(--color-border)] px-6 py-3 text-sm text-[var(--color-text-secondary)] sm:flex-row sm:items-center sm:justify-between">
-                  <span>
-                    Showing {paginatedTasks.length} of {filteredTasks.length} schedules
-                  </span>
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setCurrentPage(Math.max(1, activePage - 1))}
-                      disabled={activePage === 1}
-                      className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      Previous
-                    </button>
-                    <span>Page {activePage} of {totalPages}</span>
-                    <button
-                      type="button"
-                      onClick={() => setCurrentPage(Math.min(totalPages, activePage + 1))}
-                      disabled={activePage === totalPages}
-                      className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      Next
-                    </button>
-                    {totalPages >= 20 ? (
-                      <label className="flex items-center gap-2">
-                        <span>Go to</span>
-                        <input
-                          type="number"
-                          min={1}
-                          max={totalPages}
-                          placeholder={String(activePage)}
-                          aria-label="Go to maintenance schedule page"
-                          onKeyDown={(event) => {
-                            if (event.key !== "Enter") return;
-                            if (!event.currentTarget.value.trim()) return;
-                            const requestedPage = Number(event.currentTarget.value);
-                            if (!Number.isFinite(requestedPage)) return;
-                            setCurrentPage(
-                              Math.min(totalPages, Math.max(1, Math.trunc(requestedPage))),
-                            );
-                            event.currentTarget.value = "";
-                          }}
-                          className="w-16 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2 py-1.5 text-center text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
-                        />
-                      </label>
-                    ) : null}
-                  </div>
+                <div>
+                  <Pagination
+                    page={activePage}
+                    totalPages={totalPages}
+                    totalItems={filteredTasks.length}
+                    pageSize={schedulesPerPage}
+                    pageSizeOptions={[5, 8, 10, 15, 20]}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={(pageSize) => {
+                      setSchedulesPerPage(pageSize);
+                      setCurrentPage(1);
+                    }}
+                  />
                 </div>
               ) : null}
-            </Card>
+            </div>
           ) : (
-            <Card padding="none" className="p-6">
-              <div className="mb-6 flex items-center justify-between">
+            <Card padding="none" className="p-4 sm:p-5">
+              <div className="mb-4 flex items-center justify-between rounded-xl border border-[var(--color-border)] bg-white px-3 py-2">
                 <button
                   type="button"
                   onClick={prevMonth}
-                  className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-card-bg-hover)] transition"
+                  className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-2 text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"
+                  aria-label="Previous month"
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
-                <h2 className="text-lg font-bold text-[var(--color-text-primary)]">
-                  {monthName} {yearName}
-                </h2>
+                <div className="text-center">
+                  <h2 className="text-base font-bold text-[var(--color-text-primary)] sm:text-lg">
+                    {monthName} {yearName}
+                  </h2>
+                  <p className="text-xs text-[var(--color-text-secondary)]">
+                    {filteredTasks.length} visible schedules
+                  </p>
+                </div>
                 <button
                   type="button"
                   onClick={nextMonth}
-                  className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-card-bg-hover)] transition"
+                  className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-2 text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"
+                  aria-label="Next month"
                 >
                   <ChevronRight className="w-5 h-5" />
                 </button>
               </div>
-              <div className="mb-2 grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+              <div className="mb-1 grid grid-cols-7 gap-1 rounded-lg bg-[#070b45] px-1 py-2 text-center text-[11px] font-bold uppercase tracking-wide text-white sm:gap-2">
                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
                   (day) => (
-                    <div key={day} className="py-2">
+                    <div key={day}>
                       {day}
                     </div>
                   ),
                 )}
               </div>
-              <div className="grid grid-cols-7 gap-2">
+              <div className="grid grid-cols-7 gap-1 sm:gap-2">
                 {calendarCells.map((cell, idx) => {
                   const schedulesForDay = filteredTasks.filter(
                     (task) => task.date === cell.dateStr,
                   );
+                  const isToday = Boolean(cell.dateStr) && cell.dateStr === formatLocalDate(today);
+                  const visibleSchedules = schedulesForDay.slice(0, 2);
+                  const hiddenScheduleCount = schedulesForDay.length - visibleSchedules.length;
 
                   return (
                     <div
@@ -868,9 +914,9 @@ const MaintenanceSchedulingCombined = () => {
                           openScheduleDetails(schedulesForDay);
                         }
                       }}
-                      className={`min-h-44 rounded-xl border p-2 transition duration-200 ${
+                      className={`group min-h-28 rounded-lg border p-1.5 transition duration-200 sm:min-h-32 sm:p-2 ${
                         cell.day
-                          ? `bg-[var(--color-card-bg)] border-[var(--color-border)] hover:border-[var(--color-brand-primary)] ${
+                          ? `bg-white ${isToday ? "border-[#070b45] shadow-sm" : "border-[#dde4ef]"} hover:border-[var(--color-brand-primary)] hover:bg-[#f8fafc] ${
                               schedulesForDay.length > 0 ? "cursor-pointer" : ""
                             }`
                           : "bg-transparent border-transparent"
@@ -878,10 +924,21 @@ const MaintenanceSchedulingCombined = () => {
                     >
                       {cell.day && (
                         <>
-                          <div className="mb-2 flex items-center justify-between">
-                            <span className="font-semibold text-sm text-[var(--color-text-secondary)]">
+                          <div className="mb-1.5 flex items-center justify-between">
+                            <span
+                              className={`flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs font-bold ${
+                                isToday
+                                  ? "bg-[#070b45] text-white"
+                                  : "text-[var(--color-text-secondary)]"
+                              }`}
+                            >
                               {cell.day}
                             </span>
+                            {schedulesForDay.length > 0 ? (
+                              <span className="rounded-full bg-[#eef2ff] px-2 py-0.5 text-[10px] font-bold text-[#070b45]">
+                                {schedulesForDay.length}
+                              </span>
+                            ) : null}
                             <button
                               type="button"
                               onClick={(event) => event.stopPropagation()}
@@ -890,24 +947,26 @@ const MaintenanceSchedulingCombined = () => {
                               <Plus className="w-3.5 h-3.5" />
                             </button>
                           </div>
-                          <div className="space-y-1.5 text-xs">
-                            {schedulesForDay.map((task) => (
+                          <div className="space-y-1 text-xs">
+                            {visibleSchedules.map((task) => (
                               <button
                                 type="button"
                                 key={task.id}
-                                className={`block w-full rounded-lg px-2.5 py-2 text-left transition hover:brightness-110 ${getTaskStyle(task.status)}`}
+                                className={`block w-full rounded-md px-2 py-1.5 text-left transition hover:brightness-105 ${getTaskStyle(task.status)}`}
                               >
-                                <span className="block truncate text-xs font-semibold">
+                                <span className="block truncate text-[11px] font-bold">
                                   {formatWorkOrderNumber(task.id)}
                                 </span>
-                                <span className="block truncate text-xs">
-                                  Plate No.: {task.vehicleId}
-                                </span>
-                                <span className="block truncate text-xs">
-                                  Work Order: {task.title}
+                                <span className="block truncate text-[11px]">
+                                  {task.vehicleId}
                                 </span>
                               </button>
                             ))}
+                            {hiddenScheduleCount > 0 ? (
+                              <div className="rounded-md bg-[#f1f5f9] px-2 py-1 text-[11px] font-bold text-[#475569]">
+                                +{hiddenScheduleCount} more
+                              </div>
+                            ) : null}
                           </div>
                         </>
                       )}
@@ -917,7 +976,7 @@ const MaintenanceSchedulingCombined = () => {
               </div>
             </Card>
           )}
-        </div>
+        </section>
       </div>
       <Modal
         isOpen={selectedSchedules.length > 0}
@@ -1033,7 +1092,7 @@ const MaintenanceSchedulingCombined = () => {
               { label: "Scheduled Date", value: selectedSchedule.date },
               { label: "Mechanic", value: selectedSchedule.assignedDriver },
               { label: "Status", value: selectedSchedule.status },
-              { label: "Garage / Cluster", value: selectedSchedule.garageId },
+              { label: "Garage/Cluster", value: getGarageName(selectedSchedule.garageId) },
               { label: "Account Type", value: selectedSchedule.accountType },
               {
                 label: "System Affected",
@@ -1129,53 +1188,25 @@ const MaintenanceSchedulingCombined = () => {
         }}
       />
 
-      {confirmDeleteTask && (
-        <div className="modal-overlay px-4 backdrop-blur-sm">
-          <div className="modal-content w-full max-w-md rounded-xl p-6">
-            <h3 className="mb-4 text-lg font-bold text-[var(--color-text-primary)]">
-              Confirm Delete
-            </h3>
-            <p className="text-sm text-[var(--color-text-secondary)] mb-6">
+      <ConfirmationModal
+        isOpen={Boolean(confirmDeleteTask)}
+        variant="danger"
+        message={
+          confirmDeleteTask ? (
+            <>
               Are you sure you want to delete this schedule?
-              <br />
-              <span className="mt-2 block font-bold text-[var(--color-text-primary)]">{confirmDeleteTask.title} - {confirmDeleteTask.vehicleId}</span>
-              <br />
-              This action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmDeleteTask(null)}
-                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    await deleteMaintenanceSchedule(confirmDeleteTask.id);
-                    setTasks((current) =>
-                      current.filter((t) => t.id !== confirmDeleteTask.id),
-                    );
-                  } catch (err) {
-                    console.error("Failed to delete schedule", err);
-                    // fallback: still remove locally
-                    setTasks((current) =>
-                      current.filter((t) => t.id !== confirmDeleteTask.id),
-                    );
-                  } finally {
-                    setConfirmDeleteTask(null);
-                  }
-                }}
-                className="rounded-xl bg-rose-500 px-4 py-2 text-sm font-medium text-white hover:bg-rose-400"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              <span className="mt-2 block font-bold">
+                {confirmDeleteTask.title} - {confirmDeleteTask.vehicleId}
+              </span>
+            </>
+          ) : (
+            ""
+          )
+        }
+        confirmLabel="Yes"
+        onConfirm={confirmScheduleDelete}
+        onCancel={() => setConfirmDeleteTask(null)}
+      />
     </div>
   );
 };

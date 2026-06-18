@@ -1,1325 +1,809 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useBackend } from "../../lib/api/httpClient";
 import {
-  ShieldCheck,
-  Search,
-  Filter,
-  Shield,
-  UserCheck,
+  AlertCircle,
+  CheckCircle,
+  Edit2,
+  Key,
+  Lock,
   Plus,
-  ArrowUp,
-  ArrowDown,
+  RefreshCw,
+  Trash2,
+  Unlock,
+  Users,
+  XCircle,
 } from "lucide-react";
-import PageHeader from "../../components/PageHeader/PageHeader";
-import Button from "../../components/ui/Button";
-import Modal from "../../components/ui/Modal";
-import {
-  createUser,
-  deleteUser,
-  getManagedUsers,
-  getUsers,
-  unlockUser,
-  updateUser,
-  updateUserRole,
-  type UserCreateInput,
-  type UserRecord,
-  type UserRole,
-} from "../../lib/api/userService";
+import { fetchJSON, useBackend } from "../../lib/api/httpClient";
 import { getCurrentUser } from "../../lib/api/authService";
-import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
 import {
-  getMaintenanceSchedules,
-  updateMaintenanceSchedule,
-} from "../../lib/api/maintenanceService";
-import type { MaintenanceTask } from "../../types/maintenance";
+  ActionButton,
+  ActionMenu,
+  ConfirmationModal,
+  DataTable,
+  SearchInput,
+  StatusBadge,
+  ToastNotification,
+} from "../../components/ui";
 
-const roleOptions: UserRole[] = ["ADMIN", "OPERATIONS", "MECHANIC"];
+interface SystemRole {
+  role: string;
+  system: string;
+}
 
-const statusStyles: Record<UserRecord["status"], string> = {
-  Active: "text-[#047857] bg-[var(--color-status-success)]/15 border border-[var(--color-status-success)]/30",
-  Inactive: "text-[#92400e] bg-[var(--color-status-warning)]/15 border border-[var(--color-status-warning)]/30",
-  Suspended: "text-[#c41c3b] bg-[var(--color-status-error)]/15 border border-[var(--color-status-error)]/30",
+interface PortalUserRecord {
+  id: string;
+  name: string;
+  username: string;
+  isActive: boolean;
+  failedLoginAttempts: number;
+  lockedAt: string | null;
+  roles: SystemRole[];
+}
+
+type ModalMode = "create" | "edit" | "reset-pw";
+type PendingUserAction =
+  | { type: "unlock" | "status" | "delete"; user: PortalUserRecord }
+  | null;
+
+const roleSystems = ["VRMS", "VMMS", "BMS", "SHARED"] as const;
+const emptyRoleState = {
+  vrmsRole: "",
+  vmmsRole: "",
+  bmsRole: "",
+  sharedRole: "",
 };
 
-const roleStyles: Record<string, string> = {
-  ADMIN: "text-[#0369a1] bg-[var(--color-status-info)]/15 border border-[var(--color-status-info)]/30",
-  OPERATIONS: "text-[#92400e] bg-[var(--color-status-warning)]/15 border border-[var(--color-status-warning)]/30",
-  MECHANIC: "text-[#047857] bg-[var(--color-status-success)]/15 border border-[var(--color-status-success)]/30",
-};
-
-function normalizeRole(role?: string | null) {
-  return (role ?? "").trim().toUpperCase();
+function normalizeRole(value?: string | null) {
+  return (value ?? "").trim().toUpperCase();
 }
 
-function normalizeUserIdentity(value: string) {
-  return value.trim().replace(/\s+/g, " ").toLowerCase();
+function normalizeSystem(value?: string | null) {
+  return (value ?? "").trim().toUpperCase();
 }
 
-function displayRole(role: string) {
-  switch (normalizeRole(role)) {
-    case "ADMIN":
-      return "Admin";
-    case "MECHANIC":
-      return "Mechanic";
-    case "OPERATIONS":
-      return "Operations";
-
-    default:
-      return role;
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === "object" && "data" in error) {
+    const data = (error as { data?: unknown }).data;
+    if (data && typeof data === "object" && "message" in data) {
+      const message = (data as { message?: unknown }).message;
+      if (Array.isArray(message)) return message.join(", ");
+      if (typeof message === "string") return message;
+    }
   }
+
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
 }
 
-function validateUserField(value: string, label: string) {
-  const trimmedValue = value.trim();
+function hasSharedAdminAccess(user: unknown) {
+  if (!user || typeof user !== "object") return false;
 
-  if (!trimmedValue) {
-    return `${label} is required.`;
-  }
-
-  if (trimmedValue.length < 3) {
-    return `${label} must be 3 characters minimum.`;
-  }
-
-  return "";
-}
-
-function validatePassword(password: string) {
-  const trimmedPassword = password.trim();
-
-  if (!trimmedPassword) {
-    return "Password is required when creating a user.";
-  }
-
-  if (trimmedPassword.length < 12) {
-    return "Password must be at least 12 characters long.";
-  }
-
-  if (!/[A-Z]/.test(trimmedPassword)) {
-    return "Password must include at least one uppercase letter.";
-  }
-
-  if (!/[a-z]/.test(trimmedPassword)) {
-    return "Password must include at least one lowercase letter.";
-  }
-
-  if (!/\d/.test(trimmedPassword)) {
-    return "Password must include at least one number.";
-  }
-
-  if (!/[^A-Za-z0-9]/.test(trimmedPassword)) {
-    return "Password must include at least one special character.";
-  }
-
-  return "";
-}
-
-// Layout & interaction classes
-const containerClasses = 'space-y-6';
-const statsGridClasses = 'grid gap-4 md:grid-cols-3';
-const cardClasses = 'rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card';
-const headerSectionClasses = 'mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between';
-const filtersGridClasses = 'grid gap-3 md:grid-cols-[1.8fr_1fr_1fr] mb-6';
-const searchInputClasses = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none';
-const selectInputClasses = 'w-full appearance-none rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2.5 pl-10 pr-4 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none';
-const loadingStateClasses = 'rounded-2xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-4 py-8 text-center text-sm text-[var(--color-text-secondary)]';
-const emptyStateClasses = 'rounded-2xl border border-dashed border-[var(--color-border)] px-4 py-10 text-center text-sm text-[var(--color-text-secondary)]';
-const tableWrapperClasses = 'overflow-hidden rounded-xl border border-[var(--color-border)] shadow-card';
-const tableClasses = 'min-w-full text-left text-sm text-[var(--color-text-primary)]';
-const theadClasses = 'sticky top-0 z-10 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]';
-const tbodyClasses = 'divide-y divide-[var(--color-divider)]';
-const sortButtonClasses = 'inline-flex items-center gap-2 text-left uppercase tracking-wider text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]';
-const actionButtonsGroupClasses = 'flex flex-wrap gap-2';
-const badgeClasses = 'inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-wider';
-const modalOverlayClasses = 'fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.5)] px-4 backdrop-blur-sm';
-const formClasses = 'space-y-4';
-const inputClasses = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none';
-const buttonGroupClasses = 'flex justify-end gap-2 pt-2';
-
-export default function UserManagement() {
-  const usersPerPage = 8;
-  const navigate = useNavigate();
-  const [currentUser, setCurrentUser] = useState<UserRecord | null>(null);
-  const [users, setUsers] = useState<UserRecord[]>([]);
-  const [maintenanceSchedules, setMaintenanceSchedules] = useState<
-    MaintenanceTask[]
-  >([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("All");
-  const [roleFilter, setRoleFilter] = useState<string>("All");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [sortField, setSortField] = useState<"name" | "role">("name");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
-  const [processingUserId, setProcessingUserId] = useState<string | null>(null);
-  const [confirmDeleteUser, setConfirmDeleteUser] = useState<UserRecord | null>(null);
-  const [confirmUnlockUser, setConfirmUnlockUser] =
-    useState<UserRecord | null>(null);
-  const [blockedDeleteUser, setBlockedDeleteUser] =
-    useState<UserRecord | null>(null);
-  const [confirmCreateUser, setConfirmCreateUser] = useState(false);
-  const [duplicateUser, setDuplicateUser] = useState<UserRecord | null>(null);
-
-  useBodyScrollLock(
-    Boolean(duplicateUser || confirmDeleteUser || blockedDeleteUser),
-  );
-
-  const [passwordError, setPasswordError] = useState("");
-  const [newUserForm, setNewUserForm] = useState<{
-    name: string;
-    username: string;
-    password: string;
-    role: UserRole | "";
-  }>({
-    name: "",
-    username: "",
-    password: "",
-    role: "",
-  });
-  const isCreateFormComplete =
-    newUserForm.name.trim().length > 0 &&
-    newUserForm.username.trim().length > 0 &&
-    newUserForm.password.trim().length > 0 &&
-    newUserForm.role !== "";
-  const nameValidationMessage = validateUserField(
-    newUserForm.name,
-    "Name",
-  );
-  const usernameValidationMessage = validateUserField(
-    newUserForm.username,
-    "Username",
-  );
-  const isCreatePasswordValid =
-    validatePassword(newUserForm.password) === "";
-  const isCreateFormValid =
-    isCreateFormComplete &&
-    !nameValidationMessage &&
-    !usernameValidationMessage &&
-    isCreatePasswordValid;
-  const userHasMaintenanceSchedule = (user: UserRecord) =>
-    maintenanceSchedules.some(
-      (schedule) =>
-        schedule.assignedDriver.trim().toLowerCase() ===
-        user.name.trim().toLowerCase(),
-    );
-  const findDuplicateUser = () => {
-    const normalizedName = normalizeUserIdentity(newUserForm.name);
-    const normalizedUsername = normalizeUserIdentity(newUserForm.username);
-
-    return users.find(
-      (user) =>
-        normalizeUserIdentity(user.name) === normalizedName ||
-        normalizeUserIdentity(user.username) === normalizedUsername,
-    );
+  const userRecord = user as {
+    role?: string | null;
+    roles?: { role?: string | null; system?: string | null }[];
   };
 
-  useEffect(() => {
-    let isMounted = true;
+  if (normalizeRole(userRecord.role) === "ADMIN") return true;
 
-    // If the app is configured to use the backend but no JWT is present,
-    // avoid calling protected endpoints (they will respond 401).
+  return (userRecord.roles ?? []).some(
+    (role) =>
+      normalizeSystem(role.system) === "SHARED" &&
+      normalizeRole(role.role) === "ADMIN",
+  );
+}
+
+function normalizePortalUser(user: unknown): PortalUserRecord {
+  const source =
+    user && typeof user === "object"
+      ? (user as Partial<PortalUserRecord> & {
+          role?: string;
+          status?: string;
+        })
+      : {};
+
+  const roles = Array.isArray(source.roles)
+    ? source.roles.map((role) => ({
+        system: normalizeSystem(role.system),
+        role: normalizeRole(role.role),
+      }))
+    : source.role
+      ? [{ system: "VMMS", role: normalizeRole(source.role) }]
+      : [];
+
+  return {
+    id: String(source.id ?? ""),
+    name: String(source.name ?? ""),
+    username: String(source.username ?? ""),
+    isActive:
+      typeof source.isActive === "boolean"
+        ? source.isActive
+        : source.status !== "Inactive",
+    failedLoginAttempts: Number(source.failedLoginAttempts ?? 0),
+    lockedAt: source.lockedAt ?? null,
+    roles,
+  };
+}
+
+async function fetchUsers() {
+  const endpoint = useBackend ? "/auth/users" : "/users";
+  const users = await fetchJSON<unknown[]>(endpoint);
+  return users.map((user) => normalizePortalUser(user));
+}
+
+function validatePasswordStrength(password: string): string | null {
+  if (password.length < 12) {
+    return "Password must be at least 12 characters long.";
+  }
+  if (!/[A-Z]/.test(password)) {
+    return "Password must include at least one uppercase letter.";
+  }
+  if (!/[a-z]/.test(password)) {
+    return "Password must include at least one lowercase letter.";
+  }
+  if (!/\d/.test(password)) {
+    return "Password must include at least one number.";
+  }
+  if (!/[^A-Za-z0-9]/.test(password)) {
+    return "Password must include at least one special character.";
+  }
+  return null;
+}
+
+export default function UserManagement() {
+  const navigate = useNavigate();
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [users, setUsers] = useState<PortalUserRecord[]>([]);
+  const [usersSearch, setUsersSearch] = useState("");
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [modalMode, setModalMode] = useState<ModalMode>("create");
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [vrmsRole, setVrmsRole] = useState("");
+  const [vmmsRole, setVmmsRole] = useState("");
+  const [bmsRole, setBmsRole] = useState("");
+  const [sharedRole, setSharedRole] = useState("");
+  const [formError, setFormError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [pendingUserAction, setPendingUserAction] =
+    useState<PendingUserAction>(null);
+
+  const filteredUsers = useMemo(() => {
+    const normalizedSearch = usersSearch.toLowerCase();
+    return users.filter(
+      (user) =>
+        user.name.toLowerCase().includes(normalizedSearch) ||
+        user.username.toLowerCase().includes(normalizedSearch),
+    );
+  }, [users, usersSearch]);
+
+  const showToast = (message: string) => {
+    setSuccessMessage(message);
+    window.setTimeout(() => setSuccessMessage(""), 4000);
+  };
+
+  const loadUsers = useCallback(async () => {
+    setUsersLoading(true);
+    try {
+      setUsers(await fetchUsers());
+    } catch (error) {
+      console.error("Failed to load users:", error);
+    } finally {
+      setUsersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
     const token = window.localStorage.getItem("accessToken");
     if (useBackend && !token) {
-      // redirect to login so the user can sign in and obtain a token
       navigate("/login", { replace: true });
       return;
     }
 
-    const refreshUsers = async () => {
-      try {
-        const [resultUsers, me, schedules] = await Promise.all([
-          getUsers(),
-          getCurrentUser(),
-          getMaintenanceSchedules(),
-        ]);
+    let isMounted = true;
+    getCurrentUser()
+      .then((user) => {
         if (!isMounted) return;
-
-        let usersWithLockState = resultUsers;
-        if (normalizeRole(me.role) === "ADMIN") {
-          const managedUsers = await getManagedUsers();
-          const managedUsersById = new Map(
-            managedUsers.map((user) => [user.id, user]),
-          );
-          usersWithLockState = resultUsers.map((user) => {
-            const managedUser = managedUsersById.get(user.id);
-            return managedUser
-              ? {
-                  ...user,
-                  isLocked: managedUser.isLocked,
-                  lockedAt: managedUser.lockedAt,
-                }
-              : user;
-          });
-        }
-
-        if (!isMounted) return;
-        setUsers(usersWithLockState);
-        setCurrentUser(me);
-        setMaintenanceSchedules(schedules);
-      } catch (error) {
-        console.error("Failed to load users or current user", error);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-
-    refreshUsers();
-
-    const onLoginActivity = () => {
-      refreshUsers();
-    };
-    window.addEventListener("user-login-activity-updated", onLoginActivity);
+        setIsAdmin(hasSharedAdminAccess(user));
+      })
+      .catch((error) => {
+        console.error("Failed to load current user:", error);
+        if (isMounted) setIsAdmin(false);
+      });
 
     return () => {
       isMounted = false;
-      window.removeEventListener(
-        "user-login-activity-updated",
-        onLoginActivity,
-      );
     };
   }, [navigate]);
 
-  const filteredUsers = useMemo(() => {
-    const normalizedSearch = searchQuery.toLowerCase();
+  useEffect(() => {
+    if (!isAdmin) return;
+    void loadUsers();
+  }, [isAdmin, loadUsers]);
 
-    return users
-      .filter((user) => {
-        const matchesSearch = [user.name, user.username, normalizeRole(user.role)]
-          .join(" ")
-          .toLowerCase()
-          .includes(normalizedSearch);
+  useEffect(() => {
+    const closeActionMenu = () => setOpenActionMenuId(null);
+    document.addEventListener("click", closeActionMenu);
+    return () => document.removeEventListener("click", closeActionMenu);
+  }, []);
 
-        const matchesStatus =
-          statusFilter === "All" ? true : user.status === statusFilter;
-
-        const matchesRole =
-          roleFilter === "All"
-            ? true
-            : normalizeRole(user.role) === normalizeRole(roleFilter);
-
-        return matchesSearch && matchesStatus && matchesRole;
-      })
-      .sort((a, b) => {
-        const left =
-          sortField === "name" ? a.name.toLowerCase() : a.role.toLowerCase();
-        const right =
-          sortField === "name" ? b.name.toLowerCase() : b.role.toLowerCase();
-
-        if (left < right) return sortDirection === "asc" ? -1 : 1;
-        if (left > right) return sortDirection === "asc" ? 1 : -1;
-        return 0;
-      });
-  }, [users, searchQuery, statusFilter, roleFilter, sortField, sortDirection]);
-  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / usersPerPage));
-  const activePage = Math.min(currentPage, totalPages);
-  const paginatedUsers = filteredUsers.slice(
-    (activePage - 1) * usersPerPage,
-    activePage * usersPerPage,
-  );
-
-  const stats = useMemo(() => {
-    const totalUsers = users.length;
-    const activeUsers = users.filter((user) => user.status === "Active").length;
-    const adminUsers = users.filter(
-      (user) => normalizeRole(user.role) === "ADMIN",
-    ).length;
-
-    return [
-      { label: "Total Users", value: totalUsers, icon: ShieldCheck },
-      { label: "Active Users", value: activeUsers, icon: UserCheck },
-      { label: "Admins", value: adminUsers, icon: Shield },
-    ];
-  }, [users]);
-
-  const handleDeleteUser = async (user: UserRecord) => {
-    if (!currentUser) return;
-    if (user.id === currentUser.id) {
-      alert("You cannot delete your own account.");
-      return;
+  const buildRoleAssignments = () => {
+    const roleAssignments: SystemRole[] = [];
+    if (vrmsRole) roleAssignments.push({ system: "VRMS", role: vrmsRole });
+    if (vmmsRole) roleAssignments.push({ system: "VMMS", role: vmmsRole });
+    if (bmsRole) roleAssignments.push({ system: "BMS", role: bmsRole });
+    if (sharedRole) {
+      roleAssignments.push({ system: "SHARED", role: sharedRole });
     }
-    if (!canPerform(currentUser.role, "delete")) {
-      alert("You do not have permission to delete users.");
-      return;
-    }
-    if (userHasMaintenanceSchedule(user)) {
-      setBlockedDeleteUser(user);
-      return;
-    }
-    setConfirmDeleteUser(user);
+    return roleAssignments;
   };
 
-  const performDeleteUser = async (user: UserRecord) => {
-    if (userHasMaintenanceSchedule(user)) {
-      setConfirmDeleteUser(null);
+  const handleCreateOrUpdateUser = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setFormError("");
+
+    if (!name.trim() || !username.trim()) {
+      setFormError("Name and Username are required.");
       return;
     }
 
-    setProcessingUserId(user.id);
-    try {
-      await deleteUser(user.id);
-      setUsers((currentUsers) =>
-        currentUsers.filter((currentUser) => currentUser.id !== user.id),
-      );
-    } catch (error) {
-      console.error("Failed to delete user", error);
-    } finally {
-      setProcessingUserId(null);
-      setConfirmDeleteUser(null);
-    }
-  };
-
-  const performUnlockUser = async (user: UserRecord) => {
-    setProcessingUserId(user.id);
-    try {
-      const unlockedUser = await unlockUser(user.id);
-      setUsers((currentUsers) =>
-        currentUsers.map((currentUser) =>
-          currentUser.id === user.id
-            ? {
-                ...currentUser,
-                isLocked: unlockedUser.isLocked,
-                lockedAt: unlockedUser.lockedAt,
-              }
-            : currentUser,
-        ),
-      );
-    } catch (error) {
-      console.error("Failed to unlock user", error);
-    } finally {
-      setProcessingUserId(null);
-      setConfirmUnlockUser(null);
-    }
-  };
-
-  const updateScheduledMechanicName = async (
-    previousName: string,
-    nextName: string,
-  ) => {
-    const normalizedPreviousName = previousName.trim().toLowerCase();
-    const matchingSchedules = maintenanceSchedules.filter(
-      (schedule) =>
-        schedule.assignedDriver.trim().toLowerCase() ===
-        normalizedPreviousName,
-    );
-
-    if (matchingSchedules.length === 0) return;
-
-    const updatedSchedules = await Promise.all(
-      matchingSchedules.map((schedule) =>
-        updateMaintenanceSchedule({
-          ...schedule,
-          assignedDriver: nextName.trim(),
-        }),
-      ),
-    );
-    const updatedSchedulesById = new Map(
-      updatedSchedules.map((schedule) => [schedule.id, schedule]),
-    );
-
-    setMaintenanceSchedules((currentSchedules) =>
-      currentSchedules.map(
-        (schedule) => updatedSchedulesById.get(schedule.id) ?? schedule,
-      ),
-    );
-  };
-
-  const confirmCreateUserAccount = async (userToReplace?: UserRecord) => {
-    if (!isCreateFormValid) return;
-
-    if (!userToReplace) {
-      const duplicate = findDuplicateUser();
-      if (duplicate) {
-        setConfirmCreateUser(false);
-        setDuplicateUser(duplicate);
-        return;
-      }
-    }
-
-    setProcessingUserId("create");
-
-    if (!currentUser) {
-      alert("Current user unknown");
-      setProcessingUserId(null);
+    const roleAssignments = buildRoleAssignments();
+    if (roleAssignments.length === 0) {
+      setFormError("At least one role assignment is required.");
       return;
     }
-    if (!canPerform(currentUser.role, "create")) {
-      alert("You do not have permission to create users.");
-      setProcessingUserId(null);
-      return;
-    }
-
-    if (!newUserForm.role) {
-      alert("Please select a role for the new user.");
-      setProcessingUserId(null);
-      return;
-    }
-
-    const passwordValidationMessage = validatePassword(newUserForm.password);
-    if (passwordValidationMessage) {
-      setPasswordError(passwordValidationMessage);
-      setProcessingUserId(null);
-      return;
-    }
-
-    setPasswordError("");
-    const selectedRole = newUserForm.role;
 
     try {
-      const userInput: UserCreateInput = {
-        name: newUserForm.name.trim(),
-        username: newUserForm.username.trim(),
-        password: newUserForm.password,
-        role: selectedRole,
-      };
-
-      if (userToReplace) {
-        if (userToReplace.id === currentUser.id) {
-          alert("You cannot replace your own account.");
+      if (modalMode === "create") {
+        if (!password) {
+          setFormError("Password is required for new users.");
+          return;
+        }
+        const passwordError = validatePasswordStrength(password);
+        if (passwordError) {
+          setFormError(passwordError);
           return;
         }
 
-        const updatedUser = await updateUser(userToReplace.id, {
-          name: userInput.name,
-          username: userInput.username,
-          password: userInput.password,
+        await fetchJSON("/auth/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: name.trim(),
+            username: username.trim(),
+            password,
+            roleAssignments,
+          }),
         });
-        const userWithRole =
-          userToReplace.role === selectedRole
-            ? updatedUser
-            : await updateUserRole(userToReplace.id, selectedRole);
-
-        if (userToReplace.name !== userInput.name) {
-          await updateScheduledMechanicName(
-            userToReplace.name,
-            userInput.name,
-          );
-        }
-
-        setUsers((currentUsers) =>
-          currentUsers.map((user) =>
-            user.id === userToReplace.id
-              ? { ...user, ...updatedUser, role: userWithRole.role }
-              : user,
-          ),
-        );
+        showToast(`User ${username} created successfully!`);
       } else {
-        const createdUser = await createUser(userInput);
-        setUsers((currentUsers) => [createdUser, ...currentUsers]);
-      }
+        if (password) {
+          const passwordError = validatePasswordStrength(password);
+          if (passwordError) {
+            setFormError(passwordError);
+            return;
+          }
+        }
 
-      setIsCreateModalOpen(false);
-      setConfirmCreateUser(false);
-      setDuplicateUser(null);
-      setNewUserForm({
-        name: "",
-        username: "",
-        password: "",
-        role: "",
-      });
-
-      getUsers()
-        .then((freshUsers) => setUsers(freshUsers))
-        .catch((error) => console.error("Failed to refresh users", error));
-    } catch (error) {
-      console.error("Failed to create user", error);
-    } finally {
-      setProcessingUserId(null);
-    }
-  };
-
-  const handleCreateUser = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    await confirmCreateUserAccount();
-  };
-
-  const handleEditUser = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!currentUser || !editingUser) return;
-    const isSelf = editingUser.id === currentUser.id;
-
-    // Only ADMINs can edit users at all
-    if (!canPerform(currentUser.role, "edit")) {
-      alert("You do not have permission to edit users.");
-      return;
-    }
-
-    // Handle self-edit: allow only display name change
-    if (isSelf) {
-      const nameChanged = editingUser.name !== newUserForm.name;
-      const usernameChanged = editingUser.username !== newUserForm.username;
-      const roleChanged = editingUser.role !== newUserForm.role;
-
-      if (usernameChanged || roleChanged) {
-        alert("You cannot change your username or role for your own account.");
-        return;
-      }
-
-      if (!nameChanged) {
-        setIsCreateModalOpen(false);
-        setEditingUser(null);
-        return;
-      }
-
-      setProcessingUserId(editingUser.id);
-      try {
-        const nextName = newUserForm.name.trim();
-        await updateUser(editingUser.id, { name: nextName });
-        await updateScheduledMechanicName(editingUser.name, nextName);
-        const fresh = await getUsers();
-        setUsers(fresh);
-        setIsCreateModalOpen(false);
-        setEditingUser(null);
-      } catch (error) {
-        console.error("Failed to edit own user", error);
-      } finally {
-        setProcessingUserId(null);
-      }
-      return;
-    }
-
-    // Non-self edits
-    setProcessingUserId(editingUser.id);
-    try {
-      const nameChanged = editingUser.name !== newUserForm.name;
-      const usernameChanged = editingUser.username !== newUserForm.username;
-      const roleChanged = editingUser.role !== newUserForm.role;
-
-      // Persist name/username changes
-      if (nameChanged || usernameChanged) {
-        const nextName = newUserForm.name.trim();
-        await updateUser(editingUser.id, {
-          name: nextName,
-          username: newUserForm.username.trim(),
+        await fetchJSON(`/auth/users/${encodeURIComponent(selectedUserId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: name.trim(),
+            username: username.trim(),
+            password: password || undefined,
+            roleAssignments,
+          }),
         });
-        if (nameChanged) {
-          await updateScheduledMechanicName(editingUser.name, nextName);
-        }
+        showToast(`User ${username} updated successfully!`);
       }
 
-      // Persist role change
-      if (roleChanged) {
-        if (!newUserForm.role) {
-          alert("Please select a role for the user.");
-        } else {
-          const updated = await updateUserRole(
-            editingUser.id,
-            newUserForm.role,
-          );
-          setUsers((currentUsers) =>
-            currentUsers.map((u) =>
-              u.id === updated.id ? { ...u, role: updated.role } : u,
-            ),
-          );
-        }
-      }
-
-      // Refresh full user list to ensure backend canonical state
-      const fresh = await getUsers();
-      setUsers(fresh);
-      setIsCreateModalOpen(false);
-      setEditingUser(null);
+      setShowUserModal(false);
+      await loadUsers();
     } catch (error) {
-      console.error("Failed to edit user", error);
-    } finally {
-      setProcessingUserId(null);
+      setFormError(getErrorMessage(error, "Failed to save user."));
     }
   };
 
-  const handleSort = (field: "name" | "role") => {
-    setCurrentPage(1);
-    if (sortField === field) {
-      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+  const handleResetPassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setFormError("");
+
+    if (!password) {
+      setFormError("Please enter a new password.");
+      return;
+    }
+
+    const passwordError = validatePasswordStrength(password);
+    if (passwordError) {
+      setFormError(passwordError);
+      return;
+    }
+
+    try {
+      await fetchJSON(`/auth/users/${encodeURIComponent(selectedUserId)}/password`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      showToast(`Password reset successfully for ${username}!`);
+      setShowUserModal(false);
+      await loadUsers();
+    } catch (error) {
+      setFormError(getErrorMessage(error, "Failed to save user."));
+    }
+  };
+
+  const toggleUserStatus = async (userId: string, currentStatus: boolean) => {
+    try {
+      await fetchJSON(`/auth/users/${encodeURIComponent(userId)}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !currentStatus }),
+      });
+      showToast("User status updated!");
+      await loadUsers();
+    } catch (error) {
+      console.error("Failed to toggle user status:", error);
+    }
+  };
+
+  const handleUnlockUser = async (userId: string) => {
+    try {
+      await fetchJSON(`/auth/users/${encodeURIComponent(userId)}/unlock`, {
+        method: "PATCH",
+      });
+      showToast("User account unlocked!");
+      await loadUsers();
+    } catch (error) {
+      console.error("Failed to unlock user:", error);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    try {
+      await fetchJSON(`/auth/users/${encodeURIComponent(userId)}`, {
+        method: "DELETE",
+      });
+      showToast("User deleted successfully!");
+      await loadUsers();
+    } catch (error) {
+      console.error("Failed to delete user:", error);
+    }
+  };
+
+  const confirmUserAction = async () => {
+    if (!pendingUserAction) return;
+    const { type, user } = pendingUserAction;
+    setPendingUserAction(null);
+
+    if (type === "unlock") {
+      await handleUnlockUser(user.id);
+      return;
+    }
+
+    if (type === "status") {
+      await toggleUserStatus(user.id, user.isActive);
+      return;
+    }
+
+    await handleDeleteUser(user.id);
+  };
+
+  const openModal = (mode: ModalMode, user?: PortalUserRecord) => {
+    setModalMode(mode);
+    setFormError("");
+
+    if (mode === "create") {
+      setSelectedUserId("");
+      setName("");
+      setUsername("");
+      setPassword("");
+      setVrmsRole(emptyRoleState.vrmsRole);
+      setVmmsRole(emptyRoleState.vmmsRole);
+      setBmsRole(emptyRoleState.bmsRole);
+      setSharedRole(emptyRoleState.sharedRole);
     } else {
-      setSortField(field);
-      setSortDirection("asc");
-    }
-  };
+      if (!user) return;
+      setSelectedUserId(user.id);
+      setName(user.name);
+      setUsername(user.username);
+      setPassword("");
 
-  function canPerform(role: UserRecord["role"], action: string) {
-    const normalizedRole = normalizeRole(role);
-    const map: Record<string, Record<string, boolean>> = {
-      ADMIN: {
-        create: true,
-        edit: true,
-        suspend: true,
-        delete: true,
-      },
-      OPERATIONS: {
-        create: true,
-        edit: false,
-        suspend: true,
-        delete: false,
-      },
-      MECHANIC: {
-        create: false,
-        edit: false,
-        suspend: false,
-        delete: false,
-      },
-    };
-    return !!map[normalizedRole]?.[action];
-  }
+      const getRole = (system: (typeof roleSystems)[number]) =>
+        user.roles.find((role) => normalizeSystem(role.system) === system)
+          ?.role || "";
+
+      setVrmsRole(getRole("VRMS"));
+      setVmmsRole(getRole("VMMS"));
+      setBmsRole(getRole("BMS"));
+      setSharedRole(getRole("SHARED"));
+    }
+
+    setShowUserModal(true);
+  };
 
   return (
-    <div className={containerClasses}>
-      <PageHeader
-        icon={ShieldCheck}
-        title="User Management"
-        subtitle="Manage system users, roles, permissions, and account states"
-      />
+    <div className="space-y-6">
+      {successMessage && (
+        <div className="fixed right-8 top-8 z-[60] w-[390px] max-w-[calc(100vw-2rem)]">
+          <ToastNotification type="success" message={successMessage} />
+        </div>
+      )}
 
-      <div className={statsGridClasses}>
-        {stats.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <div
-              key={stat.label}
-              className={cardClasses}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-[var(--color-text-secondary)]">{stat.label}</p>
-                  <p className="mt-3 text-3xl font-bold text-[var(--color-text-primary)]">
-                    {stat.value}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)]/80 p-3 text-[var(--color-text-secondary)] shadow-card">
-                  <Icon className="h-5 w-5" />
-                </div>
-              </div>
+      {!isAdmin ? (
+        <div className="flex min-h-[520px] items-center justify-center">
+          <div className="max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-8 text-center shadow-card">
+            <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-xl bg-red-500/10 text-red-600">
+              <Lock size={26} />
             </div>
-          );
-        })}
-      </div>
-
-      <div className={cardClasses}>
-        <div className={headerSectionClasses}>
-          <div>
-            <h2 className="text-lg font-bold text-[var(--color-text-primary)]">
-              System Users
+            <h2 className="mb-2 text-2xl font-bold text-[var(--color-text-primary)]">
+              Access Restricted
             </h2>
-            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-              Review users, update roles, suspend accounts, and remove access.
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              User Accounts can only be managed by a Shared Portal
+              administrator.
             </p>
           </div>
-          <Button
-            variant="primary"
-            className="flex items-center gap-2"
-            onClick={() => {
-              setEditingUser(null);
-              setNewUserForm({
-                name: "",
-                username: "",
-                password: "",
-                role: "",
-              });
-              setPasswordError("");
-              setIsCreateModalOpen(true);
-            }}
-            disabled={!currentUser || !canPerform(currentUser.role, "create")}
-          >
-            <Plus className="h-4 w-4" />
-            <span>Add User</span>
-          </Button>
         </div>
-
-        <div className={filtersGridClasses}>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
-              placeholder="Search name, username, role..."
-              className={searchInputClasses}
-            />
-          </div>
-
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" />
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              className={selectInputClasses}
-            >
-              <option value="All">All Statuses</option>
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-              <option value="Suspended">Suspended</option>
-            </select>
-          </div>
-
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" />
-            <select
-              value={roleFilter}
-              onChange={(e) => {
-                setRoleFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              className={selectInputClasses}
-            >
-              <option value="All">All Roles</option>
-              {roleOptions.map((roleOption) => (
-                <option key={roleOption} value={roleOption}>
-                  {displayRole(roleOption)}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className={loadingStateClasses}>
-            Loading users...
-          </div>
-        ) : filteredUsers.length === 0 ? (
-          <div className={emptyStateClasses}>
-            No users match your current filters.
-          </div>
-        ) : (
-          <div className={tableWrapperClasses}>
-            <div className="min-h-full overflow-x-auto">
-              <table className={tableClasses}>
-                <thead className={theadClasses}>
-                  <tr>
-                    <th className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => handleSort("name")}
-                        className={sortButtonClasses}
-                      >
-                        <span>User</span>
-                        {sortField === "name" ? (
-                          sortDirection === "asc" ? (
-                            <ArrowUp className="h-3.5 w-3.5" />
-                          ) : (
-                            <ArrowDown className="h-3.5 w-3.5" />
-                          )
-                        ) : null}
-                      </button>
-                    </th>
-                    <th className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => handleSort("role")}
-                        className={sortButtonClasses}
-                      >
-                        <span>Role</span>
-                        {sortField === "role" ? (
-                          sortDirection === "asc" ? (
-                            <ArrowUp className="h-3.5 w-3.5" />
-                          ) : (
-                            <ArrowDown className="h-3.5 w-3.5" />
-                          )
-                        ) : null}
-                      </button>
-                    </th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Last Active</th>
-                    <th className="px-4 py-3">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className={tbodyClasses}>
-                  {paginatedUsers.map((user) => (
-                    <tr key={user.id} className="bg-transparent align-top">
-                      <td className="px-4 py-3">
-                        <div className="space-y-0.5">
-                          <p className="font-semibold text-[var(--color-text-primary)]">
-                            {user.name}
-                          </p>
-                          <p className="text-sm text-[var(--color-text-secondary)]">
-                            {user.username}
-                          </p>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`${badgeClasses} ${roleStyles[user.role] ?? "border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]"}`}
-                        >
-                          {displayRole(user.role)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`${badgeClasses} ${
-                            user.isLocked
-                              ? "border border-rose-500/30 bg-rose-500/15 text-rose-700"
-                              : statusStyles[user.status] ??
-                                "border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]"
-                          }`}
-                        >
-                          {user.isLocked ? "Locked" : user.status ?? "Unknown"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-[var(--color-text-secondary)]">
-                        {user.lastActive
-                          ? new Date(user.lastActive).toLocaleString()
-                          : "—"}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className={actionButtonsGroupClasses}>
-                          {normalizeRole(currentUser?.role) === "ADMIN" &&
-                          user.isLocked ? (
-                            <button
-                              type="button"
-                              onClick={() => setConfirmUnlockUser(user)}
-                              disabled={processingUserId === user.id}
-                              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {processingUserId === user.id
-                                ? "Unlocking..."
-                                : "Unlock"}
-                            </button>
-                          ) : null}
-
-                          {normalizeRole(currentUser?.role) === "ADMIN" ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingUser(user);
-                                setNewUserForm({
-                                  name: user.name,
-                                  username: user.username,
-                                  password: "",
-                                  role: user.role,
-                                });
-                                setIsCreateModalOpen(true);
-                              }}
-                              className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] ${processingUserId === user.id ? "cursor-not-allowed opacity-50" : ""}`}
-                            >
-                              Edit
-                            </button>
-                          ) : null}
-
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteUser(user)}
-                            disabled={
-                              processingUserId === user.id ||
-                              user.id === currentUser?.id ||
-                              normalizeRole(currentUser?.role) !== "ADMIN"
-                            }
-                            className={`table-delete-button !text-sm !font-medium ${
-                              processingUserId === user.id ||
-                              user.id === currentUser?.id ||
-                              currentUser?.role !== "ADMIN" ||
-                              userHasMaintenanceSchedule(user)
-                                ? "cursor-not-allowed opacity-50"
-                                : ""
-                            }`}
-                            title={
-                              userHasMaintenanceSchedule(user)
-                                ? "Cannot delete a user assigned to a maintenance schedule"
-                                : "Delete user"
-                            }
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex flex-col gap-3 border-t border-[var(--color-border)] px-4 py-3 text-sm text-[var(--color-text-secondary)] sm:flex-row sm:items-center sm:justify-between">
-              <span>
-                Showing {paginatedUsers.length} of {filteredUsers.length} users
-              </span>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage(Math.max(1, activePage - 1))}
-                  disabled={activePage === 1}
-                  className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Previous
-                </button>
-                <span>Page {activePage} of {totalPages}</span>
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage(Math.min(totalPages, activePage + 1))}
-                  disabled={activePage === totalPages}
-                  className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Next
-                </button>
-                {totalPages >= 20 ? (
-                  <label className="flex items-center gap-2">
-                    <span>Go to</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={totalPages}
-                      placeholder={String(activePage)}
-                      aria-label="Go to user page"
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter") return;
-                        if (!event.currentTarget.value.trim()) return;
-                        const requestedPage = Number(event.currentTarget.value);
-                        if (!Number.isFinite(requestedPage)) return;
-                        setCurrentPage(
-                          Math.min(totalPages, Math.max(1, Math.trunc(requestedPage))),
-                        );
-                        event.currentTarget.value = "";
-                      }}
-                      className="w-16 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2 py-1.5 text-center text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
-                    />
-                  </label>
-                ) : null}
+      ) : (
+        <div>
+          <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+            <div>
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)]">
+                <Users size={24} />
               </div>
+              <h2 className="mb-2 text-3xl font-bold text-[var(--color-text-primary)]">
+                USER ACCOUNT MANAGEMENT
+              </h2>
+              <p className="text-sm text-[var(--color-text-secondary)]">
+                Add or edit system roles and active/lockout configurations.
+              </p>
             </div>
-          </div>
-        )}
-      </div>
-
-      <Modal
-        isOpen={isCreateModalOpen}
-        title={editingUser ? "Edit user account" : "Create new user account"}
-        onClose={() => {
-          setIsCreateModalOpen(false);
-          setEditingUser(null);
-          setPasswordError("");
-        }}
-        size="lg"
-        className="rounded-[30px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-[0_30px_90px_rgba(0,0,0,0.35)]"
-        footer={(
-          <div className={buttonGroupClasses}>
-            <button
+            <ActionButton
+              onClick={() => openModal("create")}
+              className="cursor-pointer"
               type="button"
-              onClick={() => {
-                setIsCreateModalOpen(false);
-                setEditingUser(null);
-                setPasswordError("");
-              }}
-              className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
             >
-              Cancel
-            </button>
-            {editingUser ? (
-              <button
-                type="submit"
-                form="edit-user-form"
-                disabled={processingUserId === editingUser.id}
-                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-70"
-              >
-                {processingUserId === editingUser.id ? "Saving..." : "Save Changes"}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  const passwordValidationMessage = validatePassword(newUserForm.password);
-                  if (passwordValidationMessage) {
-                    setPasswordError(passwordValidationMessage);
-                    return;
-                  }
-                  setPasswordError("");
-
-                  const duplicate = findDuplicateUser();
-                  if (duplicate) {
-                    setDuplicateUser(duplicate);
-                    return;
-                  }
-
-                  setConfirmCreateUser(true);
-                }}
-                disabled={
-                  processingUserId === "create" || !isCreateFormValid
-                }
-                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-70"
-              >
-                {processingUserId === "create" ? "Creating..." : "Create User"}
-              </button>
-            )}
+              <Plus size={16} />
+              Create New User
+            </ActionButton>
           </div>
-        )}
-      >
-        <form
-          id={editingUser ? "edit-user-form" : "create-user-form"}
-          onSubmit={editingUser ? handleEditUser : handleCreateUser}
-          className={formClasses}
-        >
-              <div>
-                <label className="mb-1 block text-sm font-medium text-[var(--color-text-secondary)]">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  minLength={3}
-                  value={newUserForm.name}
-                  placeholder="Enter Name"
-                  onChange={(event) =>
-                    setNewUserForm((current) => ({
-                      ...current,
-                      name: event.target.value,
-                    }))
-                  }
-                  className={inputClasses}
-                  aria-invalid={!editingUser && Boolean(nameValidationMessage)}
-                />
-                {!editingUser &&
-                  newUserForm.name.trim().length > 0 &&
-                  nameValidationMessage && (
-                    <p className="mt-1 text-xs text-[var(--color-brand-danger)]">
-                      {nameValidationMessage}
-                    </p>
-                  )}
-              </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-[var(--color-text-secondary)]">
-                  Username
-                </label>
-                <input
-                  type="text"
-                  required
-                  minLength={3}
-                  value={newUserForm.username}
-                  placeholder="Enter username"
-                  name="new-user-username"
-                  autoComplete="off"
-                  spellCheck={false}
-                  onChange={(event) =>
-                    setNewUserForm((current) => ({
-                      ...current,
-                      username: event.target.value,
-                    }))
-                  }
-                  className={inputClasses}
-                  disabled={editingUser?.id === currentUser?.id}
-                  aria-invalid={
-                    !editingUser && Boolean(usernameValidationMessage)
-                  }
-                />
-                {!editingUser &&
-                  newUserForm.username.trim().length > 0 &&
-                  usernameValidationMessage && (
-                    <p className="mt-1 text-xs text-[var(--color-brand-danger)]">
-                      {usernameValidationMessage}
-                    </p>
-                  )}
-              </div>
+          <section className="space-y-6">
+            <div className="mb-6">
+              <SearchInput
+                placeholder="Search user by username or name..."
+                value={usersSearch}
+                onChange={(event) => setUsersSearch(event.target.value)}
+              />
+            </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
+            {usersLoading ? (
+              <div className="flex items-center justify-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-12 text-sm text-[var(--color-text-secondary)]">
+                <RefreshCw className="animate-spin" size={16} />
+                Loading user records...
+              </div>
+            ) : (
+              <DataTable
+                data={filteredUsers}
+                getRowKey={(user) => user.id}
+                minWidth="900px"
+                emptyMessage="No user accounts found."
+                columns={[
+                  {
+                    key: "name",
+                    header: "Full Name",
+                    width: "22%",
+                    render: (user) => <span className="font-bold">{user.name}</span>,
+                  },
+                  {
+                    key: "username",
+                    header: "Username",
+                    width: "18%",
+                    render: (user) => (
+                      <span className="font-semibold text-[#2f3b52]">{user.username}</span>
+                    ),
+                  },
+                  {
+                    key: "roles",
+                    header: "System Roles",
+                    width: "34%",
+                    render: (user) => (
+                      <div className="flex flex-wrap gap-1.5">
+                        {user.roles.map((role, index) => (
+                          <span
+                            key={`${role.system}-${role.role}-${index}`}
+                            className="rounded-full border border-[var(--color-brand-primary)]/20 bg-[var(--color-brand-primary)]/10 px-2 py-0.5 text-[10px] font-bold text-[var(--color-brand-primary)]"
+                          >
+                            {role.system}: {role.role}
+                          </span>
+                        ))}
+                      </div>
+                    ),
+                  },
+                  {
+                    key: "status",
+                    header: "Status",
+                    width: "14%",
+                    render: (user) =>
+                      user.lockedAt ? (
+                        <StatusBadge status="Failed" />
+                      ) : user.isActive ? (
+                        <StatusBadge status="Active" />
+                      ) : (
+                        <StatusBadge status="Inactive" />
+                      ),
+                  },
+                  {
+                    key: "actions",
+                    header: "Actions",
+                    width: "12%",
+                    align: "center",
+                    render: (user) => (
+                      <ActionMenu
+                        open={openActionMenuId === user.id}
+                        onToggle={(event) => {
+                          event.stopPropagation();
+                          setOpenActionMenuId((current) =>
+                            current === user.id ? null : user.id,
+                          );
+                        }}
+                        items={[
+                          ...(user.lockedAt
+                            ? [{
+                                label: "Unlock",
+                                icon: Unlock,
+                                onClick: () => {
+                                  setOpenActionMenuId(null);
+                                  setPendingUserAction({ type: "unlock", user });
+                                },
+                              }]
+                            : []),
+                          {
+                            label: user.isActive ? "Deactivate" : "Activate",
+                            icon: user.isActive ? XCircle : CheckCircle,
+                            onClick: () => {
+                              setOpenActionMenuId(null);
+                              setPendingUserAction({ type: "status", user });
+                            },
+                          },
+                          {
+                            label: "Reset Password",
+                            icon: Key,
+                            onClick: () => {
+                              setOpenActionMenuId(null);
+                              openModal("reset-pw", user);
+                            },
+                          },
+                          {
+                            label: "Edit",
+                            icon: Edit2,
+                            onClick: () => {
+                              setOpenActionMenuId(null);
+                              openModal("edit", user);
+                            },
+                          },
+                          {
+                            label: "Delete",
+                            icon: Trash2,
+                            danger: true,
+                            onClick: () => {
+                              setOpenActionMenuId(null);
+                              setPendingUserAction({ type: "delete", user });
+                            },
+                          },
+                        ]}
+                      />
+                    ),
+                  },
+                ]} 
+              />
+            )}
+          </section>
+        </div>
+      )}
+
+      <ConfirmationModal
+        isOpen={Boolean(pendingUserAction)}
+        variant={pendingUserAction?.type === "delete" ? "danger" : "primary"}
+        message={
+          pendingUserAction ? (
+            <>
+              Are you sure you want to{" "}
+              {pendingUserAction.type === "unlock"
+                ? "unlock"
+                : pendingUserAction.type === "status"
+                  ? pendingUserAction.user.isActive
+                    ? "deactivate"
+                    : "activate"
+                  : "delete"}{" "}
+              this user?
+              <span className="mt-2 block font-bold">
+                {pendingUserAction.user.username}
+              </span>
+            </>
+          ) : (
+            ""
+          )
+        }
+        confirmLabel="Yes"
+        onConfirm={() => void confirmUserAction()}
+        onCancel={() => setPendingUserAction(null)}
+      />
+
+      {showUserModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.5)] p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg overflow-hidden rounded-[30px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-[0_30px_90px_rgba(0,0,0,0.35)]">
+            <div className="flex items-center justify-between border-b border-[var(--color-border)] p-6">
+              <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
+                {modalMode === "create"
+                  ? "Create New User Account"
+                  : modalMode === "edit"
+                    ? "Edit User Roles"
+                    : "Reset Password"}
+              </h3>
+              <button
+                onClick={() => setShowUserModal(false)}
+                className="cursor-pointer text-xl font-bold text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+
+            <form
+              onSubmit={
+                modalMode === "reset-pw"
+                  ? handleResetPassword
+                  : handleCreateOrUpdateUser
+              }
+              className="space-y-4 p-6"
+            >
+              {formError && (
+                <div className="flex gap-2 rounded-xl border border-red-500/20 bg-red-500/10 p-3.5 text-xs text-red-700">
+                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                  {formError}
+                </div>
+              )}
+
+              {modalMode !== "reset-pw" && (
+                <>
+                  <div>
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                      Display Name
+                    </label>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                      placeholder="e.g. Maria Santos"
+                      className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-4 py-2.5 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-primary)]/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                      Username
+                    </label>
+                    <input
+                      type="text"
+                      value={username}
+                      onChange={(event) => setUsername(event.target.value)}
+                      placeholder="e.g. msantos"
+                      disabled={modalMode === "edit"}
+                      className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-4 py-2.5 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-primary)]/20 disabled:opacity-50"
+                    />
+                  </div>
+                </>
+              )}
+
+              {(modalMode === "create" || modalMode === "reset-pw") && (
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-[var(--color-text-secondary)]">
-                    Password
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                    {modalMode === "create" ? "Password" : "New Password"}
                   </label>
                   <input
                     type="password"
-                    required={!editingUser}
-                    value={newUserForm.password}
-                    name="new-user-password"
-                    autoComplete="new-password"
-                    spellCheck={false}
-                    placeholder={
-                      editingUser
-                        ? editingUser.id === currentUser?.id
-                          ? "You can only change your display name here"
-                          : "Leave blank to keep current password"
-                        : "Enter Password"
-                    }
-                    disabled={editingUser?.id === currentUser?.id}
-                    onChange={(event) => {
-                      const nextPassword = event.target.value;
-
-                      setNewUserForm((current) => ({
-                        ...current,
-                        password: nextPassword,
-                      }));
-
-                      if (!editingUser) {
-                        setPasswordError(validatePassword(nextPassword));
-                      }
-                    }}
-                    className={inputClasses}
-                    aria-disabled={editingUser?.id === currentUser?.id}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Enter password"
+                    className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-4 py-2.5 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-primary)]/20"
                   />
-                  {!editingUser && (
-                    <p className={`mt-1 text-xs ${passwordError ? "text-[var(--color-brand-danger)]" : "text-[var(--color-text-secondary)]"}`}>
-                      {newUserForm.password.trim().length > 0
-                        ? passwordError || "Password looks good."
-                        : ""}
-                    </p>
-                  )}
                 </div>
+              )}
 
+              {modalMode !== "reset-pw" && (
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-[var(--color-text-secondary)]">
-                    Role
+                  <label className="mb-4 block border-b border-[var(--color-border)] pb-2 text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                    Application Role Mappings
                   </label>
-                  <select
-                    required
-                    value={newUserForm.role}
-                    onChange={(event) =>
-                      setNewUserForm((current) => ({
-                        ...current,
-                        role: event.target.value as UserRole,
-                      }))
-                    }
-                    className={inputClasses}
-                    disabled={editingUser?.id === currentUser?.id}
-                  >
-                    <option value="" disabled>
-                      Select role
-                    </option>
-                    {roleOptions.map((roleOption) => (
-                      <option key={roleOption} value={roleOption}>
-                        {displayRole(roleOption)}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-blue-400">
+                        VRMS Role
+                      </label>
+                      <select
+                        value={vrmsRole}
+                        onChange={(event) => setVrmsRole(event.target.value)}
+                        className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-2.5 text-xs text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
+                      >
+                        <option value="">None (No Access)</option>
+                        <option value="ADMIN">ADMIN</option>
+                        <option value="MECHANIC">MECHANIC</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                        VMMS Role
+                      </label>
+                      <select
+                        value={vmmsRole}
+                        onChange={(event) => setVmmsRole(event.target.value)}
+                        className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-2.5 text-xs text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
+                      >
+                        <option value="">None (No Access)</option>
+                        <option value="ADMIN">ADMIN</option>
+                        <option value="MECHANIC">MECHANIC</option>
+                        <option value="OPERATIONS">OPERATIONS</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-amber-400">
+                        BMS Role
+                      </label>
+                      <select
+                        value={bmsRole}
+                        onChange={(event) => setBmsRole(event.target.value)}
+                        className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-2.5 text-xs text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
+                      >
+                        <option value="">None (No Access)</option>
+                        <option value="ADMIN">ADMIN</option>
+                        <option value="OPERATIONS">OPERATIONS</option>
+                        <option value="CUSTOMER_SUPPORT">
+                          CUSTOMER_SUPPORT
+                        </option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                        SHARED Portal Role
+                      </label>
+                      <select
+                        value={sharedRole}
+                        onChange={(event) => setSharedRole(event.target.value)}
+                        className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-2.5 text-xs text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
+                      >
+                        <option value="">None</option>
+                        <option value="ADMIN">ADMIN</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
+              )}
+
+              <div className="flex justify-end gap-3 border-t border-[var(--color-border)] pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowUserModal(false)}
+                  className="cursor-pointer rounded-xl border border-[var(--color-border)] px-4 py-2 text-xs font-bold text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="cursor-pointer rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-[var(--color-brand-dark)]"
+                >
+                  {modalMode === "reset-pw" ? "Reset Password" : "Save Changes"}
+                </button>
               </div>
             </form>
-      </Modal>
-
-      <Modal
-        isOpen={Boolean(confirmUnlockUser)}
-        title="Unlock user account"
-        message={
-          confirmUnlockUser
-            ? `Unlock ${confirmUnlockUser.name} (${confirmUnlockUser.username})? Their failed login attempts will be reset.`
-            : ""
-        }
-        confirmLabel="Unlock Account"
-        cancelLabel="Cancel"
-        onConfirm={() => {
-          if (confirmUnlockUser) {
-            void performUnlockUser(confirmUnlockUser);
-          }
-        }}
-        onClose={() => setConfirmUnlockUser(null)}
-      />
-
-      <Modal
-        isOpen={confirmCreateUser}
-        title="Create user account"
-        message={`Create account for ${newUserForm.name || "this user"} (${newUserForm.username || "username"}) with the ${displayRole(newUserForm.role || "") || "selected"} role?`}
-        confirmLabel="Create User"
-        cancelLabel="Cancel"
-        onConfirm={async () => {
-          setConfirmCreateUser(false);
-          await confirmCreateUserAccount();
-        }}
-        onClose={() => setConfirmCreateUser(false)}
-      />
-
-      {duplicateUser && (
-        <div className={modalOverlayClasses}>
-          <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card">
-            <h3 className="mb-3 text-lg font-bold text-[var(--color-text-primary)]">
-              Existing User Account
-            </h3>
-            <p className="text-sm text-[var(--color-text-secondary)]">
-              An account already exists with a similar name or username:{" "}
-              <span className="font-bold text-[var(--color-text-primary)]">
-                {duplicateUser.name} ({duplicateUser.username})
-              </span>
-              .
-            </p>
-            <div className="mt-6 flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setDuplicateUser(null);
-                  setIsCreateModalOpen(false);
-                }}
-                disabled={processingUserId === "create"}
-                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => setDuplicateUser(null)}
-                disabled={processingUserId === "create"}
-                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition hover:bg-[var(--color-card-bg-hover)] disabled:opacity-50"
-              >
-                Continue Editing
-              </button>
-              <button
-                type="button"
-                onClick={() => void confirmCreateUserAccount(duplicateUser)}
-                disabled={
-                  processingUserId === "create" ||
-                  duplicateUser.id === currentUser?.id
-                }
-                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-50"
-              >
-                {processingUserId === "create" ? "Replacing..." : "Replace"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {confirmDeleteUser && (
-        <div className={modalOverlayClasses}>
-          <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card">
-            <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-4">
-              Confirm Delete
-            </h3>
-            <p className="text-sm text-[var(--color-text-secondary)] mb-6">
-              Are you sure you want to delete the user
-              <br />
-              <span className="mt-2 block font-bold text-[var(--color-text-primary)]">{confirmDeleteUser.name} ({confirmDeleteUser.username})</span>
-              <br />
-              This action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmDeleteUser(null)}
-                className="rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => performDeleteUser(confirmDeleteUser)}
-                className="rounded-xl bg-[var(--color-brand-danger)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] hover:bg-[var(--color-brand-danger)]/90"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {blockedDeleteUser && (
-        <div className={modalOverlayClasses}>
-          <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card">
-            <h3 className="mb-3 text-lg font-bold text-[var(--color-text-primary)]">
-              User Cannot Be Deleted
-            </h3>
-            <p className="text-sm text-[var(--color-text-secondary)]">
-              <span className="font-semibold text-[var(--color-text-primary)]">
-                {blockedDeleteUser.name}
-              </span>{" "}
-              is assigned to an existing maintenance schedule. Remove or
-              reassign the schedule before deleting this user.
-            </p>
-            <div className="mt-6 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setBlockedDeleteUser(null)}
-                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90"
-              >
-                Close
-              </button>
-            </div>
           </div>
         </div>
       )}
