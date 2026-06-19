@@ -429,11 +429,17 @@ export function DataTable<T>({
 
 export const StatusBadge = ({ status }: { status: StandardStatus }) => {
   const normalized = status.toLowerCase();
+  const displayStatus = status
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
   const style =
     normalized.includes("complete") || normalized === "active"
       ? "border-[#30c967] bg-[#dcfce7] text-[#22ad4f]"
       : normalized.includes("progress")
         ? "border-[#168cff] bg-[#dff0ff] text-[#168cff]"
+      : normalized === "due"
+        ? "border-[#7c3aed] bg-[#ede9fe] text-[#6d28d9]"
       : normalized.includes("flag")
         ? "border-[#ef4444] bg-[#fee2e2] text-[#ef4444]"
         : normalized.includes("pending") || normalized.includes("hold")
@@ -448,7 +454,7 @@ export const StatusBadge = ({ status }: { status: StandardStatus }) => {
     <span
       className={`inline-flex min-w-24 justify-center rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide ${style}`}
     >
-      {status}
+      {displayStatus}
     </span>
   );
 };

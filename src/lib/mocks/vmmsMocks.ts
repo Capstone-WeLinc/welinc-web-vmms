@@ -1,7 +1,13 @@
-import type { MaintenanceTask } from "../../types/maintenance";
+import {
+  AccountType,
+  MaintenanceIntervalType,
+  MaintenanceStatus,
+  MaintenanceTriggerType,
+  type MaintenanceTask,
+} from "../../types/maintenance";
 import {
   defaultChecklistTemplates,
-  type WorkOrderTemplate,
+  type ChecklistTemplateName,
   type ChecklistItemTemplate,
 } from "../../data/ChecklistData";
 
@@ -290,45 +296,45 @@ export const mockWorkOrders: MaintenanceTask[] = [
     id: "task-1",
     vehicleId: "TRK-0011",
     title: "Oil Change",
-    status: "Pending",
+    status: MaintenanceStatus.PENDING,
     date: "2026-05-22",
     assignedDriver: "J. Dela Cruz",
     notes: "Standard oil and filter change. Synthetic 5W-30.",
     garageId: "g1",
-    accountType: "Corporate - Bonchon",
+    accountType: AccountType.IN_HOUSE,
     odometerReading: "12000",
     systemAffected: "engine",
-    triggerType: "ODOMETER",
+    triggerType: MaintenanceTriggerType.ODOMETER,
     intervalKm: "10000",
     bufferDistanceKm: "500",
     startingReferenceReadingKm: "2000",
-    intervalType: "MONTHLY",
+    intervalType: MaintenanceIntervalType.MONTHLY,
     startReferenceDate: "2026-01-01",
   },
   {
     id: "task-2",
     vehicleId: "TRK-0022",
     title: "Brake Inspection",
-    status: "In-Progress",
+    status: MaintenanceStatus.IN_PROGRESS,
     date: "2026-05-20",
     assignedDriver: "Sarah Connor",
     notes: "Scheduled 10,000-mile tire rotation and alignment check.",
     garageId: "g2",
-    accountType: "Corporate - Bonchon",
+    accountType: AccountType.IN_HOUSE,
     odometerReading: "45000",
     systemAffected: "brakes",
-    triggerType: "TIME",
+    triggerType: MaintenanceTriggerType.TIME,
     intervalKm: "",
     bufferDistanceKm: "",
     startingReferenceReadingKm: "",
-    intervalType: "DAILY",
+    intervalType: MaintenanceIntervalType.DAILY,
     startReferenceDate: "2026-05-01",
   },
   {
     id: "task-3",
     vehicleId: "TRK-11",
     title: "Oil Change",
-    status: "Pending",
+    status: MaintenanceStatus.PENDING,
     date: "2026-05-22",
     assignedDriver: "David Miller",
     notes: "Standard oil and filter change. Synthetic 5W-30.",
@@ -337,7 +343,7 @@ export const mockWorkOrders: MaintenanceTask[] = [
     id: "task-4",
     vehicleId: "TRK-44",
     title: "Engine Tune",
-    status: "Completed",
+    status: MaintenanceStatus.COMPLETED,
     date: "2026-05-25",
     assignedDriver: "Elena Rostova",
     notes: "Spark plug replacement and engine timing calibration completed.",
@@ -346,7 +352,7 @@ export const mockWorkOrders: MaintenanceTask[] = [
     id: "task-5",
     vehicleId: "TRK-55",
     title: "Flagged PM",
-    status: "Flagged",
+    status: MaintenanceStatus.OVERDUE,
     date: "2026-05-27",
     assignedDriver: "James Carter",
     notes:
@@ -619,14 +625,14 @@ export const mockUsers: UserRecord[] = [
 ];
 
 export function getMockChecklistTemplates(): Record<
-  WorkOrderTemplate,
+  ChecklistTemplateName,
   ChecklistItemTemplate[]
 > {
   const saved = window.localStorage.getItem("checklistTemplates");
   if (saved) {
     try {
       return JSON.parse(saved) as Record<
-        WorkOrderTemplate,
+        ChecklistTemplateName,
         ChecklistItemTemplate[]
       >;
     } catch {
@@ -637,7 +643,7 @@ export function getMockChecklistTemplates(): Record<
 }
 
 export function saveMockChecklistTemplates(
-  templates: Record<WorkOrderTemplate, ChecklistItemTemplate[]>,
+  templates: Record<ChecklistTemplateName, ChecklistItemTemplate[]>,
 ) {
   window.localStorage.setItem("checklistTemplates", JSON.stringify(templates));
   return templates;

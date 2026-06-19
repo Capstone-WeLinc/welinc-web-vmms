@@ -12,7 +12,7 @@ import { getCurrentUser } from "./lib/api/authService";
 import Dashboard from "./pages/Dashboard/Dashboard";
 import PlaceholderPage from "./pages/PlaceholderPage/PlaceholderPage";
 import SchedulingPage from "./pages/Maintenance Scheduling/MaintenanceScheduling";
-import WorkOrderTemplates from "./pages/WorkOrderTemplates/WorkOrderTemplates";
+import ChecklistTemplates from "./pages/ChecklistTemplates/ChecklistTemplates";
 import WorkOrders from "./pages/WorkOrders/WorkOrders";
 import ExpenseTrackingPage from "./pages/Expense/ExpenseTrackingPage";
 import MaintenanceLogs from "./pages/MaintenanceLogs/MaintenanceLogs";
@@ -61,11 +61,11 @@ function App() {
     getCurrentUser()
       .then((u) => {
         setCurrentUser(u);
-        navigate(isMechanicRole(u) ? "/work-orders" : "/users", { replace: true });
+        navigate("/dashboard", { replace: true });
       })
       .catch(() => {
         setCurrentUser(null);
-        navigate("/users", { replace: true });
+        navigate("/dashboard", { replace: true });
       });
   };
 
@@ -98,11 +98,12 @@ function App() {
 
     if (isMechanic) {
       if (
+        location.pathname !== "/dashboard" &&
         location.pathname !== "/work-orders" &&
         location.pathname !== "/maintenance-logs" &&
         location.pathname !== "/profile"
       ) {
-        navigate("/work-orders", { replace: true });
+        navigate("/dashboard", { replace: true });
       }
       return;
     }
@@ -120,7 +121,7 @@ function App() {
       ];
 
       if (!allowedOperationsPaths.includes(location.pathname)) {
-        navigate("/users", { replace: true });
+        navigate("/dashboard", { replace: true });
       }
     }
   }, [currentUser, isAuthenticated, isMechanic, isOperations, location.pathname, navigate]);
@@ -205,7 +206,7 @@ function App() {
             path="/"
             element={
               isAuthenticated ? (
-                <Navigate to="/users" replace />
+                <Navigate to="/dashboard" replace />
               ) : (
                 <Navigate to="/login" replace />
               )
@@ -215,7 +216,7 @@ function App() {
             path="/login"
             element={
               isAuthenticated && !hasIncomingSsoToken ? (
-                <Navigate to="/users" replace />
+                <Navigate to="/dashboard" replace />
               ) : (
                 <LoginPage onLogin={handleLogin} />
               )
@@ -276,17 +277,21 @@ function App() {
               </RequireAuthWrapper>
             }
           />
-          <Route
-            path="/inspection-checklists"
-            element={
+            <Route
+              path="/checklist-templates"
+              element={
               <RequireAuthWrapper
                 isAuthenticated={isAuthenticated}
                 location={location}
               >
-                <WorkOrderTemplates />
+                <ChecklistTemplates />
               </RequireAuthWrapper>
-            }
-          />
+              }
+            />
+            <Route
+              path="/inspection-checklists"
+              element={<Navigate to="/checklist-templates" replace />}
+            />
           <Route
             path="/profile"
             element={

@@ -14,8 +14,10 @@ import {
 } from "../mocks/vmmsMocks";
 
 export interface VehicleOption {
+  id?: string;
   value: string;
   label: string;
+  plateNumber?: string;
   status?: string;
   odometer?: number;
 }
@@ -34,10 +36,20 @@ const fallbackVehicleOptions: VehicleOption[] = [
   { value: "EFG 2345", label: "EFG 2345 - Truck Kilo", status: "AVAILABLE" },
   { value: "HU 6789", label: "HU 6789 - Truck Lima", status: "AVAILABLE" },
 ];
-import type { MaintenanceTask, MaintenanceStatus } from "../../types/maintenance";
-import { getNextWorkOrderId, isInProgressStatus } from "../utils/workOrders";
+import {
+  AccountType,
+  MaintenanceIntervalType,
+  MaintenanceStatus,
+  MaintenanceTriggerType,
+  type MaintenanceTask,
+} from "../../types/maintenance";
+import {
+  getCalculatedMaintenanceStatus,
+  getNextWorkOrderId,
+  isInProgressStatus,
+} from "../utils/workOrders";
 import type {
-  WorkOrderTemplate,
+  ChecklistTemplateName,
   ChecklistItemTemplate,
 } from "../../data/ChecklistData";
 import type {
@@ -111,21 +123,71 @@ function getNextLocalMaintenanceScheduleId(schedules: MaintenanceTask[]) {
 function normalizeMaintenanceStatusValue(status?: string | null): MaintenanceStatus {
   const normalized = (status ?? "").trim().toLowerCase().replace(/[\s_]+/g, "-");
 
-  if (normalized === "in-progress") return "In Progress";
-  if (normalized === "completed") return "Completed";
-  if (normalized === "overdue") return "Overdue";
-  if (normalized === "flagged") return "Flagged";
-  return "Pending";
+  if (normalized === "in-progress") return MaintenanceStatus.IN_PROGRESS;
+  if (normalized === "completed") return MaintenanceStatus.COMPLETED;
+  if (normalized === "due") return MaintenanceStatus.DUE;
+  if (normalized === "overdue") return MaintenanceStatus.OVERDUE;
+  if (normalized === "cancelled") return MaintenanceStatus.CANCELLED;
+  return MaintenanceStatus.PENDING;
+}
+
+function normalizeAccountTypeValue(value?: string | null) {
+  const normalized = (value ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (!normalized) return undefined;
+  if (normalized === "outsourced") return AccountType.OUTSOURCED;
+  return AccountType.IN_HOUSE;
+}
+
+function normalizeTriggerTypeValue(value?: string | null) {
+  const normalized = (value ?? "").trim().toUpperCase();
+  if (normalized === MaintenanceTriggerType.TIME) return MaintenanceTriggerType.TIME;
+  if (normalized === MaintenanceTriggerType.MANUAL) return MaintenanceTriggerType.MANUAL;
+  if (normalized === MaintenanceTriggerType.ODOMETER) return MaintenanceTriggerType.ODOMETER;
+  return undefined;
+}
+
+function normalizeIntervalTypeValue(value?: string | null) {
+  const normalized = (value ?? "").trim().toUpperCase().replace(/-/g, "_");
+  if (normalized === MaintenanceIntervalType.DAILY) return MaintenanceIntervalType.DAILY;
+  if (normalized === MaintenanceIntervalType.WEEKLY) return MaintenanceIntervalType.WEEKLY;
+  if (normalized === MaintenanceIntervalType.MONTHLY) return MaintenanceIntervalType.MONTHLY;
+  if (normalized === MaintenanceIntervalType.QUARTERLY) return MaintenanceIntervalType.QUARTERLY;
+  if (normalized === MaintenanceIntervalType.SEMI_ANNUALLY) return MaintenanceIntervalType.SEMI_ANNUALLY;
+  if (normalized === "YEARLY" || normalized === MaintenanceIntervalType.ANNUALLY) {
+    return MaintenanceIntervalType.ANNUALLY;
+  }
+  return undefined;
+}
+
+function formatLocalDateText(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function normalizeMaintenanceTask(task: MaintenanceTask): MaintenanceTask {
-  return {
+  const rawTask = task as MaintenanceTask & { createdAt?: string | null };
+  const date =
+    task.date ||
+    (typeof rawTask.createdAt === "string" ? rawTask.createdAt.slice(0, 10) : "") ||
+    formatLocalDateText();
+  const normalizedTask = {
     ...task,
+    date,
     status: normalizeMaintenanceStatusValue(task.status),
+    accountType: normalizeAccountTypeValue(task.accountType),
+    triggerType: normalizeTriggerTypeValue(task.triggerType),
+    intervalType: normalizeIntervalTypeValue(task.intervalType),
     assignedDriver:
       task.assignedDriver ??
       (task as MaintenanceTask & { assignedMechanic?: string }).assignedMechanic ??
       "",
+  };
+
+  return {
+    ...normalizedTask,
+    status: getCalculatedMaintenanceStatus(normalizedTask),
   };
 }
 
@@ -283,18 +345,18 @@ export async function getDashboardStats() {
 
   const totalVehicles = String(vehicles.length);
   const activeWorkOrders = String(
-    schedules.filter((s) => (s.status ?? "") !== "Completed").length,
+    schedules.filter((s) => (s.status ?? "") !== MaintenanceStatus.COMPLETED).length,
   );
   const overdueMaintenance = String(
     schedules.filter((s) => {
       if (!s.date) return false;
       const d = new Date(s.date);
-      return d < now && (s.status ?? "") !== "Completed";
+      return d < now && (s.status ?? "") !== MaintenanceStatus.COMPLETED;
     }).length,
   );
   const completedThisWeek = String(
     schedules.filter((s) => {
-      if ((s.status ?? "") !== "Completed") return false;
+      if ((s.status ?? "") !== MaintenanceStatus.COMPLETED) return false;
       if (!s.date) return false;
       const d = new Date(s.date);
       return d >= oneWeekAgo && d <= now;
@@ -346,7 +408,7 @@ export async function getUpcomingMaintenance() {
 }
 
 export async function getWorkOrders() {
-  return getMaintenanceSchedules();
+  return getMaintenanceSchedules({ includeDeleted: true });
 }
 
 export async function getUsers() {
@@ -589,19 +651,19 @@ export async function getChecklistTemplates() {
     return getMockChecklistTemplates();
   }
 
-  return fetchJSON<Record<WorkOrderTemplate, ChecklistItemTemplate[]>>(
+  return fetchJSON<Record<ChecklistTemplateName, ChecklistItemTemplate[]>>(
     "/checklists",
   );
 }
 
 export async function saveChecklistTemplates(
-  templates: Record<WorkOrderTemplate, ChecklistItemTemplate[]>,
+  templates: Record<ChecklistTemplateName, ChecklistItemTemplate[]>,
 ) {
   if (!useBackend) {
     return saveMockChecklistTemplates(templates);
   }
 
-  return fetchJSON<Record<WorkOrderTemplate, ChecklistItemTemplate[]>>(
+  return fetchJSON<Record<ChecklistTemplateName, ChecklistItemTemplate[]>>(
     "/checklists/sync",
     {
       method: "POST",
@@ -612,22 +674,26 @@ export async function saveChecklistTemplates(
 
 export type CreateMaintenanceScheduleInput = Omit<MaintenanceTask, "id">;
 
-export async function getMaintenanceSchedules(options?: { statuses?: string[] }) {
+export async function getMaintenanceSchedules(options?: {
+  statuses?: string[];
+  includeDeleted?: boolean;
+}) {
   const allowedStatuses = options?.statuses?.map((status) => status.trim()).filter(Boolean);
+  const includeDeleted = options?.includeDeleted === true;
 
   if (!useMaintenanceScheduleBackend) {
-    const schedules = readLocalMaintenanceSchedules();
-    return allowedStatuses?.length
-      ? schedules.filter((schedule) => allowedStatuses.includes(schedule.status))
-      : schedules;
+    const schedules = readLocalMaintenanceSchedules().map(normalizeMaintenanceTask);
+    return schedules.filter(
+      (schedule) =>
+        (includeDeleted || !schedule.deletedAt) &&
+        (!allowedStatuses?.length || allowedStatuses.includes(schedule.status)),
+    );
   }
 
-  const query =
-    allowedStatuses?.length
-      ? `?${new URLSearchParams(
-          allowedStatuses.map((status) => ["status", status]),
-        ).toString()}`
-      : "";
+  const queryParams = new URLSearchParams();
+  allowedStatuses?.forEach((status) => queryParams.append("status", status));
+  if (includeDeleted) queryParams.set("includeDeleted", "true");
+  const query = queryParams.size ? `?${queryParams.toString()}` : "";
 
   let schedules: MaintenanceTask[];
   try {
@@ -656,10 +722,17 @@ export async function createMaintenanceSchedule(
 ) {
   if (!useMaintenanceScheduleBackend) {
     const schedules = readLocalMaintenanceSchedules();
+    const id = getNextLocalMaintenanceScheduleId(schedules);
     const createdTask: MaintenanceTask = {
       ...schedule,
-      status: normalizeMaintenanceStatusValue(schedule.status),
-      id: getNextLocalMaintenanceScheduleId(schedules),
+      date: schedule.date || formatLocalDateText(),
+      status: getCalculatedMaintenanceStatus({
+        ...schedule,
+        date: schedule.date || formatLocalDateText(),
+        status: normalizeMaintenanceStatusValue(schedule.status),
+        id,
+      }),
+      id,
     };
     writeLocalMaintenanceSchedules([createdTask, ...schedules]);
     return createdTask;
@@ -669,7 +742,7 @@ export async function createMaintenanceSchedule(
   const payload = {
     vehicleId: schedule.vehicleId,
     title: schedule.title,
-    date: schedule.date,
+    date: schedule.date || formatLocalDateText(),
     assignedDriver: schedule.assignedDriver,
     notes: schedule.notes,
     status: schedule.status,
@@ -710,7 +783,7 @@ export async function updateMaintenanceSchedule(schedule: MaintenanceTask) {
   const payload = {
     vehicleId: schedule.vehicleId,
     title: schedule.title,
-    date: schedule.date,
+    date: schedule.date || formatLocalDateText(),
     assignedDriver: schedule.assignedDriver,
     notes: schedule.notes,
     status: schedule.status,
@@ -741,7 +814,10 @@ export async function deleteMaintenanceSchedule(id: string) {
     const schedules = readLocalMaintenanceSchedules();
     const index = schedules.findIndex((current) => current.id === id);
     if (index >= 0) {
-      schedules.splice(index, 1);
+      schedules[index] = {
+        ...schedules[index],
+        deletedAt: new Date().toISOString(),
+      };
       writeLocalMaintenanceSchedules(schedules);
       return;
     }
@@ -781,8 +857,10 @@ export async function getVehicles(): Promise<VehicleOption[]> {
   >("/vehicles");
 
   return vehicles.map((vehicle) => ({
+    id: vehicle.id,
     value: vehicle.plateNumber,
     label: `${vehicle.plateNumber} - ${vehicle.model}`,
+    plateNumber: vehicle.plateNumber,
     status: vehicle.status,
     odometer: vehicle.odometer,
   }));
@@ -816,7 +894,7 @@ export async function createExpense(expense: {
 export async function createIncome(income: {
   vehicle: string;
   bookingRef: string;
-  workOrderTemplate: string;
+  checklistTemplate: string;
   tripDate: string;
   clientType: string;
   revenueAmount: string;
@@ -828,7 +906,7 @@ export async function createIncome(income: {
 export type {
   MaintenanceTask,
   MaintenanceStatus,
-  WorkOrderTemplate,
+  ChecklistTemplateName,
   ChecklistItemTemplate,
 };
 

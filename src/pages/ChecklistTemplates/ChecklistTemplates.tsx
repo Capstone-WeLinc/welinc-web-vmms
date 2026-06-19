@@ -27,7 +27,7 @@ import {
 import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
 import type { MaintenanceTask } from "../../types/maintenance";
 
-type WorkOrderTemplate = string;
+type ChecklistTemplateName = string;
 
 interface ChecklistItemTemplate {
   id: string;
@@ -36,15 +36,15 @@ interface ChecklistItemTemplate {
 
 const containerClasses = "space-y-6";
 
-export default function WorkOrderTemplates() {
+export default function ChecklistTemplates() {
   const itemsPerPage = 8;
   const [templates, setTemplates] = useState<
-    Record<WorkOrderTemplate, ChecklistItemTemplate[]>
+    Record<ChecklistTemplateName, ChecklistItemTemplate[]>
   >({});
   const [maintenanceSchedules, setMaintenanceSchedules] = useState<
     MaintenanceTask[]
   >([]);
-  const [selectedType, setSelectedType] = useState<WorkOrderTemplate>("");
+  const [selectedType, setSelectedType] = useState<ChecklistTemplateName>("");
   const [editingItems, setEditingItems] = useState<ChecklistItemTemplate[]>([]);
   const [isAddingType, setIsAddingType] = useState(false);
   const [newTypeName, setNewTypeName] = useState("");
@@ -85,11 +85,22 @@ export default function WorkOrderTemplates() {
     ),
   );
 
-  const templateHasMaintenanceSchedule = (type: string) =>
-    maintenanceSchedules.some(
+  const getTemplateUsageCount = (type: string) =>
+    maintenanceSchedules.filter(
       (schedule) =>
         schedule.title.trim().toLowerCase() === type.trim().toLowerCase(),
-    );
+    ).length;
+
+  const templateHasMaintenanceSchedule = (type: string) =>
+    getTemplateUsageCount(type) > 0;
+
+  const showStructureLockedMessage = () => {
+    setToast({
+      type: "error",
+      message:
+        "Checklist items cannot be modified because this template has already been used.",
+    });
+  };
 
   useEffect(() => {
     getChecklistTemplates()
@@ -97,7 +108,7 @@ export default function WorkOrderTemplates() {
         setTemplates(loadedTemplates);
         const availableTypes = Object.keys(loadedTemplates);
         const initialType = availableTypes.length > 0 ? availableTypes[0] : "";
-        setSelectedType(initialType as WorkOrderTemplate);
+        setSelectedType(initialType as ChecklistTemplateName);
         setEditingItems(initialType ? [...loadedTemplates[initialType]] : []);
       })
       .catch(() => {
@@ -128,6 +139,10 @@ export default function WorkOrderTemplates() {
 
   const handleAddItem = () => {
     if (!selectedType || !isEditingChecklist) return;
+    if (templateHasMaintenanceSchedule(selectedType)) {
+      showStructureLockedMessage();
+      return;
+    }
     const newItem: ChecklistItemTemplate = {
       id: Date.now().toString(),
       text: "",
@@ -159,6 +174,10 @@ export default function WorkOrderTemplates() {
 
   const handleReorderItems = (draggedId: string, targetId: string) => {
     if (!isEditingChecklist) return;
+    if (templateHasMaintenanceSchedule(selectedType)) {
+      showStructureLockedMessage();
+      return;
+    }
 
     setEditingItems((items) => {
       const fromIndex = items.findIndex((item) => item.id === draggedId);
@@ -184,6 +203,10 @@ export default function WorkOrderTemplates() {
 
   const handleSave = () => {
     if (!canSaveTemplate) return;
+    if (templateHasMaintenanceSchedule(selectedType)) {
+      showStructureLockedMessage();
+      return;
+    }
 
     const saveableItems = editingItems.filter(
       (item) => item.text.trim() !== "",
@@ -228,13 +251,8 @@ export default function WorkOrderTemplates() {
 
   const replaceDuplicateType = () => {
     if (!duplicateType) return;
-    if (
-      duplicateTypeSource &&
-      templateHasMaintenanceSchedule(duplicateTypeSource)
-    ) {
-      window.alert(
-        "This template cannot be replaced because it has a maintenance schedule.",
-      );
+    if (templateHasMaintenanceSchedule(duplicateType)) {
+      showStructureLockedMessage();
       return;
     }
 
@@ -328,12 +346,6 @@ export default function WorkOrderTemplates() {
       handleCancelEditType();
       return;
     }
-    if (templateHasMaintenanceSchedule(oldType)) {
-      window.alert(
-        "This template cannot be renamed because it has a maintenance schedule.",
-      );
-      return;
-    }
     const existingType = Object.keys(templates).find(
       (type) =>
         type !== oldType && type.toLowerCase() === trimmed.toLowerCase(),
@@ -343,7 +355,7 @@ export default function WorkOrderTemplates() {
       setDuplicateTypeSource(oldType);
       return;
     }
-    const newTemplates: Record<WorkOrderTemplate, ChecklistItemTemplate[]> = {
+    const newTemplates: Record<ChecklistTemplateName, ChecklistItemTemplate[]> = {
       ...templates,
     };
     newTemplates[trimmed] = newTemplates[oldType] ?? [];
@@ -418,8 +430,8 @@ export default function WorkOrderTemplates() {
 
       <PageHeader
         icon={ClipboardCheck}
-        title={"WORK ORDER TEMPLATES"}
-        subtitle={"Manage and configure work order templates"}
+        title={"CHECKLIST TEMPLATES"}
+        subtitle={"Manage and configure checklist templates"}
       />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,0.42fr)_minmax(0,1fr)] xl:items-start">
@@ -640,6 +652,10 @@ export default function WorkOrderTemplates() {
                 if (isEditingChecklist) {
                   handleSave();
                 } else {
+                  if (templateHasMaintenanceSchedule(selectedType)) {
+                    showStructureLockedMessage();
+                    return;
+                  }
                   setIsEditingChecklist(true);
                 }
               }}
@@ -681,7 +697,7 @@ export default function WorkOrderTemplates() {
               ? "No checklist items match your filter."
               : hasSelectedTemplate
                 ? "This template has no checklist items."
-                : "Select or create a work order template."
+                : "Select or create a checklist template."
           }
           columns={[
             {
@@ -785,7 +801,7 @@ export default function WorkOrderTemplates() {
         message={
           confirmDeleteType ? (
             <>
-              Are you sure you want to delete this work order template?
+              Are you sure you want to delete this checklist template?
               <span className="mt-2 block font-bold">{confirmDeleteType}</span>
             </>
           ) : (
@@ -809,9 +825,23 @@ export default function WorkOrderTemplates() {
               <span className="font-semibold text-[var(--color-text-primary)]">
                 {blockedDeleteType}
               </span>{" "}
-              is used by an existing maintenance schedule. Remove or update
-              the schedule before deleting this template.
+              Checklist Template cannot be deleted because it is currently
+              being used by active records.
             </p>
+            <dl className="mt-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-[var(--color-text-secondary)]">Usage count</dt>
+                <dd className="font-semibold text-[var(--color-text-primary)]">
+                  {getTemplateUsageCount(blockedDeleteType)}
+                </dd>
+              </div>
+              <div className="mt-2 flex justify-between gap-4">
+                <dt className="text-[var(--color-text-secondary)]">Maintenance schedules</dt>
+                <dd className="font-semibold text-[var(--color-text-primary)]">
+                  {getTemplateUsageCount(blockedDeleteType)}
+                </dd>
+              </div>
+            </dl>
             <div className="mt-6 flex justify-end">
               <button
                 type="button"
@@ -829,7 +859,7 @@ export default function WorkOrderTemplates() {
         <div className="modal-overlay z-[60] px-4 backdrop-blur-sm">
           <div className="modal-content w-full max-w-md rounded-xl p-6">
             <h3 className="mb-3 text-lg font-bold text-[var(--color-text-primary)]">
-              Existing Work Order Template
+              Existing Checklist Template
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)]">
               A template named{" "}

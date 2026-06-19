@@ -30,7 +30,7 @@ The app expects the backend to run at `http://localhost:3000`.
 - `/User Management`
 - `/Maintenance Scheduling`
 - `/Work Orders`
-- `/Work Orders Template`
+- `/Checklist Template`
 - `/Maintenance Logs`
 - `/Maintenance Reports`
 - `/Fuel Management`

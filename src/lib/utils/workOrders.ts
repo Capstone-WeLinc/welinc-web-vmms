@@ -1,4 +1,9 @@
-import type { MaintenanceTask } from "../../types/maintenance";
+import {
+  MaintenanceIntervalType,
+  MaintenanceStatus,
+  MaintenanceTriggerType,
+  type MaintenanceTask,
+} from "../../types/maintenance";
 
 export const normalizeMaintenanceStatus = (status?: string | null) =>
   (status ?? "").trim().toLowerCase().replace(/[\s_]+/g, "-");
@@ -6,7 +11,11 @@ export const normalizeMaintenanceStatus = (status?: string | null) =>
 export const isPendingStatus = (status?: string | null) =>
   normalizeMaintenanceStatus(status) === "pending";
 
+export const isDueStatus = (status?: string | null) =>
+  normalizeMaintenanceStatus(status) === "due";
+
 export const isInProgressStatus = (status?: string | null) =>
+  normalizeMaintenanceStatus(status) === "in-progress" ||
   normalizeMaintenanceStatus(status) === "in-progress";
 
 export const isOverdueStatus = (status?: string | null) =>
@@ -44,14 +53,14 @@ export const formatLogNumber = (id: string) => {
   return `LOG-${normalizedId.slice(0, 8).padEnd(8, "0")}`;
 };
 
-const parseKm = (value?: string | null) => {
+export const parseKm = (value?: string | null) => {
   if (!value?.trim()) return null;
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-const parseLocalDate = (value?: string | null) => {
+export const parseLocalDate = (value?: string | null) => {
   if (!value?.trim()) return null;
 
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -72,32 +81,56 @@ const parseLocalDate = (value?: string | null) => {
   return parsed;
 };
 
-const formatLocalDate = (date: Date) => {
+export const formatLocalDate = (date: Date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
 
-const addIntervalToDate = (
+export const addIntervalToDate = (
   date: Date,
   intervalType?: string | null,
 ) => {
   const dueDate = new Date(date);
 
-  if (intervalType === "DAILY") {
+  const addMonths = (months: number) => {
+    const originalDay = dueDate.getDate();
+    dueDate.setDate(1);
+    dueDate.setMonth(dueDate.getMonth() + months);
+    const lastDayOfTargetMonth = new Date(
+      dueDate.getFullYear(),
+      dueDate.getMonth() + 1,
+      0,
+    ).getDate();
+    dueDate.setDate(Math.min(originalDay, lastDayOfTargetMonth));
+    return dueDate;
+  };
+
+  if (intervalType === MaintenanceIntervalType.DAILY) {
     dueDate.setDate(dueDate.getDate() + 1);
     return dueDate;
   }
 
-  if (intervalType === "WEEKLY") {
+  if (intervalType === MaintenanceIntervalType.WEEKLY) {
     dueDate.setDate(dueDate.getDate() + 7);
     return dueDate;
   }
 
-  if (intervalType === "MONTHLY") {
-    dueDate.setMonth(dueDate.getMonth() + 1);
-    return dueDate;
+  if (intervalType === MaintenanceIntervalType.MONTHLY) {
+    return addMonths(1);
+  }
+
+  if (intervalType === MaintenanceIntervalType.QUARTERLY) {
+    return addMonths(3);
+  }
+
+  if (intervalType === MaintenanceIntervalType.SEMI_ANNUALLY) {
+    return addMonths(6);
+  }
+
+  if (intervalType === MaintenanceIntervalType.ANNUALLY) {
+    return addMonths(12);
   }
 
   return null;
@@ -117,31 +150,75 @@ export const getOdometerActivationRange = (task: MaintenanceTask) => {
   }
 
   const targetReading = startingReference + interval;
+  const activationMileage = targetReading - buffer;
 
   return {
-    minimum: targetReading - buffer,
-    maximum: targetReading + buffer,
+    minimum: activationMileage,
+    maximum: targetReading,
+    activationMileage,
+    dueMileage: targetReading,
+    startingReference,
+    interval,
+    buffer,
   };
+};
+
+export const getOdometerMilestones = getOdometerActivationRange;
+
+export const getCalculatedMaintenanceStatus = (
+  task: MaintenanceTask,
+  currentDate = new Date(),
+): MaintenanceTask["status"] => {
+  if (task.status === MaintenanceStatus.COMPLETED) return MaintenanceStatus.COMPLETED;
+  if (isInProgressStatus(task.status)) return MaintenanceStatus.IN_PROGRESS;
+
+  if (task.triggerType === MaintenanceTriggerType.ODOMETER) {
+    const odometerReading = parseKm(task.odometerReading);
+    const milestones = getOdometerMilestones(task);
+
+    if (odometerReading === null || !milestones) return MaintenanceStatus.PENDING;
+    if (odometerReading < milestones.activationMileage) return MaintenanceStatus.PENDING;
+    if (odometerReading <= milestones.dueMileage) return MaintenanceStatus.DUE;
+    return MaintenanceStatus.OVERDUE;
+  }
+
+  if (task.triggerType === MaintenanceTriggerType.TIME) {
+    const activationDate = getTimeBasedActivationDate(task);
+    if (!activationDate) return MaintenanceStatus.PENDING;
+
+    const today = new Date(currentDate);
+    today.setHours(0, 0, 0, 0);
+
+    if (today.getTime() < activationDate.getTime()) return MaintenanceStatus.PENDING;
+    if (today.getTime() === activationDate.getTime()) return MaintenanceStatus.DUE;
+    return MaintenanceStatus.OVERDUE;
+  }
+
+  if (isDueStatus(task.status)) return MaintenanceStatus.DUE;
+  if (isOverdueStatus(task.status)) return MaintenanceStatus.OVERDUE;
+  return MaintenanceStatus.PENDING;
+};
+
+export const isScheduleReadyForMechanic = (
+  task: MaintenanceTask,
+  currentDate = new Date(),
+) => {
+  const status = getCalculatedMaintenanceStatus(task, currentDate);
+  return (
+    status === MaintenanceStatus.DUE ||
+    status === MaintenanceStatus.OVERDUE ||
+    status === MaintenanceStatus.IN_PROGRESS
+  );
 };
 
 export const isPendingOdometerScheduleReadyForMechanic = (
   task: MaintenanceTask,
 ) => {
-  if (!isPendingStatus(task.status) || task.triggerType !== "ODOMETER") {
+  if (!isPendingStatus(task.status) || task.triggerType !== MaintenanceTriggerType.ODOMETER) {
     return true;
   }
 
-  const odometerReading = parseKm(task.odometerReading);
-  const activationRange = getOdometerActivationRange(task);
-
-  if (odometerReading === null || !activationRange) {
-    return false;
-  }
-
-  return (
-    odometerReading >= activationRange.minimum &&
-    odometerReading <= activationRange.maximum
-  );
+  return isScheduleReadyForMechanic(task);
 };
 
 export const getTimeBasedActivationDate = (task: MaintenanceTask) => {
@@ -155,19 +232,9 @@ export const isPendingTimeScheduleReadyForMechanic = (
   task: MaintenanceTask,
   currentDate = new Date(),
 ) => {
-  if (!isPendingStatus(task.status) || task.triggerType !== "TIME") {
+  if (!isPendingStatus(task.status) || task.triggerType !== MaintenanceTriggerType.TIME) {
     return true;
   }
 
-  const activationDate = getTimeBasedActivationDate(task);
-  const scheduledDate = parseLocalDate(task.date);
-  if (!activationDate || !scheduledDate) return false;
-
-  const today = new Date(currentDate);
-  today.setHours(0, 0, 0, 0);
-
-  return (
-    formatLocalDate(scheduledDate) === formatLocalDate(activationDate) &&
-    today.getTime() >= activationDate.getTime()
-  );
+  return isScheduleReadyForMechanic(task, currentDate);
 };
