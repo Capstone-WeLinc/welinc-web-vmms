@@ -408,7 +408,18 @@ export default function UserManagement() {
               className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)]"
             />
           </label>
-
+          {editingUser ? (
+            <label className="grid gap-1.5 text-sm font-medium text-[var(--color-text-secondary)]">
+              New Password (optional)
+              <input
+                type="password"
+                value={form.password}
+                onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
+                autoComplete="new-password"
+                className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)]"
+              />
+            </label>
+          ) : null}
           <label className="grid gap-1.5 text-sm font-medium text-[var(--color-text-secondary)]">
             Role
             <select
