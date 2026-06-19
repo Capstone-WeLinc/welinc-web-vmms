@@ -32,7 +32,6 @@ type ToastState = {
 type UserForm = {
   name: string;
   email: string;
-  password: string;
   role: UserRole | "";
   isActive: boolean;
 };
@@ -40,7 +39,6 @@ type UserForm = {
 const EMPTY_FORM: UserForm = {
   name: "",
   email: "",
-  password: "",
   role: "",
   isActive: true,
 };
@@ -49,16 +47,6 @@ const ROLE_OPTIONS: UserRole[] = ["ADMIN", "MECHANIC"];
 
 const normalizeIdentity = (value?: string | null) =>
   (value ?? "").trim().toLowerCase();
-
-const validatePassword = (password: string) => {
-  if (!password) return "";
-  if (password.length < 8) return "Password must be at least 8 characters.";
-  if (!/[A-Z]/.test(password)) return "Password needs an uppercase letter.";
-  if (!/[a-z]/.test(password)) return "Password needs a lowercase letter.";
-  if (!/\d/.test(password)) return "Password needs a number.";
-  if (!/[^A-Za-z0-9]/.test(password)) return "Password needs a special character.";
-  return "";
-};
 
 export default function UserManagement() {
   const [users, setUsers] = useState<UserRecord[]>([]);
@@ -72,6 +60,8 @@ export default function UserManagement() {
   const [processing, setProcessing] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [unlockTarget, setUnlockTarget] = useState<UserRecord | null>(null);
+  const [deactivateTarget, setDeactivateTarget] = useState<UserRecord | null>(null);
+  const [editConfirmationOpen, setEditConfirmationOpen] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
 
   const loadData = useCallback(async (showLoading = false) => {
@@ -149,7 +139,6 @@ export default function UserManagement() {
     setForm({
       name: user.name,
       email: user.email,
-      password: "",
       role: user.role,
       isActive: user.status === "Active",
     });
@@ -163,44 +152,18 @@ export default function UserManagement() {
     setForm(EMPTY_FORM);
   };
 
-  const saveUser = async (event: FormEvent) => {
-    event.preventDefault();
-    const name = form.name.trim();
-    const email = form.email.trim();
-    const passwordError = validatePassword(form.password);
-
-    if (!name || !email || !form.role) {
-      setToast({ type: "warning", message: "Name, email, and role are required." });
-      return;
-    }
-    if (editingUser && passwordError) {
-      setToast({ type: "warning", message: passwordError });
-      return;
-    }
-
-    const duplicate = users.find(
-      (user) =>
-        user.id !== editingUser?.id &&
-        (normalizeIdentity(user.name) === normalizeIdentity(name) ||
-          normalizeIdentity(user.email) === normalizeIdentity(email)),
-    );
-    if (duplicate) {
-      setToast({ type: "warning", message: "A user with this name or email already exists." });
-      return;
-    }
-
+  const persistUser = async (name: string, email: string, role: UserRole) => {
     setProcessing(true);
     try {
       if (editingUser) {
         const updated = await updateUser(editingUser.id, {
           name,
           email,
-          ...(form.password ? { password: form.password } : {}),
         });
         const withRole =
           editingUser.role === form.role
             ? updated
-            : await updateUserRole(editingUser.id, form.role);
+            : await updateUserRole(editingUser.id, role);
         setUsers((current) =>
           current.map((user) =>
             user.id === editingUser.id
@@ -213,7 +176,7 @@ export default function UserManagement() {
         const input: UserCreateInput = {
           name,
           email,
-          role: form.role,
+          role,
           isActive: form.isActive,
         };
         const created = await createUser(input);
@@ -235,6 +198,40 @@ export default function UserManagement() {
     }
   };
 
+  const saveUser = (event: FormEvent) => {
+    event.preventDefault();
+    const name = form.name.trim();
+    const email = form.email.trim();
+
+    if (!name || !email || !form.role) {
+      setToast({ type: "warning", message: "Name, email, and role are required." });
+      return;
+    }
+    const duplicate = users.find(
+      (user) =>
+        user.id !== editingUser?.id &&
+        (normalizeIdentity(user.name) === normalizeIdentity(name) ||
+          normalizeIdentity(user.email) === normalizeIdentity(email)),
+    );
+    if (duplicate) {
+      setToast({ type: "warning", message: "A user with this name or email already exists." });
+      return;
+    }
+
+    if (editingUser) {
+      setEditConfirmationOpen(true);
+      return;
+    }
+
+    void persistUser(name, email, form.role);
+  };
+
+  const confirmEdit = () => {
+    if (!form.role) return;
+    setEditConfirmationOpen(false);
+    void persistUser(form.name.trim(), form.email.trim(), form.role);
+  };
+
   const toggleStatus = async (user: UserRecord) => {
     const nextStatus = user.status === "Active" ? "Inactive" : "Active";
     try {
@@ -247,6 +244,13 @@ export default function UserManagement() {
       console.error("Failed to update user status", error);
       setToast({ type: "error", message: "Unable to update user status." });
     }
+  };
+
+  const confirmDeactivation = () => {
+    if (!deactivateTarget) return;
+    const target = deactivateTarget;
+    setDeactivateTarget(null);
+    void toggleStatus(target);
   };
 
   const confirmUnlock = async () => {
@@ -349,7 +353,13 @@ export default function UserManagement() {
                     {
                       label: user.status === "Active" ? "Deactivate" : "Activate",
                       icon: UserRoundCheck,
-                      onClick: () => void toggleStatus(user),
+                      onClick: () => {
+                        if (user.status === "Active") {
+                          setDeactivateTarget(user);
+                        } else {
+                          void toggleStatus(user);
+                        }
+                      },
                     },
                     ...(user.isLocked
                       ? [{ label: "Unlock", icon: Unlock, onClick: () => setUnlockTarget(user) }]
@@ -408,18 +418,6 @@ export default function UserManagement() {
               className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)]"
             />
           </label>
-          {editingUser ? (
-            <label className="grid gap-1.5 text-sm font-medium text-[var(--color-text-secondary)]">
-              New Password (optional)
-              <input
-                type="password"
-                value={form.password}
-                onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-                autoComplete="new-password"
-                className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)]"
-              />
-            </label>
-          ) : null}
           <label className="grid gap-1.5 text-sm font-medium text-[var(--color-text-secondary)]">
             Role
             <select
@@ -446,6 +444,29 @@ export default function UserManagement() {
           ) : null}
         </form>
       </Modal>
+
+      <ConfirmationModal
+        isOpen={editConfirmationOpen}
+        title="Confirm User Changes"
+        message={editingUser ? `Save changes to ${editingUser.name}'s account?` : ""}
+        confirmLabel="Save Changes"
+        onConfirm={confirmEdit}
+        onCancel={() => setEditConfirmationOpen(false)}
+      />
+
+      <ConfirmationModal
+        isOpen={Boolean(deactivateTarget)}
+        title="Deactivate User"
+        message={
+          deactivateTarget
+            ? `Are you sure you want to deactivate ${deactivateTarget.name}'s account?`
+            : ""
+        }
+        confirmLabel="Deactivate"
+        variant="danger"
+        onConfirm={confirmDeactivation}
+        onCancel={() => setDeactivateTarget(null)}
+      />
 
       <ConfirmationModal
         isOpen={Boolean(unlockTarget)}

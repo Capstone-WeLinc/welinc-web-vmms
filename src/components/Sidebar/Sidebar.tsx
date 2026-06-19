@@ -1,6 +1,8 @@
 import type { UserRecord } from "../../lib/api/authService";
+import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { isMechanicRole, isOperationsRole } from "../../lib/utils/permissions";
+import { ConfirmationModal } from "../ui";
 import logo from "../../assets/logo.png";
 import {
   LayoutDashboard,
@@ -54,6 +56,7 @@ const getNavLinkClass = (isActive: boolean) => {
 };
 
 export default function Sidebar({ currentUser }: SidebarProps) {
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const isMechanic = isMechanicRole(currentUser);
   const isOperations = isOperationsRole(currentUser);
   const visibleNavItems = isMechanic
@@ -92,6 +95,7 @@ export default function Sidebar({ currentUser }: SidebarProps) {
   const hasMultipleSystems = getSubsystemCount() > 1;
 
   const handleSignOut = () => {
+    setIsLogoutModalOpen(false);
     window.localStorage.removeItem("accessToken");
     try {
       window.localStorage.removeItem("session_login_time");
@@ -124,6 +128,7 @@ export default function Sidebar({ currentUser }: SidebarProps) {
     : "AD";
 
   return (
+    <>
     <aside className={asideBaseClasses} data-sidebar-mode="hover-expand">
       <div className={headerClasses}>
         <div className={logoFrameClasses}>
@@ -177,7 +182,7 @@ export default function Sidebar({ currentUser }: SidebarProps) {
 
         <button
           className={`${baseButtonClasses} text-[#ef4444] hover:bg-red-500/10`}
-          onClick={handleSignOut}
+          onClick={() => setIsLogoutModalOpen(true)}
           title="Sign Out"
           type="button"
         >
@@ -186,5 +191,15 @@ export default function Sidebar({ currentUser }: SidebarProps) {
         </button>
       </div>
     </aside>
+    <ConfirmationModal
+      isOpen={isLogoutModalOpen}
+      title="Confirm Sign Out"
+      message="Are you sure you want to sign out of your account?"
+      onConfirm={handleSignOut}
+      onCancel={() => setIsLogoutModalOpen(false)}
+      confirmLabel="Sign Out"
+      variant="danger"
+    />
+    </>
   );
 }
