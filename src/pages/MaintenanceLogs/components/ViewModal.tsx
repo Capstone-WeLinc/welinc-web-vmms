@@ -5,7 +5,6 @@ type MaintenanceStatus = "Completed" | "Flagged";
 type MaintenanceClass = "Maintenance" | "Repair";
 
 interface MaintenanceLog {
-  id: string;
   logNumber: string;
   plateNo: string;
   workOrder: string;
@@ -13,23 +12,15 @@ interface MaintenanceLog {
   date: string;
   garage: string;
   accountType: string;
-  triggerType: string;
-  intervalKm: string;
-  bufferDistanceKm: string;
-  startReferenceDate: string;
   odometerReading: number;
   status: MaintenanceStatus;
   mechanic: string;
-  checklistCompleted: number;
-  checklistTotal: number;
-  executionCompleted: number;
-  executionTotal: number;
-  changedParts: number;
-  materialCost: number;
-  laborCost: number;
   cost: number;
-  remarks: string;
-  technicianSignature: string;
+  costBreakdown: Array<{
+    item: string;
+    partsUsed: string;
+    cost: number;
+  }>;
 }
 
 interface ViewModalProps {
@@ -38,59 +29,33 @@ interface ViewModalProps {
   onClose: () => void;
 }
 
-const modalOverlayClasses =
-  "fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm";
-const modalContentClasses =
-  "w-full max-w-3xl animate-in rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-2xl fade-in zoom-in-95 duration-200";
-const modalHeaderClasses =
-  "mb-5 flex items-center justify-between border-b border-[var(--color-divider)] pb-4";
-const modalTitleClasses = "text-lg font-bold text-[var(--color-text-primary)]";
-const modalSubtitleClasses = "mt-0.5 text-xs text-[var(--color-text-secondary)]";
-const closeButtonClasses =
-  "rounded-lg p-1.5 text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-input-bg)] hover:text-[var(--color-text-primary)]";
-const infoGridClasses = "grid grid-cols-2 gap-x-4 gap-y-5";
-const sectionClasses =
-  "mt-6 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4";
-const sectionTitleClasses =
-  "mb-4 text-sm font-bold uppercase tracking-wide text-[var(--color-text-primary)]";
-const infoLabelClasses =
+const labelClasses =
   "mb-1 block text-xs font-medium text-[var(--color-text-secondary)]";
-const infoValueClasses = "text-sm font-bold text-[var(--color-text-primary)]";
-const modalFooterClasses =
-  "mt-8 flex justify-end border-t border-[var(--color-divider)] pt-4";
-const modalCloseButtonClasses =
-  "rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-4 py-2.5 text-sm font-medium text-[var(--color-text-secondary)] transition-all duration-200 hover:bg-[var(--color-card-bg-hover)] focus:outline-none active:scale-95";
+const valueClasses = "text-sm font-bold text-[var(--color-text-primary)]";
 
-const LogStatusBadge = ({ status }: { status: MaintenanceStatus }) => {
-  const getStatusDetails = () => {
-    switch (status) {
-      case "Completed":
-        return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700";
-      case "Flagged":
-      default:
-        return "border-[#ef4444] bg-[#fee2e2] text-[#ef4444]";
-    }
-  };
+const LogStatusBadge = ({ status }: { status: MaintenanceStatus }) => (
+  <span
+    className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-wider ${
+      status === "Completed"
+        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+        : "border-red-500/30 bg-red-500/10 text-red-600"
+    }`}
+  >
+    {status}
+  </span>
+);
 
-  return (
-    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-wider ${getStatusDetails()}`}>
-      {status}
-    </span>
-  );
-};
-
-const LogClassBadge = ({ value }: { value: MaintenanceClass }) => {
-  const classes =
-    value === "Repair"
-      ? "border-[#b50000] bg-[#ff8f94] text-[#8f1212]"
-      : "border-[#313a9f] bg-[#a9b5ff] text-[#111957]";
-
-  return (
-    <span className={`inline-flex min-w-[112px] justify-center rounded-full border-2 px-4 py-1 text-xs font-bold uppercase ${classes}`}>
-      {value}
-    </span>
-  );
-};
+const LogClassBadge = ({ value }: { value: MaintenanceClass }) => (
+  <span
+    className={`inline-flex min-w-[112px] justify-center rounded-full border-2 px-4 py-1 text-xs font-bold uppercase ${
+      value === "Repair"
+        ? "border-[#b50000] bg-[#ff8f94] text-[#8f1212]"
+        : "border-[#313a9f] bg-[#a9b5ff] text-[#111957]"
+    }`}
+  >
+    {value}
+  </span>
+);
 
 export default function ViewModal({ isOpen, log, onClose }: ViewModalProps) {
   useBodyScrollLock(isOpen && Boolean(log));
@@ -98,135 +63,135 @@ export default function ViewModal({ isOpen, log, onClose }: ViewModalProps) {
   if (!isOpen || !log) return null;
 
   return (
-    <div className={modalOverlayClasses}>
-      <div className={modalContentClasses}>
-        <div className={modalHeaderClasses}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-2xl">
+        <div className="mb-5 flex items-center justify-between border-b border-[var(--color-divider)] pb-4">
           <div>
-            <h3 className={modalTitleClasses}>Maintenance Log Details</h3>
-            <p className={modalSubtitleClasses}>{log.logNumber}</p>
+            <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
+              Maintenance Log Details
+            </h3>
+            <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
+              {log.logNumber}
+            </p>
           </div>
-          <button onClick={onClose} className={closeButtonClasses}>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-input-bg)] hover:text-[var(--color-text-primary)]"
+            aria-label="Close maintenance log details"
+          >
             <X size={18} />
           </button>
         </div>
 
-        <div className={infoGridClasses}>
+        <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
           <div>
-            <span className={infoLabelClasses}>Plate No.</span>
-            <span className={infoValueClasses}>{log.plateNo}</span>
+            <span className={labelClasses}>Plate No.</span>
+            <span className={valueClasses}>{log.plateNo}</span>
           </div>
           <div>
-            <span className={infoLabelClasses}>Status</span>
+            <span className={labelClasses}>Status</span>
             <LogStatusBadge status={log.status} />
           </div>
           <div>
-            <span className={infoLabelClasses}>Work Order</span>
-            <span className={infoValueClasses}>{log.workOrder}</span>
+            <span className={labelClasses}>Work Order</span>
+            <span className={valueClasses}>{log.workOrder}</span>
           </div>
           <div>
-            <span className={infoLabelClasses}>Class</span>
+            <span className={labelClasses}>Class</span>
             <LogClassBadge value={log.class} />
           </div>
           <div>
-            <span className={infoLabelClasses}>Date</span>
-            <span className={infoValueClasses}>{log.date}</span>
+            <span className={labelClasses}>Date</span>
+            <span className={valueClasses}>{log.date}</span>
           </div>
           <div>
-            <span className={infoLabelClasses}>Odometer Reading (km)</span>
-            <span className={infoValueClasses}>{log.odometerReading.toLocaleString()} km</span>
+            <span className={labelClasses}>Odometer Reading</span>
+            <span className={valueClasses}>
+              {log.odometerReading.toLocaleString()} km
+            </span>
           </div>
           <div>
-            <span className={infoLabelClasses}>Mechanic / Shop</span>
-            <span className={infoValueClasses}>{log.mechanic}</span>
+            <span className={labelClasses}>Mechanic / Shop</span>
+            <span className={valueClasses}>{log.mechanic}</span>
           </div>
           <div>
-            <span className={infoLabelClasses}>Garage</span>
-            <span className={infoValueClasses}>{log.garage}</span>
+            <span className={labelClasses}>Garage</span>
+            <span className={valueClasses}>{log.garage}</span>
           </div>
           <div>
-            <span className={infoLabelClasses}>Account Type</span>
-            <span className={infoValueClasses}>{log.accountType}</span>
+            <span className={labelClasses}>Account Type</span>
+            <span className={valueClasses}>{log.accountType}</span>
           </div>
           <div>
-            <span className="mb-1 block text-xs font-medium text-slate-400">Cost</span>
+            <span className={labelClasses}>Cost</span>
             <span className="text-sm font-bold text-emerald-700">
               ₱{log.cost.toLocaleString()}
             </span>
           </div>
         </div>
 
-        <div className={sectionClasses}>
-          <h4 className={sectionTitleClasses}>Schedule Details</h4>
-          <div className={infoGridClasses}>
+        <div className="mt-7 border-t border-[var(--color-divider)] pt-5">
+          <div className="mb-3 flex items-center justify-between gap-4">
             <div>
-              <span className={infoLabelClasses}>Trigger</span>
-              <span className={infoValueClasses}>{log.triggerType}</span>
+              <h4 className="text-sm font-bold text-[var(--color-text-primary)]">
+                Material Cost Breakdown
+              </h4>
+              <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
+                Parts recorded against changed execution items.
+              </p>
             </div>
-            <div>
-              <span className={infoLabelClasses}>Start Reference Date</span>
-              <span className={infoValueClasses}>{log.startReferenceDate}</span>
-            </div>
-            <div>
-              <span className={infoLabelClasses}>Interval Km</span>
-              <span className={infoValueClasses}>{log.intervalKm}</span>
-            </div>
-            <div>
-              <span className={infoLabelClasses}>Buffer Distance Km</span>
-              <span className={infoValueClasses}>{log.bufferDistanceKm}</span>
-            </div>
+            <span className="text-sm font-bold text-emerald-700">
+              ₱{log.cost.toLocaleString()}
+            </span>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-[var(--color-border)]">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-[#070b45] text-xs uppercase text-white">
+                <tr>
+                  <th className="px-4 py-3">Execution Item</th>
+                  <th className="px-4 py-3">Parts Used</th>
+                  <th className="px-4 py-3 text-right">Cost</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-divider)]">
+                {log.costBreakdown.map((line, index) => (
+                  <tr key={`${line.item}-${index}`}>
+                    <td className="px-4 py-3 font-medium text-[var(--color-text-primary)]">
+                      {line.item}
+                    </td>
+                    <td className="px-4 py-3 text-[var(--color-text-secondary)]">
+                      {line.partsUsed}
+                    </td>
+                    <td className="px-4 py-3 text-right font-semibold text-[var(--color-text-primary)]">
+                      ₱{line.cost.toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+                {log.costBreakdown.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="px-4 py-8 text-center text-[var(--color-text-secondary)]">
+                      No material costs recorded.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
           </div>
         </div>
 
-        <div className={sectionClasses}>
-          <h4 className={sectionTitleClasses}>Work Order Progress</h4>
-          <div className={infoGridClasses}>
-            <div>
-              <span className={infoLabelClasses}>Inspection Checklist</span>
-              <span className={infoValueClasses}>
-                {log.checklistCompleted}/{log.checklistTotal} items
-              </span>
-            </div>
-            <div>
-              <span className={infoLabelClasses}>Execution Checklist</span>
-              <span className={infoValueClasses}>
-                {log.executionCompleted}/{log.executionTotal} items
-              </span>
-            </div>
-            <div>
-              <span className={infoLabelClasses}>Changed Parts</span>
-              <span className={infoValueClasses}>{log.changedParts}</span>
-            </div>
-            <div>
-              <span className={infoLabelClasses}>Technician Signature</span>
-              <span className={infoValueClasses}>{log.technicianSignature}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className={sectionClasses}>
-          <h4 className={sectionTitleClasses}>Cost Breakdown</h4>
-          <div className={infoGridClasses}>
-            <div>
-              <span className={infoLabelClasses}>Material Cost</span>
-              <span className={infoValueClasses}>
-                â‚±{log.materialCost.toLocaleString()}
-              </span>
-            </div>
-            <div>
-              <span className={infoLabelClasses}>Labor Cost</span>
-              <span className={infoValueClasses}>
-                â‚±{log.laborCost.toLocaleString()}
-              </span>
-            </div>
-            <div className="col-span-2">
-              <span className={infoLabelClasses}>Remarks</span>
-              <span className={infoValueClasses}>{log.remarks}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className={modalFooterClasses}>
-          <button onClick={onClose} className={modalCloseButtonClasses}>
+        <div className="mt-7 flex justify-end border-t border-[var(--color-divider)] pt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-4 py-2.5 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
+          >
             Close
           </button>
         </div>

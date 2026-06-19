@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 import { isMechanicRole, isOperationsRole } from "../../lib/utils/permissions";
 import logo from "../../assets/logo.png";
 import {
+  LayoutDashboard,
   LayoutGrid,
   LogOut,
   Users,
@@ -17,11 +18,11 @@ interface SidebarProps {
 }
 
 const navItems = [
-//  { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
+  { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
   { label: "User Management", icon: Users, path: "/users" },
   { label: "Maintenance Scheduling", icon: CalendarClock, path: "/maintenance-scheduling" },
   { label: "Work Orders", icon: Wrench, path: "/work-orders" },
-  { label: "Work Order Templates", icon: ClipboardCheck, path: "/inspection-checklists" },
+  { label: "Checklist Templates", icon: ClipboardCheck, path: "/checklist-templates" },
   { label: "Maintenance Logs", icon: ClipboardList, path: "/maintenance-logs" },
 //  { label: "Maintenance Reports", icon: FileBarChart2, path: "/maintenance-reports" },
 //  { label: "Fuel Management", icon: Fuel, path: "/fuel-management" },
@@ -56,7 +57,7 @@ export default function Sidebar({ currentUser }: SidebarProps) {
   const isMechanic = isMechanicRole(currentUser);
   const isOperations = isOperationsRole(currentUser);
   const visibleNavItems = isMechanic
-    ? navItems.filter((item) => item.path === "/work-orders" || item.path === "/maintenance-logs")
+    ? navItems.filter((item) => ["/dashboard", "/work-orders", "/maintenance-logs"].includes(item.path))
     : isOperations
       ? navItems.filter((item) =>
           ["/dashboard", "/maintenance-scheduling", "/work-orders", "/maintenance-logs", "/maintenance-reports", "/fuel-management"].includes(item.path),

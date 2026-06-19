@@ -15,5 +15,5 @@ export type {
   CreateMaintenanceScheduleInput,
   MaintenanceStatus,
   MaintenanceTask,
-  WorkOrderTemplate,
+  ChecklistTemplateName,
 } from "./vmmsApi";

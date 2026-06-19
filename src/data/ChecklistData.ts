@@ -1,4 +1,4 @@
-export type WorkOrderTemplate = string;
+export type ChecklistTemplateName = string;
 
 export interface ChecklistItemTemplate {
   id: string;
@@ -6,7 +6,7 @@ export interface ChecklistItemTemplate {
 }
 
 export const defaultChecklistTemplates: Record<
-  WorkOrderTemplate,
+  ChecklistTemplateName,
   ChecklistItemTemplate[]
 > = {
   "Oil Change": [

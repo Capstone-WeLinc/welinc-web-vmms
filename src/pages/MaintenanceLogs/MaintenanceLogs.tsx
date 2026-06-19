@@ -6,9 +6,14 @@ import { getCurrentUser } from "../../lib/api/authService";
 import type { UserRecord } from "../../lib/api/authService";
 import { getMaintenanceSchedules } from "../../lib/api/maintenanceService";
 import type { MaintenanceTask } from "../../lib/api/maintenanceService";
+import { getVehicles, type VehicleOption } from "../../lib/api/vehicleService";
 import { getGarages } from "../../lib/api/locationService";
 import { isMechanicRole } from "../../lib/utils/permissions";
 import { formatLogNumber } from "../../lib/utils/workOrders";
+import {
+  MaintenanceStatus as MaintenanceStatusEnum,
+  maintenanceStatusLabels,
+} from "../../types/maintenance";
 import {
   ActionButton,
   DataTable,
@@ -45,7 +50,11 @@ interface MaintenanceLog {
   executionTotal: number;
   changedParts: number;
   materialCost: number;
-  laborCost: number;
+  costBreakdown: Array<{
+    item: string;
+    partsUsed: string;
+    cost: number;
+  }>;
   cost: number;
   remarks: string;
   technicianSignature: string;
@@ -63,8 +72,9 @@ const formatCurrency = (value: number) => `₱${value.toLocaleString()}`;
 const formatOdometer = (value: number) => `${value.toLocaleString()} km`;
 
 const normalizeStatus = (status?: string): MaintenanceStatus | null => {
-  if (status === "Completed") return "Completed";
-  if (status === "Flagged") return "Flagged";
+  const normalized = status?.trim().toUpperCase().replace(/[\s-]+/g, "_");
+  if (normalized === MaintenanceStatusEnum.COMPLETED) return "Completed";
+  if (normalized === "FLAGGED") return "Flagged";
   return null;
 };
 
@@ -92,11 +102,12 @@ const readProgress = (task: MaintenanceTask) => {
     checklist?: Array<{ status?: string }>;
     execution?: {
       done?: boolean;
-      laborCost?: string;
       remarks?: string;
       technicianSignature?: string;
       items?: Array<{
+        text?: string;
         status?: string;
+        partsUsed?: string;
         partsCost?: string;
       }>;
     };
@@ -113,12 +124,30 @@ const buildLogNumber = (task: MaintenanceTask) => {
   return formatLogNumber(task.id);
 };
 
+const getVehiclePlateNumber = (
+  vehicleId: string | undefined,
+  vehicles: VehicleOption[],
+) => {
+  if (!vehicleId) return "Unassigned";
+  const vehicle = vehicles.find(
+    (item) =>
+      item.id === vehicleId ||
+      item.value === vehicleId ||
+      item.plateNumber === vehicleId,
+  );
+  return vehicle?.plateNumber ?? vehicle?.value ?? vehicleId;
+};
+
 const mapScheduleToLog = (
   task: MaintenanceTask,
   garageNames: Record<string, string>,
+  vehicles: VehicleOption[],
 ): MaintenanceLog | null => {
   const status = normalizeStatus(task.status);
   if (!status) return null;
+  const relatedPlateNumber = (
+    task as MaintenanceTask & { vehicle?: { plateNumber?: string } }
+  ).vehicle?.plateNumber;
   const progress = readProgress(task);
   const checklist = progress?.checklist ?? [];
   const execution = progress?.execution;
@@ -127,12 +156,24 @@ const mapScheduleToLog = (
     (total, item) => total + parseCost(item.partsCost),
     0,
   );
-  const laborCost = parseCost(execution?.laborCost);
+  const costBreakdown = executionItems
+    .filter(
+      (item) =>
+        item.status === "changed" ||
+        Boolean(item.partsUsed?.trim()) ||
+        parseCost(item.partsCost) > 0,
+    )
+    .map((item) => ({
+      item: item.text?.trim() || "Checklist item",
+      partsUsed: item.partsUsed?.trim() || "Not specified",
+      cost: parseCost(item.partsCost),
+    }));
 
   return {
     id: task.id,
     logNumber: buildLogNumber(task),
-    plateNo: task.vehicleId || "Unassigned",
+    plateNo:
+      relatedPlateNumber || getVehiclePlateNumber(task.vehicleId, vehicles),
     workOrder: task.title || "Untitled work order",
     class: classifyMaintenance(status),
     date: task.date || "",
@@ -151,8 +192,8 @@ const mapScheduleToLog = (
     executionTotal: executionItems.length,
     changedParts: executionItems.filter((item) => item.status === "changed").length,
     materialCost,
-    laborCost,
-    cost: laborCost + materialCost || readNumber(task, ["cost", "totalCost", "materialCost", "laborCost"]),
+    costBreakdown,
+    cost: materialCost || readNumber(task, ["materialCost"]),
     remarks: execution?.remarks || "N/A",
     technicianSignature: execution?.technicianSignature || "N/A",
   };
@@ -195,10 +236,11 @@ export default function MaintenanceLogs() {
 
     Promise.allSettled([
       getCurrentUser(),
-      getMaintenanceSchedules({ statuses: logStatusOptions }),
+      getMaintenanceSchedules({ includeDeleted: true }),
       getGarages(),
+      getVehicles(),
     ])
-      .then(([userResult, logsResult, garagesResult]) => {
+      .then(([userResult, logsResult, garagesResult, vehiclesResult]) => {
         if (!isMounted) return;
 
         setCurrentUser(userResult.status === "fulfilled" ? userResult.value : null);
@@ -206,11 +248,13 @@ export default function MaintenanceLogs() {
           garagesResult.status === "fulfilled"
             ? Object.fromEntries(garagesResult.value.map((garage) => [garage.id, garage.name]))
             : {};
+        const vehicles =
+          vehiclesResult.status === "fulfilled" ? vehiclesResult.value : [];
 
         if (logsResult.status === "fulfilled") {
           setLogs(
             logsResult.value
-              .map((task) => mapScheduleToLog(task, garageNames))
+              .map((task) => mapScheduleToLog(task, garageNames, vehicles))
               .filter((log): log is MaintenanceLog => Boolean(log)),
           );
         } else {
@@ -312,7 +356,6 @@ export default function MaintenanceLogs() {
       "Execution Progress",
       "Changed Parts",
       "Material Cost",
-      "Labor Cost",
       "Cost",
       "Remarks",
       "Technician Signature",
@@ -333,7 +376,6 @@ export default function MaintenanceLogs() {
       `${log.executionCompleted}/${log.executionTotal}`,
       String(log.changedParts),
       formatCurrency(log.materialCost),
-      formatCurrency(log.laborCost),
       formatCurrency(log.cost),
       log.remarks,
       log.technicianSignature,
@@ -376,7 +418,6 @@ export default function MaintenanceLogs() {
         <td>${log.executionCompleted}/${log.executionTotal}</td>
         <td>${log.changedParts}</td>
         <td>${formatCurrency(log.materialCost)}</td>
-        <td>${formatCurrency(log.laborCost)}</td>
         <td>${formatCurrency(log.cost)}</td>
         <td>${log.remarks}</td>
       </tr>
@@ -540,7 +581,15 @@ export default function MaintenanceLogs() {
               key: "status",
               header: "Status",
               width: "9%",
-              render: (log) => <StatusBadge status={log.status} />,
+              render: (log) => (
+                <StatusBadge
+                  status={
+                    log.status === "Completed"
+                      ? maintenanceStatusLabels[MaintenanceStatusEnum.COMPLETED]
+                      : log.status
+                  }
+                />
+              ),
             },
             { key: "mechanic", header: "Mechanic", width: "13%", render: (log) => log.mechanic },
             {

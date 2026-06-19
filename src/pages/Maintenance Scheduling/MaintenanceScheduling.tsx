@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import {
   Calendar as CalendarIcon,
   Plus,
@@ -10,13 +11,12 @@ import {
   Clock,
   Play,
   CheckCircle2,
-  AlertTriangle,
   AlertCircle,
   ArrowUp,
   ArrowDown,
   Edit2,
   RefreshCw,
-  Trash2,
+  Archive,
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import {
@@ -34,19 +34,23 @@ import {
 } from "../../components/ui";
 import CreateSchedule from "./CreateSchedule";
 import {
-  type MaintenanceStatus,
+  MaintenanceStatus,
+  MaintenanceTriggerType,
+  maintenanceStatusLabels,
+  maintenanceTriggerTypeLabels,
   type MaintenanceTask,
 } from "../../types/maintenance";
 import {
   getMaintenanceSchedules,
   deleteMaintenanceSchedule,
 } from "../../lib/api/maintenanceService";
-import { getVehicles } from "../../lib/api/vehicleService";
+import { getVehicles, type VehicleOption } from "../../lib/api/vehicleService";
 import { getGarages } from "../../lib/api/locationService";
 import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
 import {
   formatWorkOrderNumber,
   isInProgressStatus,
+  isDueStatus,
   isOverdueStatus,
   isPendingStatus,
 } from "../../lib/utils/workOrders";
@@ -158,16 +162,15 @@ const Button = ({
 const StatusBadge = ({ status }: { status: MaintenanceStatus }) => {
   const getStatusDetails = () => {
     switch (status) {
-      case "Overdue":
+      case MaintenanceStatus.OVERDUE:
         return "text-[#c41c3b] bg-[var(--color-status-error)]/15 border-[var(--color-status-error)]/30";
-      case "Flagged":
-        return "text-[#92400e] bg-[var(--color-status-warning)]/15 border-[var(--color-status-warning)]/30";
-      case "In-Progress":
-      case "In Progress":
+      case MaintenanceStatus.DUE:
+        return "text-[#6d28d9] bg-[#ede9fe] border-[#c4b5fd]";
+      case MaintenanceStatus.IN_PROGRESS:
         return "text-[#047857] bg-[var(--color-status-success)]/15 border-[var(--color-status-success)]/30";
-      case "Completed":
+      case MaintenanceStatus.COMPLETED:
         return "text-[var(--color-text-secondary)] bg-[var(--color-card-bg)] border-[var(--color-border)]";
-      case "Pending":
+      case MaintenanceStatus.PENDING:
       default:
         return "text-[#0369a1] bg-[var(--color-status-info)]/15 border-[var(--color-status-info)]/30";
     }
@@ -177,7 +180,7 @@ const StatusBadge = ({ status }: { status: MaintenanceStatus }) => {
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${getStatusDetails()}`}
     >
-      {status}
+      {maintenanceStatusLabels[status] ?? status}
     </span>
   );
 };
@@ -240,14 +243,13 @@ const formatDateStr = (year: number, month: number, day: number) => {
 
 const getTaskStyle = (status: MaintenanceStatus) => {
   switch (status) {
-    case "Overdue":
+    case MaintenanceStatus.OVERDUE:
       return "border border-rose-500/40 bg-rose-500/15 text-rose-700 shadow-sm";
-    case "Flagged":
-      return "border border-amber-500/50 bg-amber-500/15 text-amber-800 shadow-sm";
-    case "In-Progress":
-    case "In Progress":
+    case MaintenanceStatus.DUE:
+      return "border border-violet-500/40 bg-violet-500/15 text-violet-700 shadow-sm";
+    case MaintenanceStatus.IN_PROGRESS:
       return "border border-emerald-500/40 bg-emerald-500/15 text-emerald-700 shadow-sm";
-    case "Pending":
+    case MaintenanceStatus.PENDING:
       return "border border-[var(--color-status-info)]/40 bg-[var(--color-status-info)]/15 text-[#0369a1] shadow-sm";
     default:
       return "border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-primary)] shadow-sm";
@@ -255,6 +257,7 @@ const getTaskStyle = (status: MaintenanceStatus) => {
 };
 
 const MaintenanceSchedulingCombined = () => {
+  const location = useLocation();
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -264,7 +267,7 @@ const MaintenanceSchedulingCombined = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatusFilters, setSelectedStatusFilters] = useState<string[]>([]);
   const [vehicleFilter, setVehicleFilter] = useState<string>("All");
-  const [workOrderTemplateFilter, setWorkOrderTemplateFilter] =
+  const [checklistTemplateFilter, setChecklistTemplateNameFilter] =
     useState<string>("All");
   const [dateRangeFilter, setDateRangeFilter] = useState<string>("All");
   const [dateFromFilter, setDateFromFilter] = useState("");
@@ -276,9 +279,7 @@ const MaintenanceSchedulingCombined = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [schedulesPerPage, setSchedulesPerPage] = useState(8);
   const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
-  const [vehicles, setVehicles] = useState<{ value: string; label: string }[]>(
-    [],
-  );
+  const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
   const [garages, setGarages] = useState<GarageOption[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<MaintenanceTask | null>(null);
@@ -307,6 +308,13 @@ const MaintenanceSchedulingCombined = () => {
       .then((loadedGarages) => setGarages(loadedGarages))
       .catch(() => console.error("Failed to load garages"));
   }, []);
+
+  useEffect(() => {
+    if (new URLSearchParams(location.search).get("create") !== "true") return;
+    setEditingTask(null);
+    setIsOdometerUpdateOpen(false);
+    setIsModalOpen(true);
+  }, [location.search]);
 
   useEffect(() => {
     const closeActionMenu = () => setOpenActionMenuId(null);
@@ -359,44 +367,64 @@ const MaintenanceSchedulingCombined = () => {
 
   const dateFilter = getDateRangeFilter();
 
-  const workOrderTemplates = Array.from(
+  const checklistTemplates = Array.from(
     new Set(tasks.map((task) => task.title)),
   ).sort();
-  const workOrderTemplateOptions = [
+  const checklistTemplateOptions = [
     { value: "All", label: "All Types" },
-    ...workOrderTemplates.map((template) => ({
+    ...checklistTemplates.map((template) => ({
       value: template,
       label: template,
     })),
   ];
 
   const vehicleOptions = [{ value: "All", label: "All Vehicles" }, ...vehicles];
+  const getVehicleOption = (vehicleId?: string) =>
+    vehicles.find(
+      (vehicle) =>
+        vehicle.value === vehicleId ||
+        vehicle.id === vehicleId ||
+        vehicle.plateNumber === vehicleId,
+    );
+  const getVehiclePlateNumber = (vehicleId?: string) => {
+    if (!vehicleId) return "";
+    const vehicle = getVehicleOption(vehicleId);
+    return vehicle?.plateNumber ?? vehicle?.value ?? vehicleId;
+  };
   const scheduleStatusOptions = [
-    "Pending",
-    "In Progress",
-    "Overdue",
+    MaintenanceStatus.PENDING,
+    MaintenanceStatus.DUE,
+    MaintenanceStatus.IN_PROGRESS,
+    MaintenanceStatus.OVERDUE,
   ];
 
   const filteredTasks = tasks
     .filter((task) => {
       const isActiveSchedule =
         isPendingStatus(task.status) ||
+        isDueStatus(task.status) ||
         isInProgressStatus(task.status) ||
         isOverdueStatus(task.status);
       const statusMatches =
         selectedStatusFilters.length === 0 ||
         selectedStatusFilters.some(
           (status) =>
-            (status === "Pending" && isPendingStatus(task.status)) ||
-            (status === "In Progress" && isInProgressStatus(task.status)) ||
-            (status === "Overdue" && isOverdueStatus(task.status)) ||
+            (status === MaintenanceStatus.PENDING && isPendingStatus(task.status)) ||
+            (status === MaintenanceStatus.DUE && isDueStatus(task.status)) ||
+            (status === MaintenanceStatus.IN_PROGRESS && isInProgressStatus(task.status)) ||
+            (status === MaintenanceStatus.OVERDUE && isOverdueStatus(task.status)) ||
             status === task.status,
         );
+      const taskVehicle = getVehicleOption(task.vehicleId);
       const vehicleMatches =
-        vehicleFilter === "All" || task.vehicleId === vehicleFilter;
+        vehicleFilter === "All" ||
+        task.vehicleId === vehicleFilter ||
+        taskVehicle?.value === vehicleFilter ||
+        taskVehicle?.id === vehicleFilter ||
+        taskVehicle?.plateNumber === vehicleFilter;
       const templateMatches =
-        workOrderTemplateFilter === "All" ||
-        task.title === workOrderTemplateFilter;
+        checklistTemplateFilter === "All" ||
+        task.title === checklistTemplateFilter;
       const dateMatches =
         dateFilter(new Date(task.date)) &&
         (!dateFromFilter || task.date >= dateFromFilter) &&
@@ -404,6 +432,9 @@ const MaintenanceSchedulingCombined = () => {
       const searchMatches =
         task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         task.vehicleId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        getVehiclePlateNumber(task.vehicleId)
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase()) ||
         task.assignedDriver.toLowerCase().includes(searchQuery.toLowerCase());
       return (
         isActiveSchedule &&
@@ -434,13 +465,13 @@ const MaintenanceSchedulingCombined = () => {
   const noTasks = tasks.length === 0;
 
   const pendingCount = tasks.filter((task) => isPendingStatus(task.status)).length;
+  const dueCount = tasks.filter((task) => isDueStatus(task.status)).length;
   const inProgressCount = tasks.filter(
     (task) => isInProgressStatus(task.status),
   ).length;
-  const overdueCount = tasks.filter((task) => task.status === "Overdue").length;
-  const flaggedCount = tasks.filter((task) => task.status === "Flagged").length;
+  const overdueCount = tasks.filter((task) => task.status === MaintenanceStatus.OVERDUE).length;
   const completedCount = tasks.filter(
-    (task) => task.status === "Completed",
+    (task) => task.status === MaintenanceStatus.COMPLETED,
   ).length;
   const complianceCount = pendingCount + completedCount;
   const compliance = complianceCount
@@ -504,8 +535,9 @@ const MaintenanceSchedulingCombined = () => {
   };
 
   const canShowScheduleUpdate = (task: MaintenanceTask) =>
-    isPendingStatus(task.status) &&
-    (task.triggerType === "ODOMETER" || task.triggerType === "MANUAL");
+    task.status !== MaintenanceStatus.COMPLETED &&
+    (task.triggerType === MaintenanceTriggerType.ODOMETER ||
+      task.triggerType === MaintenanceTriggerType.MANUAL);
 
   const confirmScheduleDelete = async () => {
     if (!confirmDeleteTask) return;
@@ -513,15 +545,18 @@ const MaintenanceSchedulingCombined = () => {
 
     try {
       await deleteMaintenanceSchedule(taskId);
-      setToast({ type: "error", message: "Record deleted successfully." });
+      setTasks((current) => current.filter((task) => task.id !== taskId));
+      setToast({
+        type: "success",
+        message: "Schedule archived. Existing work orders and history were retained.",
+      });
     } catch (err) {
       console.error("Failed to delete schedule", err);
       setToast({
         type: "warning",
-        message: "Schedule removed locally. Server delete failed.",
+        message: "Schedule was not archived because the server update failed.",
       });
     } finally {
-      setTasks((current) => current.filter((task) => task.id !== taskId));
       setConfirmDeleteTask(null);
     }
   };
@@ -572,6 +607,14 @@ const MaintenanceSchedulingCombined = () => {
             iconBgColor="rgba(59, 130, 246, 0.12)"
           />
           <KPIStatCard
+            icon={<AlertCircle size={20} strokeWidth={1.8} />}
+            value={dueCount}
+            label="Due"
+            subtitle="Ready to start"
+            iconColor="#7c3aed"
+            iconBgColor="rgba(124, 58, 237, 0.12)"
+          />
+          <KPIStatCard
             icon={<Play size={20} strokeWidth={1.8} />}
             value={inProgressCount}
             label="In-Progress"
@@ -586,14 +629,6 @@ const MaintenanceSchedulingCombined = () => {
             subtitle="Tasks overdue"
             iconColor="#ef4444"
             iconBgColor="rgba(239, 68, 68, 0.12)"
-          />
-          <KPIStatCard
-            icon={<AlertTriangle size={20} strokeWidth={1.8} />}
-            value={flaggedCount}
-            label="Flagged"
-            subtitle="Needs attention"
-            iconColor="#f59e0b"
-            iconBgColor="rgba(245, 158, 11, 0.12)"
           />
           <KPIStatCard
             icon={<CheckCircle2 size={20} strokeWidth={1.8} />}
@@ -684,7 +719,7 @@ const MaintenanceSchedulingCombined = () => {
                   setDateFromFilter("");
                   setDateToFilter("");
                   setVehicleFilter("All");
-                  setWorkOrderTemplateFilter("All");
+                  setChecklistTemplateNameFilter("All");
                   setDateRangeFilter("All");
                   setCurrentPage(1);
                 }}
@@ -701,12 +736,12 @@ const MaintenanceSchedulingCombined = () => {
                     }}
                   />
                   <SelectField
-                    label="Work Order Template"
+                    label="Checklist Template"
                     id="typeF"
-                    options={workOrderTemplateOptions}
-                    value={workOrderTemplateFilter}
+                    options={checklistTemplateOptions}
+                    value={checklistTemplateFilter}
                     onChange={(e) => {
-                      setWorkOrderTemplateFilter(e.target.value);
+                      setChecklistTemplateNameFilter(e.target.value);
                       setCurrentPage(1);
                     }}
                   />
@@ -754,7 +789,11 @@ const MaintenanceSchedulingCombined = () => {
                     key: "plateNo",
                     header: "Plate No.",
                     width: "10%",
-                    render: (task) => <span className="font-medium">{task.vehicleId}</span>,
+                    render: (task) => (
+                      <span className="font-medium">
+                        {getVehiclePlateNumber(task.vehicleId)}
+                      </span>
+                    ),
                   },
                   {
                     key: "workOrder",
@@ -768,16 +807,14 @@ const MaintenanceSchedulingCombined = () => {
                     width: "10%",
                     render: (task) => (
                       <span className="inline-block rounded-full bg-[#f1f5f9] px-3 py-1 text-xs font-bold text-[#475569]">
-                        {task.triggerType === "TIME"
-                          ? "Time-Based"
-                          : task.triggerType === "MANUAL"
-                            ? "Manual"
-                            : "Odometer"}
+                        {task.triggerType
+                          ? maintenanceTriggerTypeLabels[task.triggerType]
+                          : maintenanceTriggerTypeLabels[MaintenanceTriggerType.ODOMETER]}
                       </span>
                     ),
                   },
                   {
-                    key: "scheduledDate",
+                    key: "createdDate",
                     header: (
                       <button
                         type="button"
@@ -846,8 +883,8 @@ const MaintenanceSchedulingCombined = () => {
                               }]
                             : []),
                           {
-                            label: "Delete",
-                            icon: Trash2,
+                            label: "Archive",
+                            icon: Archive,
                             danger: true,
                             onClick: () => {
                               setOpenActionMenuId(null);
@@ -975,7 +1012,7 @@ const MaintenanceSchedulingCombined = () => {
                                   {formatWorkOrderNumber(task.id)}
                                 </span>
                                 <span className="block truncate text-[11px]">
-                                  {task.vehicleId}
+                                  {getVehiclePlateNumber(task.vehicleId)}
                                 </span>
                               </button>
                             ))}
@@ -1059,7 +1096,7 @@ const MaintenanceSchedulingCombined = () => {
                     {selectedSchedule.title}
                   </h3>
                   <p className="text-sm text-[var(--color-text-secondary)]">
-                    {selectedSchedule.vehicleId} - {selectedSchedule.date}
+                    {getVehiclePlateNumber(selectedSchedule.vehicleId)} - {selectedSchedule.date}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -1093,20 +1130,19 @@ const MaintenanceSchedulingCombined = () => {
                 label: "Work Order No.",
                 value: formatWorkOrderNumber(selectedSchedule.id),
               },
-              { label: "Plate No.", value: selectedSchedule.vehicleId },
-              { label: "Work Order Template", value: selectedSchedule.title },
+              {
+                label: "Plate No.",
+                value: getVehiclePlateNumber(selectedSchedule.vehicleId),
+              },
+              { label: "Checklist Template", value: selectedSchedule.title },
               {
                 label: "Trigger",
                 value:
-                  selectedSchedule.triggerType === "TIME"
-                    ? "Time-Based"
-                    : selectedSchedule.triggerType === "MANUAL"
-                      ? "Manual"
-                      : selectedSchedule.triggerType === "ODOMETER"
-                        ? "Odometer"
-                        : "Not specified",
+                  selectedSchedule.triggerType
+                    ? maintenanceTriggerTypeLabels[selectedSchedule.triggerType]
+                    : "Not specified",
               },
-              { label: "Scheduled Date", value: selectedSchedule.date },
+              { label: "Date Created", value: selectedSchedule.date },
               { label: "Mechanic", value: selectedSchedule.assignedDriver },
               { label: "Status", value: selectedSchedule.status },
               { label: "Garage/Cluster", value: getGarageName(selectedSchedule.garageId) },
@@ -1121,32 +1157,49 @@ const MaintenanceSchedulingCombined = () => {
               },
               {
                 label: "Odometer Reading",
-                value: selectedSchedule.odometerReading
+                value:
+                  selectedSchedule.triggerType === MaintenanceTriggerType.ODOMETER &&
+                  selectedSchedule.odometerReading
                   ? `${selectedSchedule.odometerReading} km`
                   : undefined,
               },
-              { label: "Interval Type", value: selectedSchedule.intervalType },
+              {
+                label: "Interval Type",
+                value:
+                  selectedSchedule.triggerType === MaintenanceTriggerType.TIME
+                    ? selectedSchedule.intervalType
+                    : undefined,
+              },
               {
                 label: "Interval",
-                value: selectedSchedule.intervalKm
+                value:
+                  selectedSchedule.triggerType === MaintenanceTriggerType.ODOMETER &&
+                  selectedSchedule.intervalKm
                   ? `${selectedSchedule.intervalKm} km`
                   : undefined,
               },
               {
                 label: "Buffer Distance",
-                value: selectedSchedule.bufferDistanceKm
+                value:
+                  selectedSchedule.triggerType === MaintenanceTriggerType.ODOMETER &&
+                  selectedSchedule.bufferDistanceKm
                   ? `${selectedSchedule.bufferDistanceKm} km`
                   : undefined,
               },
               {
                 label: "Starting Reference",
-                value: selectedSchedule.startingReferenceReadingKm
+                value:
+                  selectedSchedule.triggerType === MaintenanceTriggerType.ODOMETER &&
+                  selectedSchedule.startingReferenceReadingKm
                   ? `${selectedSchedule.startingReferenceReadingKm} km`
                   : undefined,
               },
               {
                 label: "Start Reference Date",
-                value: selectedSchedule.startReferenceDate,
+                value:
+                  selectedSchedule.triggerType === MaintenanceTriggerType.TIME
+                    ? selectedSchedule.startReferenceDate
+                    : undefined,
               },
             ]
               .filter((detail) => detail.value)
@@ -1215,7 +1268,11 @@ const MaintenanceSchedulingCombined = () => {
         message={
           confirmDeleteTask ? (
             <>
-              Are you sure you want to delete this schedule?
+              Archive this maintenance schedule?
+              <span className="mt-2 block font-normal">
+                It will be removed from Maintenance Scheduling, but existing
+                work orders and maintenance history will remain available.
+              </span>
               <span className="mt-2 block font-bold">
                 {confirmDeleteTask.title} - {confirmDeleteTask.vehicleId}
               </span>
@@ -1224,7 +1281,7 @@ const MaintenanceSchedulingCombined = () => {
             ""
           )
         }
-        confirmLabel="Yes"
+        confirmLabel="Archive Schedule"
         onConfirm={confirmScheduleDelete}
         onCancel={() => setConfirmDeleteTask(null)}
       />

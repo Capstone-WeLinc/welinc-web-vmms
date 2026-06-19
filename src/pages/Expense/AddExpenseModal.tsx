@@ -4,7 +4,7 @@ import { getVehicles } from "../../lib/api/vehicleService";
 import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
 import {
   defaultChecklistTemplates,
-  type WorkOrderTemplate,
+  type ChecklistTemplateName,
 } from "../../data/ChecklistData";
 
 type Option = { value: string; label: string };
@@ -153,9 +153,9 @@ function SearchableSelect({ id, label, options, placeholder = 'Select...', value
   );
 }
 
-const workOrderTemplates: WorkOrderTemplate[] = Object.keys(
+const checklistTemplates: ChecklistTemplateName[] = Object.keys(
   defaultChecklistTemplates,
-) as WorkOrderTemplate[];
+) as ChecklistTemplateName[];
 
 export default function AddExpenseModal({
   isOpen,
@@ -239,7 +239,7 @@ export default function AddExpenseModal({
 
             <div className="flex flex-col">
               <label className="mb-2 text-sm font-medium text-[var(--color-text-secondary)]">
-                Work Order Template *
+                Checklist Template *
               </label>
               <select
                 value={formData.description}
@@ -249,9 +249,9 @@ export default function AddExpenseModal({
                 className="w-full appearance-none rounded-lg border border-[var(--color-input-border)] bg-[var(--color-input-bg)] px-4 py-2.5 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-hidden"
               >
                 <option value="" className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]">
-                  Select Work Order Template...
+                  Select Checklist Template...
                 </option>
-                {workOrderTemplates.map((type) => (
+                {checklistTemplates.map((type) => (
                   <option
                     key={type}
                     value={type}

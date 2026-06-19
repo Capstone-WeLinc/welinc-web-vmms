@@ -4,7 +4,7 @@ import { getVehicles } from "../../lib/api/vehicleService";
 import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
 import {
   defaultChecklistTemplates,
-  type WorkOrderTemplate,
+  type ChecklistTemplateName,
 } from "../../data/ChecklistData";
 
 type Option = { value: string; label: string };
@@ -153,9 +153,9 @@ function SearchableSelect({ id, label, options, placeholder = 'Select...', value
   );
 }
 
-const workOrderTemplates: WorkOrderTemplate[] = Object.keys(
+const checklistTemplates: ChecklistTemplateName[] = Object.keys(
   defaultChecklistTemplates,
-) as WorkOrderTemplate[];
+) as ChecklistTemplateName[];
 
 export default function AddIncomeModal({
   isOpen,
@@ -165,7 +165,7 @@ export default function AddIncomeModal({
   onClose: () => void;
 }) {
   const [clientType, setClientType] = useState("Individual");
-  const [workOrderTemplate, setWorkOrderTemplate] = useState("Oil Change");
+  const [checklistTemplate, setChecklistTemplateName] = useState("Oil Change");
   const [vehicleOptions, setVehicleOptions] = useState<
     { value: string; label: string }[]
   >([]);
@@ -179,7 +179,7 @@ export default function AddIncomeModal({
   }, []);
 
   const handleSave = () => {
-    console.log("Income saved:", { clientType, workOrderTemplate });
+    console.log("Income saved:", { clientType, checklistTemplate });
     onClose();
   };
 
@@ -216,14 +216,14 @@ export default function AddIncomeModal({
 
             <div className="flex flex-col">
               <label className="mb-2 text-sm font-medium text-[var(--color-text-secondary)]">
-                Work Order Template *
+                Checklist Template *
               </label>
               <select
-                value={workOrderTemplate}
-                onChange={(e) => setWorkOrderTemplate(e.target.value)}
+                value={checklistTemplate}
+                onChange={(e) => setChecklistTemplateName(e.target.value)}
                 className="w-full appearance-none rounded-lg border border-[var(--color-input-border)] bg-[var(--color-input-bg)] px-4 py-2.5 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
               >
-                {workOrderTemplates.map((type) => (
+                {checklistTemplates.map((type) => (
                   <option
                     key={type}
                     value={type}

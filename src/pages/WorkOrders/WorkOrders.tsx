@@ -19,12 +19,14 @@ import {
   ToastNotification,
 } from "../../components/ui";
 import {
+  MaintenanceIntervalType,
+  MaintenanceStatus,
+  MaintenanceTriggerType,
   type MaintenanceTask,
-  type MaintenanceStatus,
 } from "../../types/maintenance";
 import {
   defaultChecklistTemplates,
-  type WorkOrderTemplate,
+  type ChecklistTemplateName,
 } from "../../data/ChecklistData";
 import {
   createMaintenanceSchedule,
@@ -33,15 +35,18 @@ import {
   updateWorkOrder,
   updateWorkOrderProgress,
 } from "../../lib/api/maintenanceService";
-import { getVehicles } from "../../lib/api/vehicleService";
+import { getVehicles, type VehicleOption } from "../../lib/api/vehicleService";
 import { getCurrentUser, type UserRecord } from "../../lib/api/authService";
 import { getGarages } from "../../lib/api/locationService";
 import { isMechanicRole } from "../../lib/utils/permissions";
 import {
   formatWorkOrderNumber,
+  getCalculatedMaintenanceStatus,
   getOdometerActivationRange,
   getTimeBasedActivationDate,
+  isDueStatus,
   isInProgressStatus,
+  isOverdueStatus,
   isPendingStatus,
   isPendingOdometerScheduleReadyForMechanic,
   isPendingTimeScheduleReadyForMechanic,
@@ -80,7 +85,6 @@ interface ExecutionRecord {
   attachments?: string[];
   remarks?: string;
   technicianSignature?: string;
-  laborCost?: string;
 }
 
 interface WorkOrderProgress {
@@ -128,7 +132,7 @@ const normalizeTemplateName = (value?: string | null) =>
   value?.trim().toLowerCase() ?? "";
 
 const findTemplateItems = (
-  templates: Record<WorkOrderTemplate, ChecklistItemTemplate[]>,
+  templates: Record<ChecklistTemplateName, ChecklistItemTemplate[]>,
   templateName: string,
 ) => {
   const exactItems = templates[templateName];
@@ -203,8 +207,9 @@ export default function WorkOrders() {
   );
   const [currentUser, setCurrentUser] = useState<UserRecord | null>(null);
   const [garages, setGarages] = useState<{ id: string; name: string }[]>([]);
+  const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
   const [templates, setTemplates] =
-    useState<Record<WorkOrderTemplate, ChecklistItemTemplate[]>>(
+    useState<Record<ChecklistTemplateName, ChecklistItemTemplate[]>>(
       defaultChecklistTemplates,
     );
 
@@ -258,6 +263,7 @@ export default function WorkOrders() {
       .then(setTemplates)
       .catch(() => setTemplates(defaultChecklistTemplates));
     getGarages().then(setGarages).catch(() => setGarages([]));
+    getVehicles().then(setVehicles).catch(() => setVehicles([]));
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
 
     window.addEventListener("focus", loadWorkOrders);
@@ -300,6 +306,17 @@ export default function WorkOrders() {
   const normalizeText = (value?: string | null) =>
     value?.trim().toLowerCase() ?? "";
 
+  const getVehiclePlateNumber = (vehicleId?: string) => {
+    if (!vehicleId) return "";
+    const vehicle = vehicles.find(
+      (item) =>
+        item.value === vehicleId ||
+        item.id === vehicleId ||
+        item.plateNumber === vehicleId,
+    );
+    return vehicle?.plateNumber ?? vehicle?.value ?? vehicleId;
+  };
+
   const isAssignedToCurrentMechanic = (task: MaintenanceTask) => {
     if (!isMechanic || !currentUser) return true;
 
@@ -327,7 +344,10 @@ export default function WorkOrders() {
 
   let activeTasks = tasks.filter(
     (task) =>
-      (isPendingStatus(task.status) || isInProgressStatus(task.status)) &&
+      (isPendingStatus(task.status) ||
+        isDueStatus(task.status) ||
+        isInProgressStatus(task.status) ||
+        isOverdueStatus(task.status)) &&
       isAssignedToCurrentMechanic(task),
   );
 
@@ -336,8 +356,10 @@ export default function WorkOrders() {
       selectedStatusFilters.some(
         (status) =>
           status === t.status ||
-          (status === "Pending" && isPendingStatus(t.status)) ||
-          (status === "In Progress" && isInProgressStatus(t.status)),
+          (status === MaintenanceStatus.PENDING && isPendingStatus(t.status)) ||
+          (status === MaintenanceStatus.DUE && isDueStatus(t.status)) ||
+          (status === MaintenanceStatus.IN_PROGRESS && isInProgressStatus(t.status)) ||
+          (status === MaintenanceStatus.OVERDUE && isOverdueStatus(t.status)),
       ),
     );
   }
@@ -356,6 +378,7 @@ export default function WorkOrders() {
       (t) =>
         t.title.toLowerCase().includes(query) ||
         t.vehicleId.toLowerCase().includes(query) ||
+        getVehiclePlateNumber(t.vehicleId).toLowerCase().includes(query) ||
         t.assignedDriver.toLowerCase().includes(query),
     );
   }
@@ -408,7 +431,6 @@ export default function WorkOrders() {
         attachments: current?.attachments ?? [],
         remarks: current?.remarks ?? "",
         technicianSignature: current?.technicianSignature ?? "",
-        laborCost: current?.laborCost ?? "",
       });
       return next;
     });
@@ -436,7 +458,6 @@ export default function WorkOrders() {
         attachments: [],
         remarks: "",
         technicianSignature: "",
-        laborCost: "",
       }
     : { done: false, items: [] };
 
@@ -456,7 +477,6 @@ export default function WorkOrders() {
           attachments: [],
           remarks: "",
           technicianSignature: "",
-          laborCost: "",
         },
       }).catch((error) => {
         console.error("Failed to save work order progress", error);
@@ -474,7 +494,7 @@ export default function WorkOrders() {
   const canModifySelectedTask =
     isMechanic &&
     Boolean(selectedTask) &&
-    selectedTask?.status !== "Completed" &&
+    selectedTask?.status !== MaintenanceStatus.COMPLETED &&
     canMechanicStartTask;
 
   const formatDateForDisplay = (date: Date) =>
@@ -485,14 +505,14 @@ export default function WorkOrders() {
     }).format(date);
 
   const getStartLockMessage = (task: MaintenanceTask) => {
-    if (task.triggerType === "TIME") {
+    if (task.triggerType === MaintenanceTriggerType.TIME) {
       const activationDate = getTimeBasedActivationDate(task);
 
       if (!activationDate) {
         return "This time-based work order is available to view, but it cannot be started until its interval and start reference date are configured.";
       }
 
-      return `This time-based work order can start on ${formatDateForDisplay(activationDate)} when the scheduled date matches the interval.`;
+      return `This time-based work order becomes due on ${formatDateForDisplay(activationDate)}. Before that date it stays Pending; after that date it becomes Overdue if it has not started.`;
     }
 
     const activationRange = getOdometerActivationRange(task);
@@ -503,7 +523,7 @@ export default function WorkOrders() {
     }
 
     const readingText = currentReading ? `${currentReading} km` : "not recorded";
-    return `Current odometer reading is ${readingText}. Mechanic work can start at ${activationRange.minimum} km to ${activationRange.maximum} km.`;
+    return `Current odometer reading is ${readingText}. Activation starts at ${activationRange.activationMileage.toLocaleString()} km and due mileage is ${activationRange.dueMileage.toLocaleString()} km.`;
   };
 
   const deriveTaskStatus = (
@@ -511,16 +531,16 @@ export default function WorkOrders() {
     checklist: ChecklistItem[],
     execution: ExecutionRecord,
   ): MaintenanceStatus => {
-    if (task.status === "Completed") return "Completed";
-    if (checklist.some((item) => item.status === "fail")) return "Flagged";
-    if (task.status === "Overdue") return "Overdue";
+    if (task.status === MaintenanceStatus.COMPLETED) return MaintenanceStatus.COMPLETED;
+    if (checklist.some((item) => item.status === "fail")) return MaintenanceStatus.IN_PROGRESS;
     if (
       execution.items.some((item) => item.status !== "pending") ||
       checklist.some((item) => item.status !== "pending")
     ) {
-      return "In Progress";
+      return MaintenanceStatus.IN_PROGRESS;
     }
-    return isInProgressStatus(task.status) ? "In Progress" : "Pending";
+    if (isInProgressStatus(task.status)) return MaintenanceStatus.IN_PROGRESS;
+    return getCalculatedMaintenanceStatus(task);
   };
 
   const persistTaskStatus = (
@@ -528,7 +548,7 @@ export default function WorkOrders() {
     status: MaintenanceStatus,
   ) => {
     const task = tasks.find((task) => task.id === taskId);
-    if (!task || task.status === status || task.status === "Completed") return;
+    if (!task || task.status === status || task.status === MaintenanceStatus.COMPLETED) return;
 
     const updatedTask = { ...task, status };
     setTasks((prev) => prev.map((current) => (current.id === taskId ? updatedTask : current)));
@@ -544,11 +564,11 @@ export default function WorkOrders() {
 
   const formatTriggerType = (triggerType?: string) => {
     if (!triggerType) return "";
-    return triggerType === "ODOMETER"
+    return triggerType === MaintenanceTriggerType.ODOMETER
       ? "Odometer"
-      : triggerType === "TIME"
+      : triggerType === MaintenanceTriggerType.TIME
       ? "Time"
-      : triggerType === "MANUAL"
+      : triggerType === MaintenanceTriggerType.MANUAL
       ? "Manual"
       : triggerType;
   };
@@ -561,10 +581,10 @@ export default function WorkOrders() {
   const renderScheduleDetails = (task: MaintenanceTask) => {
     const details = [
       { label: "Work Order No.", value: formatWorkOrderNumber(task.id) },
-      { label: "Vehicle", value: task.vehicleId },
-      { label: "Work Order Template", value: task.title },
+      { label: "Vehicle", value: getVehiclePlateNumber(task.vehicleId) },
+      { label: "Checklist Template", value: task.title },
       { label: "Assigned Mechanic", value: task.assignedDriver },
-      { label: "Scheduled Date", value: task.date },
+      { label: "Date Created", value: task.date },
       { label: "Garage / Cluster", value: getGarageName(task.garageId) },
       { label: "Account Type", value: task.accountType },
       { label: "Provider", value: task.outsourcedProvider },
@@ -678,10 +698,13 @@ export default function WorkOrders() {
       : badge("Execution Pending", "#ef4444");
 
     const scheduleRows = [
-      { label: "Vehicle", value: selectedTask.vehicleId },
-      { label: "Work Order Template", value: selectedTask.title },
+      {
+        label: "Vehicle",
+        value: getVehiclePlateNumber(selectedTask.vehicleId),
+      },
+      { label: "Checklist Template", value: selectedTask.title },
       { label: "Assigned Mechanic", value: selectedTask.assignedDriver },
-      { label: "Scheduled Date", value: selectedTask.date },
+      { label: "Date Created", value: selectedTask.date },
       {
         label: "Garage / Cluster",
         value: getGarageName(selectedTask.garageId),
@@ -730,7 +753,6 @@ export default function WorkOrders() {
         <h2>Cost Summary</h2>
         <table>
           <tbody>
-            <tr><td style="font-weight:700">Labor Cost</td><td style="text-align:right">${formatCurrency(laborCostTotal)}</td></tr>
             <tr><td style="font-weight:700">Material Cost</td><td style="text-align:right">${formatCurrency(materialCostTotal)}</td></tr>
             <tr><td style="font-weight:700">Total Cost</td><td style="text-align:right;font-weight:700">${formatCurrency(workOrderCostTotal)}</td></tr>
           </tbody>
@@ -754,7 +776,7 @@ export default function WorkOrders() {
           </style>
         </head>
         <body>
-          <h1>${selectedTask.vehicleId} — ${selectedTask.title}</h1>
+          <h1>${getVehiclePlateNumber(selectedTask.vehicleId)} — ${selectedTask.title}</h1>
           <div class="muted">Date: ${selectedTask.date} &nbsp; • &nbsp; Mechanic: ${selectedTask.assignedDriver}</div>
           ${scheduleDetailsHtml}
           ${signatureHtml}
@@ -835,15 +857,19 @@ export default function WorkOrders() {
     (total, item) => total + parseCostValue(item.partsCost),
     0,
   );
-  const laborCostTotal = parseCostValue(currentExecution.laborCost);
-  const workOrderCostTotal = laborCostTotal + materialCostTotal;
+  const workOrderCostTotal = materialCostTotal;
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat("en-PH", {
       style: "currency",
       currency: "PHP",
       maximumFractionDigits: 2,
     }).format(value);
-  const workOrderStatusOptions = ["Pending", "In Progress"];
+  const workOrderStatusOptions = [
+    MaintenanceStatus.PENDING,
+    MaintenanceStatus.DUE,
+    MaintenanceStatus.IN_PROGRESS,
+    MaintenanceStatus.OVERDUE,
+  ];
 
   const applyChangeOrConfirmStart = (change: () => void) => {
     if (isMechanic && selectedTask && isPendingStatus(selectedTask.status)) {
@@ -856,7 +882,7 @@ export default function WorkOrders() {
   const confirmStartWorkOrder = () => {
     if (!selectedTask || !pendingStartChange) return;
 
-    persistTaskStatus(selectedTask.id, "In Progress");
+    persistTaskStatus(selectedTask.id, MaintenanceStatus.IN_PROGRESS);
     pendingStartChange();
     setPendingStartChange(null);
     setToast({ type: "success", message: "Work order started successfully." });
@@ -1020,17 +1046,32 @@ export default function WorkOrders() {
     return `${year}-${month}-${day}`;
   };
 
-  const getNextRecurringDate = (completedAt: Date, intervalType?: string) => {
+  const getNextRecurringDate = (completedAt: Date, intervalType?: MaintenanceIntervalType) => {
     const nextDate = new Date(completedAt);
-    if (intervalType === "DAILY") nextDate.setDate(nextDate.getDate() + 1);
-    else if (intervalType === "WEEKLY") nextDate.setDate(nextDate.getDate() + 7);
-    else if (intervalType === "MONTHLY") nextDate.setMonth(nextDate.getMonth() + 1);
+    if (intervalType === MaintenanceIntervalType.DAILY) nextDate.setDate(nextDate.getDate() + 1);
+    else if (intervalType === MaintenanceIntervalType.WEEKLY) nextDate.setDate(nextDate.getDate() + 7);
+    else if (intervalType === MaintenanceIntervalType.MONTHLY) nextDate.setMonth(nextDate.getMonth() + 1);
+    else if (intervalType === MaintenanceIntervalType.QUARTERLY) nextDate.setMonth(nextDate.getMonth() + 3);
+    else if (intervalType === MaintenanceIntervalType.SEMI_ANNUALLY) nextDate.setMonth(nextDate.getMonth() + 6);
+    else if (intervalType === MaintenanceIntervalType.ANNUALLY) nextDate.setFullYear(nextDate.getFullYear() + 1);
     else return null;
     return formatDateInput(nextDate);
   };
 
+  const getLatestVehicleOdometer = async (task: MaintenanceTask) => {
+    const vehicles = await getVehicles().catch(() => []);
+    const vehicle = vehicles.find((item) => item.value === task.vehicleId);
+    return vehicle?.odometer !== undefined
+      ? String(vehicle.odometer)
+      : task.odometerReading?.trim();
+  };
+
   const createNextRecurringSchedule = async (completedTask: MaintenanceTask) => {
-    if (completedTask.triggerType === "MANUAL" || !completedTask.triggerType) {
+    if (completedTask.deletedAt) {
+      return null;
+    }
+
+    if (completedTask.triggerType === MaintenanceTriggerType.MANUAL || !completedTask.triggerType) {
       return null;
     }
 
@@ -1038,32 +1079,27 @@ export default function WorkOrders() {
     const completedDateText = formatDateInput(completedDate);
     let nextSchedule: Omit<MaintenanceTask, "id">;
 
-    if (completedTask.triggerType === "ODOMETER") {
+    if (completedTask.triggerType === MaintenanceTriggerType.ODOMETER) {
       const interval = Number(completedTask.intervalKm);
       if (!Number.isFinite(interval) || interval <= 0) return null;
 
-      const vehicles = await getVehicles().catch(() => []);
-      const vehicle = vehicles.find((item) => item.value === completedTask.vehicleId);
-      const latestOdometer =
-        vehicle?.odometer !== undefined
-          ? String(vehicle.odometer)
-          : completedTask.odometerReading?.trim();
+      const latestOdometer = await getLatestVehicleOdometer(completedTask);
       if (!latestOdometer) return null;
 
       const duplicateExists = tasks.some(
         (task) =>
           task.id !== completedTask.id &&
-          task.status !== "Completed" &&
+          task.status !== MaintenanceStatus.COMPLETED &&
           task.vehicleId === completedTask.vehicleId &&
           task.title === completedTask.title &&
-          task.triggerType === "ODOMETER" &&
+          task.triggerType === MaintenanceTriggerType.ODOMETER &&
           task.startingReferenceReadingKm === latestOdometer,
       );
       if (duplicateExists) return null;
 
       nextSchedule = {
         ...completedTask,
-        status: "Pending",
+        status: MaintenanceStatus.PENDING,
         date: completedDateText,
         odometerReading: latestOdometer,
         startingReferenceReadingKm: latestOdometer,
@@ -1071,23 +1107,25 @@ export default function WorkOrders() {
     } else {
       const nextDate = getNextRecurringDate(completedDate, completedTask.intervalType);
       if (!nextDate) return null;
+      const latestOdometer = await getLatestVehicleOdometer(completedTask);
 
       const duplicateExists = tasks.some(
         (task) =>
           task.id !== completedTask.id &&
-          task.status !== "Completed" &&
+          task.status !== MaintenanceStatus.COMPLETED &&
           task.vehicleId === completedTask.vehicleId &&
           task.title === completedTask.title &&
-          task.triggerType === "TIME" &&
-          task.date === nextDate,
+          task.triggerType === MaintenanceTriggerType.TIME &&
+          task.startReferenceDate === nextDate,
       );
       if (duplicateExists) return null;
 
       nextSchedule = {
         ...completedTask,
-        status: "Pending",
-        date: nextDate,
-        startReferenceDate: completedDateText,
+        status: MaintenanceStatus.PENDING,
+        date: completedDateText,
+        odometerReading: latestOdometer,
+        startReferenceDate: nextDate,
       };
     }
 
@@ -1099,7 +1137,15 @@ export default function WorkOrders() {
   const handleMarkComplete = async () => {
     if (!selectedTask || !canModifySelectedTask) return;
 
-    const completedTask = { ...selectedTask, status: "Completed" as const };
+    const latestOdometer =
+      selectedTask.triggerType === MaintenanceTriggerType.TIME
+        ? await getLatestVehicleOdometer(selectedTask)
+        : selectedTask.odometerReading;
+    const completedTask = {
+      ...selectedTask,
+      status: MaintenanceStatus.COMPLETED,
+      odometerReading: latestOdometer ?? selectedTask.odometerReading,
+    };
     setTasks((prev) =>
       prev.map((t) => (t.id === selectedTask.id ? completedTask : t)),
     );
@@ -1206,7 +1252,6 @@ export default function WorkOrders() {
         attachments: [],
         remarks: "",
         technicianSignature: "",
-        laborCost: "",
       };
       // assign explicitly to avoid unsafe any usage
       if (field === "attachments") {
@@ -1215,8 +1260,6 @@ export default function WorkOrders() {
         (cur as ExecutionRecord).remarks = value as string;
       } else if (field === "technicianSignature") {
         (cur as ExecutionRecord).technicianSignature = value as string;
-      } else if (field === "laborCost") {
-        (cur as ExecutionRecord).laborCost = value as string;
       }
       next.set(taskId, cur);
       return next;
@@ -1341,7 +1384,7 @@ export default function WorkOrders() {
                 key: "plate no",
                 header: "Plate No.",
                 width: "9%",
-                render: (task) => task.vehicleId,
+                render: (task) => getVehiclePlateNumber(task.vehicleId),
               },
               {
                 key: "type",
@@ -1358,12 +1401,6 @@ export default function WorkOrders() {
               {
                 key: "created",
                 header: "Date Created",
-                width: "11%",
-                render: (task) => task.startReferenceDate || task.date,
-              },
-              {
-                key: "assigned",
-                header: "Assigned Date",
                 width: "11%",
                 render: (task) => task.date,
               },
@@ -1764,7 +1801,7 @@ export default function WorkOrders() {
                       <input
                         type="text"
                         value={item.partsUsed || ""}
-                        disabled={!canModifySelectedTask || currentExecution.done || item.status !== "changed"}
+                        disabled={!canModifySelectedTask || item.status !== "changed"}
                         onChange={(event) =>
                           updateExecutionItemField(
                             selectedTask.id,
@@ -1774,7 +1811,7 @@ export default function WorkOrders() {
                           )
                         }
                         placeholder={item.status === "changed" ? "Part(s) used" : "Not applicable"}
-                        className={`mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)] ${!canModifySelectedTask || currentExecution.done || item.status !== "changed" ? "cursor-not-allowed opacity-70" : ""}`}
+                        className={`mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)] ${!canModifySelectedTask || item.status !== "changed" ? "cursor-not-allowed opacity-70" : ""}`}
                       />
                     </div>
                     <div>
@@ -1784,7 +1821,7 @@ export default function WorkOrders() {
                       <input
                         type="text"
                         value={item.partsCost || ""}
-                        disabled={!canModifySelectedTask || currentExecution.done || item.status !== "changed"}
+                        disabled={!canModifySelectedTask || item.status !== "changed"}
                         onChange={(event) =>
                           updateExecutionItemField(
                             selectedTask.id,
@@ -1794,7 +1831,7 @@ export default function WorkOrders() {
                           )
                         }
                         placeholder="0.00"
-                        className={`mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)] ${!canModifySelectedTask || currentExecution.done || item.status !== "changed" ? "cursor-not-allowed opacity-70" : ""}`}
+                        className={`mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)] ${!canModifySelectedTask || item.status !== "changed" ? "cursor-not-allowed opacity-70" : ""}`}
                       />
                     </div>
                     <div>
@@ -1805,7 +1842,7 @@ export default function WorkOrders() {
                         type="file"
                         accept="image/*"
                         multiple
-                        disabled={!canModifySelectedTask || currentExecution.done || item.status !== "changed"}
+                        disabled={!canModifySelectedTask || item.status !== "changed"}
                         onChange={(event) =>
                           updateExecutionItemAttachments(
                             selectedTask.id,
@@ -1813,7 +1850,7 @@ export default function WorkOrders() {
                             event.target.files,
                           )
                         }
-                        className={`mt-1 w-full text-xs text-[var(--color-text-secondary)] ${!canModifySelectedTask || currentExecution.done || item.status !== "changed" ? "cursor-not-allowed opacity-60" : ""}`}
+                        className={`mt-1 w-full text-xs text-[var(--color-text-secondary)] ${!canModifySelectedTask || item.status !== "changed" ? "cursor-not-allowed opacity-60" : ""}`}
                       />
                       {item.attachments && item.attachments.length > 0 ? (
                         <div className="mt-2 text-xs text-[var(--color-text-secondary)]">
@@ -1829,26 +1866,7 @@ export default function WorkOrders() {
                 ))}
               </div>
 
-              <div className="grid gap-3 border-t border-[var(--color-divider)] bg-[var(--color-input-bg)] px-6 py-4 md:grid-cols-3">
-                <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
-                    Labor Cost
-                  </p>
-                  <input
-                    type="text"
-                    value={currentExecution.laborCost || ""}
-                    disabled={!canModifySelectedTask || currentExecution.done}
-                    onChange={(event) =>
-                      updateExecutionField(
-                        selectedTask.id,
-                        "laborCost",
-                        event.target.value,
-                      )
-                    }
-                    placeholder="0.00"
-                    className={`mt-2 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm font-semibold text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)] ${!canModifySelectedTask || currentExecution.done ? "cursor-not-allowed opacity-70" : ""}`}
-                  />
-                </div>
+              <div className="grid gap-3 border-t border-[var(--color-divider)] bg-[var(--color-input-bg)] px-6 py-4 md:grid-cols-2">
                 <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
                   <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
                     Material Cost
@@ -2052,7 +2070,7 @@ export default function WorkOrders() {
                   Approval / Verification
                 </p>
                 <p className="mt-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm font-semibold text-[var(--color-text-primary)]">
-                  {selectedTask.status === "Completed"
+                  {selectedTask.status === MaintenanceStatus.COMPLETED
                     ? "Verified and completed"
                     : canComplete
                       ? "Ready for completion"
@@ -2110,7 +2128,7 @@ export default function WorkOrders() {
                 >
                   Next
                 </ActionButton>
-              ) : selectedTask?.status === "Completed" ? (
+              ) : selectedTask?.status === MaintenanceStatus.COMPLETED ? (
                 <button
                   className="no-print flex items-center gap-2 rounded-lg bg-emerald-500 px-6 py-2.5 text-sm font-bold text-white shadow-[0_0_10px_rgba(52,211,153,0.12)]"
                   disabled
@@ -2154,3 +2172,4 @@ export default function WorkOrders() {
     </div>
   );
 }
+
