@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   CalendarClock,
   CheckCircle2,
+  CircleDollarSign,
   ClipboardList,
   LayoutDashboard,
   Truck,
@@ -43,6 +44,36 @@ const isCurrentMonth = (task: MaintenanceTask) => {
     value.getMonth() === now.getMonth()
   );
 };
+
+const getMaterialCost = (task: MaintenanceTask) => {
+  const progress = task.workOrderProgress;
+  if (!progress || typeof progress !== "object" || Array.isArray(progress)) return 0;
+
+  const execution = (progress as { execution?: unknown }).execution;
+  if (!execution || typeof execution !== "object" || Array.isArray(execution)) return 0;
+
+  const items = (execution as { items?: unknown }).items;
+  if (!Array.isArray(items)) return 0;
+
+  return items.reduce((total, item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return total;
+    const value = (item as { partsCost?: unknown }).partsCost;
+    const parsed =
+      typeof value === "number"
+        ? value
+        : typeof value === "string"
+          ? Number(value.replace(/[^\d.-]/g, ""))
+          : 0;
+    return total + (Number.isFinite(parsed) ? parsed : 0);
+  }, 0);
+};
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    maximumFractionDigits: 2,
+  }).format(value);
 
 const statusBadgeClasses: Record<MaintenanceStatus, string> = {
   [MaintenanceStatus.PENDING]: "border-slate-300 bg-slate-100 text-slate-700",
@@ -148,6 +179,10 @@ export default function Dashboard() {
     filter === "month"
       ? completedThisMonth
       : schedules.filter((task) => task.status === MaintenanceStatus.COMPLETED);
+  const maintenanceCost = filteredSchedules.reduce(
+    (total, task) => total + getMaterialCost(task),
+    0,
+  );
 
   const summaryCards: Array<{
     label: string;
@@ -166,6 +201,13 @@ export default function Dashboard() {
       value: completedForSelectedPeriod.length,
       icon: CheckCircle2,
       color: "#059669",
+      path: "/maintenance-logs",
+    },
+    {
+      label: filter === "month" ? "Cost This Month" : "Maintenance Cost",
+      value: formatCurrency(maintenanceCost),
+      icon: CircleDollarSign,
+      color: "#0f766e",
       path: "/maintenance-logs",
     },
   ];
@@ -212,9 +254,9 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
         {loading
-          ? Array.from({ length: 6 }).map((_, index) => (
+          ? Array.from({ length: 7 }).map((_, index) => (
             <div key={index} className="h-32 animate-pulse rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5">
               <div className="h-9 w-9 rounded-lg bg-[var(--color-input-bg)]" />
               <div className="mt-4 h-6 w-20 rounded bg-[var(--color-input-bg)]" />

@@ -16,7 +16,9 @@ import {
   ArrowDown,
   Edit2,
   RefreshCw,
-  Archive,
+  Ban,
+  Power,
+  PowerOff,
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import {
@@ -43,6 +45,7 @@ import {
 import {
   getMaintenanceSchedules,
   deleteMaintenanceSchedule,
+  updateMaintenanceSchedule,
 } from "../../lib/api/maintenanceService";
 import { getVehicles, type VehicleOption } from "../../lib/api/vehicleService";
 import { getGarages } from "../../lib/api/locationService";
@@ -59,6 +62,12 @@ type GarageOption = { id: string; name: string };
 type ToastState = {
   type: "success" | "error" | "warning" | "info";
   message: string;
+};
+
+type ScheduleStatusAction = "cancel" | "activate" | "deactivate";
+type PendingScheduleAction = {
+  action: ScheduleStatusAction;
+  task: MaintenanceTask;
 };
 
 interface KPIStatCardProps {
@@ -170,6 +179,8 @@ const StatusBadge = ({ status }: { status: MaintenanceStatus }) => {
         return "text-[#047857] bg-[var(--color-status-success)]/15 border-[var(--color-status-success)]/30";
       case MaintenanceStatus.COMPLETED:
         return "text-[var(--color-text-secondary)] bg-[var(--color-card-bg)] border-[var(--color-border)]";
+      case MaintenanceStatus.CANCELLED:
+        return "text-slate-600 bg-slate-100 border-slate-300";
       case MaintenanceStatus.PENDING:
       default:
         return "text-[#0369a1] bg-[var(--color-status-info)]/15 border-[var(--color-status-info)]/30";
@@ -288,12 +299,12 @@ const MaintenanceSchedulingCombined = () => {
     [],
   );
   const [selectedSchedulePage, setSelectedSchedulePage] = useState(0);
-  const [confirmDeleteTask, setConfirmDeleteTask] =
-    useState<MaintenanceTask | null>(null);
+  const [pendingAction, setPendingAction] =
+    useState<PendingScheduleAction | null>(null);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
 
-  useBodyScrollLock(Boolean(confirmDeleteTask));
+  useBodyScrollLock(Boolean(pendingAction));
 
   const loadMaintenanceSchedules = () => {
     getMaintenanceSchedules().then(setTasks).catch(console.error);
@@ -396,15 +407,17 @@ const MaintenanceSchedulingCombined = () => {
     MaintenanceStatus.DUE,
     MaintenanceStatus.IN_PROGRESS,
     MaintenanceStatus.OVERDUE,
+    MaintenanceStatus.CANCELLED,
   ];
 
   const filteredTasks = tasks
     .filter((task) => {
-      const isActiveSchedule =
+      const isVisibleSchedule =
         isPendingStatus(task.status) ||
         isDueStatus(task.status) ||
         isInProgressStatus(task.status) ||
-        isOverdueStatus(task.status);
+        isOverdueStatus(task.status) ||
+        task.status === MaintenanceStatus.CANCELLED;
       const statusMatches =
         selectedStatusFilters.length === 0 ||
         selectedStatusFilters.some(
@@ -437,7 +450,7 @@ const MaintenanceSchedulingCombined = () => {
           .includes(searchQuery.toLowerCase()) ||
         task.assignedDriver.toLowerCase().includes(searchQuery.toLowerCase());
       return (
-        isActiveSchedule &&
+        isVisibleSchedule &&
         statusMatches &&
         vehicleMatches &&
         templateMatches &&
@@ -536,28 +549,53 @@ const MaintenanceSchedulingCombined = () => {
 
   const canShowScheduleUpdate = (task: MaintenanceTask) =>
     task.status !== MaintenanceStatus.COMPLETED &&
+    task.status !== MaintenanceStatus.CANCELLED &&
     (task.triggerType === MaintenanceTriggerType.ODOMETER ||
       task.triggerType === MaintenanceTriggerType.MANUAL);
 
-  const confirmScheduleDelete = async () => {
-    if (!confirmDeleteTask) return;
-    const taskId = confirmDeleteTask.id;
+  const confirmScheduleAction = async () => {
+    if (!pendingAction) return;
+    const { action, task } = pendingAction;
 
     try {
-      await deleteMaintenanceSchedule(taskId);
-      setTasks((current) => current.filter((task) => task.id !== taskId));
-      setToast({
-        type: "success",
-        message: "Schedule archived. Existing work orders and history were retained.",
-      });
+      if (action === "cancel" || action === "activate") {
+        const updatedTask = await updateMaintenanceSchedule({
+          ...task,
+          status:
+            action === "cancel"
+              ? MaintenanceStatus.CANCELLED
+              : MaintenanceStatus.PENDING,
+        });
+        setTasks((current) =>
+          current.map((currentTask) =>
+            currentTask.id === task.id ? updatedTask : currentTask,
+          ),
+        );
+        setToast({
+          type: "success",
+          message:
+            action === "cancel"
+              ? "Schedule cancelled. Its history remains available."
+              : "Schedule activated and returned to active scheduling.",
+        });
+      } else {
+        await deleteMaintenanceSchedule(task.id);
+        setTasks((current) =>
+          current.filter((currentTask) => currentTask.id !== task.id),
+        );
+        setToast({
+          type: "success",
+          message: "Schedule deactivated. Existing work orders and history were retained.",
+        });
+      }
     } catch (err) {
-      console.error("Failed to delete schedule", err);
+      console.error(`Failed to ${action} schedule`, err);
       setToast({
         type: "warning",
-        message: "Schedule was not archived because the server update failed.",
+        message: `Schedule was not ${action === "cancel" ? "cancelled" : action === "activate" ? "activated" : "deactivated"} because the server update failed.`,
       });
     } finally {
-      setConfirmDeleteTask(null);
+      setPendingAction(null);
     }
   };
 
@@ -882,13 +920,31 @@ const MaintenanceSchedulingCombined = () => {
                                 },
                               }]
                             : []),
+                          ...(task.status !== MaintenanceStatus.CANCELLED
+                            ? [{
+                                label: "Cancel",
+                                icon: Ban,
+                                danger: true,
+                                onClick: () => {
+                                  setOpenActionMenuId(null);
+                                  setPendingAction({ action: "cancel", task });
+                                },
+                              }]
+                            : [{
+                                label: "Activate",
+                                icon: Power,
+                                onClick: () => {
+                                  setOpenActionMenuId(null);
+                                  setPendingAction({ action: "activate", task });
+                                },
+                              }]),
                           {
-                            label: "Archive",
-                            icon: Archive,
+                            label: "Deactivate",
+                            icon: PowerOff,
                             danger: true,
                             onClick: () => {
                               setOpenActionMenuId(null);
-                              setConfirmDeleteTask(task);
+                              setPendingAction({ action: "deactivate", task });
                             },
                           },
                         ]}
@@ -1263,27 +1319,40 @@ const MaintenanceSchedulingCombined = () => {
       />
 
       <ConfirmationModal
-        isOpen={Boolean(confirmDeleteTask)}
+        isOpen={Boolean(pendingAction)}
         variant="danger"
         message={
-          confirmDeleteTask ? (
+          pendingAction ? (
             <>
-              Archive this maintenance schedule?
+              {pendingAction.action === "cancel"
+                ? "Cancel this maintenance schedule?"
+                : pendingAction.action === "activate"
+                  ? "Activate this maintenance schedule?"
+                  : "Deactivate this maintenance schedule?"}
               <span className="mt-2 block font-normal">
-                It will be removed from Maintenance Scheduling, but existing
-                work orders and maintenance history will remain available.
+                {pendingAction.action === "cancel"
+                  ? "It will be marked as cancelled and removed from active scheduling. Its maintenance history will remain available."
+                  : pendingAction.action === "activate"
+                    ? "It will return to active scheduling and its status will be recalculated from the schedule trigger."
+                    : "It will be soft deleted and removed from Maintenance Scheduling, but existing work orders and maintenance history will remain available."}
               </span>
               <span className="mt-2 block font-bold">
-                {confirmDeleteTask.title} - {confirmDeleteTask.vehicleId}
+                {pendingAction.task.title} - {pendingAction.task.vehicleId}
               </span>
             </>
           ) : (
             ""
           )
         }
-        confirmLabel="Archive Schedule"
-        onConfirm={confirmScheduleDelete}
-        onCancel={() => setConfirmDeleteTask(null)}
+        confirmLabel={
+          pendingAction?.action === "cancel"
+            ? "Cancel Schedule"
+            : pendingAction?.action === "activate"
+              ? "Activate Schedule"
+              : "Deactivate Schedule"
+        }
+        onConfirm={confirmScheduleAction}
+        onCancel={() => setPendingAction(null)}
       />
     </div>
   );

@@ -170,6 +170,7 @@ export const getCalculatedMaintenanceStatus = (
   currentDate = new Date(),
 ): MaintenanceTask["status"] => {
   if (task.status === MaintenanceStatus.COMPLETED) return MaintenanceStatus.COMPLETED;
+  if (task.status === MaintenanceStatus.CANCELLED) return MaintenanceStatus.CANCELLED;
   if (isInProgressStatus(task.status)) return MaintenanceStatus.IN_PROGRESS;
 
   if (task.triggerType === MaintenanceTriggerType.ODOMETER) {
