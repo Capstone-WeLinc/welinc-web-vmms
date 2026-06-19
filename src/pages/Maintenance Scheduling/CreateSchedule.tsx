@@ -253,6 +253,9 @@ export default function CreateScheduleModal({
       const savedGarageId = garageIsOther
         ? otherGarageValue.trim()
         : garageId;
+      const selectedMechanic = mechanics.find(
+        (mechanic) => mechanic.name === assignedMechanic,
+      );
 
       if (scheduleToReplace || editingTask) {
         const targetSchedule = scheduleToReplace ?? editingTask;
@@ -269,6 +272,8 @@ export default function CreateScheduleModal({
               title: workOrderTemplate,
               date: scheduledDate,
               assignedDriver: assignedMechanic,
+              assignedMechanicId: selectedMechanic?.id,
+              assignedMechanicEmail: selectedMechanic?.email,
               notes,
               garageId: savedGarageId,
               accountType,
@@ -298,6 +303,8 @@ export default function CreateScheduleModal({
           status: "Pending",
           date: scheduledDate,
           assignedDriver: assignedMechanic,
+          assignedMechanicId: selectedMechanic?.id,
+          assignedMechanicEmail: selectedMechanic?.email,
           notes,
           garageId: savedGarageId,
           accountType,
@@ -569,7 +576,18 @@ export default function CreateScheduleModal({
                 <div className="relative">
                   <select
                     value={vehicleId}
-                    onChange={(e) => setVehicleId(e.target.value)}
+                    onChange={(e) => {
+                      const nextVehicleId = e.target.value;
+                      const selectedVehicle = vehicles.find(
+                        (vehicle) => vehicle.value === nextVehicleId,
+                      );
+                      setVehicleId(nextVehicleId);
+                      setOdometerReading(
+                        selectedVehicle?.odometer !== undefined
+                          ? String(selectedVehicle.odometer)
+                          : "",
+                      );
+                    }}
                     className="select-control w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
                   >
                     {availableVehicles.length > 0 ? (

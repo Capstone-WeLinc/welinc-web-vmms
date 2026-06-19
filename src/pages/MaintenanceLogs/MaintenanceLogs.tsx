@@ -6,6 +6,7 @@ import { getCurrentUser } from "../../lib/api/authService";
 import type { UserRecord } from "../../lib/api/authService";
 import { getMaintenanceSchedules } from "../../lib/api/maintenanceService";
 import type { MaintenanceTask } from "../../lib/api/maintenanceService";
+import { getGarages } from "../../lib/api/locationService";
 import { isMechanicRole } from "../../lib/utils/permissions";
 import { formatLogNumber } from "../../lib/utils/workOrders";
 import {
@@ -29,10 +30,25 @@ interface MaintenanceLog {
   workOrder: string;
   class: MaintenanceClass;
   date: string;
+  garage: string;
+  accountType: string;
+  triggerType: string;
+  intervalKm: string;
+  bufferDistanceKm: string;
+  startReferenceDate: string;
   odometerReading: number;
   status: MaintenanceStatus;
   mechanic: string;
+  checklistCompleted: number;
+  checklistTotal: number;
+  executionCompleted: number;
+  executionTotal: number;
+  changedParts: number;
+  materialCost: number;
+  laborCost: number;
   cost: number;
+  remarks: string;
+  technicianSignature: string;
 }
 
 interface ToastState {
@@ -69,13 +85,49 @@ const readNumber = (task: MaintenanceTask, keys: string[]) => {
   return 0;
 };
 
+const readProgress = (task: MaintenanceTask) => {
+  const progress = task.workOrderProgress;
+  if (!progress || typeof progress !== "object") return null;
+  return progress as {
+    checklist?: Array<{ status?: string }>;
+    execution?: {
+      done?: boolean;
+      laborCost?: string;
+      remarks?: string;
+      technicianSignature?: string;
+      items?: Array<{
+        status?: string;
+        partsCost?: string;
+      }>;
+    };
+  };
+};
+
+const parseCost = (value?: string) => {
+  if (!value) return 0;
+  const parsed = Number(value.replace(/[^\d.-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 const buildLogNumber = (task: MaintenanceTask) => {
   return formatLogNumber(task.id);
 };
 
-const mapScheduleToLog = (task: MaintenanceTask): MaintenanceLog | null => {
+const mapScheduleToLog = (
+  task: MaintenanceTask,
+  garageNames: Record<string, string>,
+): MaintenanceLog | null => {
   const status = normalizeStatus(task.status);
   if (!status) return null;
+  const progress = readProgress(task);
+  const checklist = progress?.checklist ?? [];
+  const execution = progress?.execution;
+  const executionItems = execution?.items ?? [];
+  const materialCost = executionItems.reduce(
+    (total, item) => total + parseCost(item.partsCost),
+    0,
+  );
+  const laborCost = parseCost(execution?.laborCost);
 
   return {
     id: task.id,
@@ -84,10 +136,25 @@ const mapScheduleToLog = (task: MaintenanceTask): MaintenanceLog | null => {
     workOrder: task.title || "Untitled work order",
     class: classifyMaintenance(status),
     date: task.date || "",
+    garage: task.garageId ? garageNames[task.garageId] ?? task.garageId : "Unassigned",
+    accountType: task.accountType || "N/A",
+    triggerType: task.triggerType || "MANUAL",
+    intervalKm: task.intervalKm || "N/A",
+    bufferDistanceKm: task.bufferDistanceKm || "N/A",
+    startReferenceDate: task.startReferenceDate || "N/A",
     odometerReading: readNumber(task, ["odometerReading", "startingReferenceReadingKm"]),
     status,
     mechanic: task.assignedDriver || "Unassigned",
-    cost: readNumber(task, ["cost", "totalCost", "materialCost", "laborCost"]),
+    checklistCompleted: checklist.filter((item) => item.status && item.status !== "pending").length,
+    checklistTotal: checklist.length,
+    executionCompleted: executionItems.filter((item) => item.status && item.status !== "pending").length,
+    executionTotal: executionItems.length,
+    changedParts: executionItems.filter((item) => item.status === "changed").length,
+    materialCost,
+    laborCost,
+    cost: laborCost + materialCost || readNumber(task, ["cost", "totalCost", "materialCost", "laborCost"]),
+    remarks: execution?.remarks || "N/A",
+    technicianSignature: execution?.technicianSignature || "N/A",
   };
 };
 
@@ -129,14 +196,23 @@ export default function MaintenanceLogs() {
     Promise.allSettled([
       getCurrentUser(),
       getMaintenanceSchedules({ statuses: logStatusOptions }),
+      getGarages(),
     ])
-      .then(([userResult, logsResult]) => {
+      .then(([userResult, logsResult, garagesResult]) => {
         if (!isMounted) return;
 
         setCurrentUser(userResult.status === "fulfilled" ? userResult.value : null);
+        const garageNames =
+          garagesResult.status === "fulfilled"
+            ? Object.fromEntries(garagesResult.value.map((garage) => [garage.id, garage.name]))
+            : {};
 
         if (logsResult.status === "fulfilled") {
-          setLogs(logsResult.value.map(mapScheduleToLog).filter((log): log is MaintenanceLog => Boolean(log)));
+          setLogs(
+            logsResult.value
+              .map((task) => mapScheduleToLog(task, garageNames))
+              .filter((log): log is MaintenanceLog => Boolean(log)),
+          );
         } else {
           setLogs([]);
           showToast({
@@ -197,7 +273,10 @@ export default function MaintenanceLogs() {
         log.logNumber.toLowerCase().includes(query) ||
         log.plateNo.toLowerCase().includes(query) ||
         log.workOrder.toLowerCase().includes(query) ||
-        log.class.toLowerCase().includes(query);
+        log.class.toLowerCase().includes(query) ||
+        log.mechanic.toLowerCase().includes(query) ||
+        log.garage.toLowerCase().includes(query) ||
+        log.accountType.toLowerCase().includes(query);
       const matchesStatus =
         selectedStatuses.length === 0 || selectedStatuses.includes(log.status);
       const matchesDateFrom = !dateFrom || log.date >= dateFrom;
@@ -226,7 +305,17 @@ export default function MaintenanceLogs() {
       "Odometer Reading (km)",
       "Status",
       "Mechanic",
+      "Garage",
+      "Account Type",
+      "Trigger",
+      "Checklist Progress",
+      "Execution Progress",
+      "Changed Parts",
+      "Material Cost",
+      "Labor Cost",
       "Cost",
+      "Remarks",
+      "Technician Signature",
     ];
     const rows = filteredLogs.map((log) => [
       log.logNumber,
@@ -237,7 +326,17 @@ export default function MaintenanceLogs() {
       formatOdometer(log.odometerReading),
       log.status,
       log.mechanic,
+      log.garage,
+      log.accountType,
+      log.triggerType,
+      `${log.checklistCompleted}/${log.checklistTotal}`,
+      `${log.executionCompleted}/${log.executionTotal}`,
+      String(log.changedParts),
+      formatCurrency(log.materialCost),
+      formatCurrency(log.laborCost),
       formatCurrency(log.cost),
+      log.remarks,
+      log.technicianSignature,
     ]);
 
     const csv = [headers, ...rows].map((row) => row.join(",")).join("\n");
@@ -270,7 +369,16 @@ export default function MaintenanceLogs() {
         <td>${formatOdometer(log.odometerReading)}</td>
         <td>${log.status}</td>
         <td>${log.mechanic}</td>
+        <td>${log.garage}</td>
+        <td>${log.accountType}</td>
+        <td>${log.triggerType}</td>
+        <td>${log.checklistCompleted}/${log.checklistTotal}</td>
+        <td>${log.executionCompleted}/${log.executionTotal}</td>
+        <td>${log.changedParts}</td>
+        <td>${formatCurrency(log.materialCost)}</td>
+        <td>${formatCurrency(log.laborCost)}</td>
         <td>${formatCurrency(log.cost)}</td>
+        <td>${log.remarks}</td>
       </tr>
     `,
       )
@@ -295,10 +403,10 @@ export default function MaintenanceLogs() {
           <table>
             <thead>
               <tr>
-                <th>Log No.</th><th>Plate No.</th><th>Work Order</th><th>Class</th><th>Date</th><th>Odometer Reading (km)</th><th>Status</th><th>Mechanic</th><th>Cost</th>
+                <th>Log No.</th><th>Plate No.</th><th>Work Order</th><th>Class</th><th>Date</th><th>Odometer Reading (km)</th><th>Status</th><th>Mechanic</th><th>Garage</th><th>Trigger</th><th>Checklist</th><th>Execution</th><th>Cost</th><th>Remarks</th>
               </tr>
             </thead>
-            <tbody>${rows || '<tr><td colspan="9">No logs to export</td></tr>'}</tbody>
+            <tbody>${rows || '<tr><td colspan="14">No logs to export</td></tr>'}</tbody>
           </table>
         </body>
       </html>`);

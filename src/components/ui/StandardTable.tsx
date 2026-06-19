@@ -5,6 +5,8 @@ import type {
   MouseEvent,
   ReactNode,
 } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import DatePicker from "./DatePicker";
 import {
   Check,
@@ -340,6 +342,7 @@ interface DataTableProps<T> {
   emptyMessage?: ReactNode;
   minWidth?: string;
   onRowClick?: (row: T) => void;
+  density?: "default" | "compact";
 }
 
 export function DataTable<T>({
@@ -349,7 +352,17 @@ export function DataTable<T>({
   emptyMessage = "No records found.",
   minWidth = "760px",
   onRowClick,
+  density = "default",
 }: DataTableProps<T>) {
+  const headerCellClasses =
+    density === "compact"
+      ? "px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide align-middle"
+      : tableHeaderCellClasses;
+  const bodyCellClasses =
+    density === "compact"
+      ? "border-b border-[#dde4ef] px-2 py-1 align-middle text-sm"
+      : tableCellClasses;
+
   return (
     <div className={`${tableShellClasses} overflow-x-auto`}>
       <table className={tableClasses} style={{ minWidth, tableLayout: "fixed" }}>
@@ -358,7 +371,7 @@ export function DataTable<T>({
             {columns.map((column) => (
               <th
                 key={column.key}
-                className={`${tableHeaderCellClasses} ${
+                className={`${headerCellClasses} ${
                   column.align === "center"
                     ? "text-center"
                     : column.align === "right"
@@ -377,7 +390,9 @@ export function DataTable<T>({
             <tr>
               <td
                 colSpan={columns.length}
-                className="border-b border-[#dde4ef] px-4 py-8 text-center text-sm text-[#70747c]"
+                className={`border-b border-[#dde4ef] px-4 text-center text-sm text-[#70747c] ${
+                  density === "compact" ? "py-5" : "py-8"
+                }`}
               >
                 {emptyMessage}
               </td>
@@ -392,7 +407,7 @@ export function DataTable<T>({
                 {columns.map((column) => (
                   <td
                     key={column.key}
-                    className={`${tableCellClasses} ${
+                    className={`${bodyCellClasses} ${
                       column.align === "center"
                         ? "text-center"
                         : column.align === "right"
@@ -423,7 +438,7 @@ export const StatusBadge = ({ status }: { status: StandardStatus }) => {
         ? "border-[#ef4444] bg-[#fee2e2] text-[#ef4444]"
         : normalized.includes("pending") || normalized.includes("hold")
           ? "border-[#ff7a00] bg-[#fff3e4] text-[#ff7a00]"
-          : normalized.includes("failed") || normalized.includes("cancel")
+          : normalized.includes("failed") || normalized.includes("cancel") || normalized.includes("lock")
             ? "border-[#ef4444] bg-[#fee2e2] text-[#ef4444]"
             : normalized.includes("inactive")
               ? "border-[#94a3b8] bg-[#f1f5f9] text-[#64748b]"
@@ -459,22 +474,51 @@ export const ActionMenu = ({
   onView,
   onEdit,
   onDelete,
-}: ActionMenuProps) => (
-  <div className="relative flex justify-center">
-    <button
-      type="button"
-      onClick={onToggle}
-      className="flex h-8 w-8 items-center justify-center rounded-full text-[#070b45] transition hover:bg-[#f1f5f9]"
-      aria-expanded={open}
-      aria-label="Open row actions"
+}: ActionMenuProps) => {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [position, setPosition] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setPosition(null);
+      return;
+    }
+
+    const updatePosition = () => {
+      const button = buttonRef.current;
+      if (!button) return;
+
+      const rect = button.getBoundingClientRect();
+      const menuWidth = 160;
+      const itemCount = items?.length ?? [onView, onEdit, onDelete].filter(Boolean).length;
+      const estimatedHeight = itemCount * 42 + 12;
+      const left = Math.min(
+        Math.max(8, rect.right - menuWidth),
+        window.innerWidth - menuWidth - 8,
+      );
+
+      if (rect.bottom + estimatedHeight + 8 <= window.innerHeight) {
+        setPosition({ left, top: rect.bottom + 4 });
+      } else {
+        setPosition({ left, bottom: window.innerHeight - rect.top + 4 });
+      }
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [items?.length, onDelete, onEdit, onView, open]);
+
+  const menu = position ? (
+    <div
+      className="fixed z-[100] w-40 overflow-hidden rounded-xl border border-[#dce3ed] bg-white py-1.5 text-left shadow-[0_10px_24px_rgba(15,23,42,0.22)]"
+      style={position}
+      onClick={(event) => event.stopPropagation()}
     >
-      <MoreVertical size={20} strokeWidth={2.6} />
-    </button>
-    {open && (
-      <div
-        className="absolute right-0 top-9 z-30 w-40 overflow-hidden rounded-xl border border-[#dce3ed] bg-white py-1.5 text-left shadow-[0_10px_24px_rgba(15,23,42,0.22)]"
-        onClick={(event) => event.stopPropagation()}
-      >
         {items?.map((item) => {
           const Icon = item.icon;
           return (
@@ -506,10 +550,25 @@ export const ActionMenu = ({
             <Trash2 className="h-4 w-4" /> Delete
           </button>
         )}
-      </div>
-    )}
-  </div>
-);
+    </div>
+  ) : null;
+
+  return (
+    <div className="flex justify-center">
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={onToggle}
+        className="flex h-8 w-8 items-center justify-center rounded-full text-[#070b45] transition hover:bg-[#f1f5f9]"
+        aria-expanded={open}
+        aria-label="Open row actions"
+      >
+        <MoreVertical size={20} strokeWidth={2.6} />
+      </button>
+      {open && menu ? createPortal(menu, document.body) : null}
+    </div>
+  );
+};
 
 interface ExportButtonProps {
   open: boolean;

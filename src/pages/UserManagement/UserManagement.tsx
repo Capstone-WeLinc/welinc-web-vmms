@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Edit2, Plus, Trash2, Unlock, UserRoundCheck, Users } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Edit2, Plus, Unlock, UserRoundCheck, Users } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import {
   ActionButton,
@@ -12,11 +12,8 @@ import {
   StatusBadge,
   ToastNotification,
 } from "../../components/ui";
-import { getCurrentUser } from "../../lib/api/authService";
-import { getMaintenanceSchedules } from "../../lib/api/maintenanceService";
 import {
   createUser,
-  deleteUser,
   getManagedUsers,
   unlockUser,
   updateUser,
@@ -26,7 +23,6 @@ import {
   type UserRecord,
   type UserRole,
 } from "../../lib/api/userService";
-import type { MaintenanceTask } from "../../types/maintenance";
 
 type ToastState = {
   type: "success" | "error" | "warning" | "info";
@@ -38,6 +34,7 @@ type UserForm = {
   email: string;
   password: string;
   role: UserRole | "";
+  isActive: boolean;
 };
 
 const EMPTY_FORM: UserForm = {
@@ -45,9 +42,10 @@ const EMPTY_FORM: UserForm = {
   email: "",
   password: "",
   role: "",
+  isActive: true,
 };
 
-const ROLE_OPTIONS: UserRole[] = ["ADMIN", "OPERATIONS", "MECHANIC"];
+const ROLE_OPTIONS: UserRole[] = ["ADMIN", "MECHANIC"];
 
 const normalizeIdentity = (value?: string | null) =>
   (value ?? "").trim().toLowerCase();
@@ -64,8 +62,6 @@ const validatePassword = (password: string) => {
 
 export default function UserManagement() {
   const [users, setUsers] = useState<UserRecord[]>([]);
-  const [currentUser, setCurrentUser] = useState<UserRecord | null>(null);
-  const [schedules, setSchedules] = useState<MaintenanceTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -75,32 +71,41 @@ export default function UserManagement() {
   const [formOpen, setFormOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<UserRecord | null>(null);
   const [unlockTarget, setUnlockTarget] = useState<UserRecord | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     try {
-      const [loadedUsers, me, loadedSchedules] = await Promise.all([
-        getManagedUsers(),
-        getCurrentUser(),
-        getMaintenanceSchedules(),
-      ]);
+      const loadedUsers = await getManagedUsers();
       setUsers(loadedUsers);
-      setCurrentUser(me);
-      setSchedules(loadedSchedules);
     } catch (error) {
       console.error("Failed to load user management data", error);
-      setToast({ type: "error", message: "Unable to load users." });
+      if (showLoading) {
+        setToast({ type: "error", message: "Unable to load users." });
+      }
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    void loadData();
-  }, []);
+    void loadData(true);
+
+    const refreshUsers = () => void loadData();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") refreshUsers();
+    };
+    const refreshInterval = window.setInterval(refreshUsers, 10_000);
+
+    window.addEventListener("focus", refreshUsers);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(refreshInterval);
+      window.removeEventListener("focus", refreshUsers);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loadData]);
 
   useEffect(() => {
     const closeMenu = () => setOpenMenuId(null);
@@ -118,7 +123,7 @@ export default function UserManagement() {
     const query = normalizeIdentity(search);
     return users
       .filter((user) =>
-        [user.name, user.email, user.role, user.status]
+        [user.name, user.email, user.role, user.isLocked ? "Locked" : user.status]
           .join(" ")
           .toLowerCase()
           .includes(query),
@@ -133,12 +138,6 @@ export default function UserManagement() {
     activePage * pageSize,
   );
 
-  const isAssignedToSchedule = (user: UserRecord) =>
-    schedules.some(
-      (schedule) =>
-        normalizeIdentity(schedule.assignedDriver) === normalizeIdentity(user.name),
-    );
-
   const openCreate = () => {
     setEditingUser(null);
     setForm(EMPTY_FORM);
@@ -147,7 +146,13 @@ export default function UserManagement() {
 
   const openEdit = (user: UserRecord) => {
     setEditingUser(user);
-    setForm({ name: user.name, email: user.email, password: "", role: user.role });
+    setForm({
+      name: user.name,
+      email: user.email,
+      password: "",
+      role: user.role,
+      isActive: user.status === "Active",
+    });
     setFormOpen(true);
   };
 
@@ -168,11 +173,7 @@ export default function UserManagement() {
       setToast({ type: "warning", message: "Name, email, and role are required." });
       return;
     }
-    if (!editingUser && !form.password) {
-      setToast({ type: "warning", message: "Password is required for new users." });
-      return;
-    }
-    if (passwordError) {
+    if (editingUser && passwordError) {
       setToast({ type: "warning", message: passwordError });
       return;
     }
@@ -209,10 +210,18 @@ export default function UserManagement() {
         );
         setToast({ type: "success", message: "User updated successfully." });
       } else {
-        const input: UserCreateInput = { name, email, password: form.password, role: form.role };
+        const input: UserCreateInput = {
+          name,
+          email,
+          role: form.role,
+          isActive: form.isActive,
+        };
         const created = await createUser(input);
         setUsers((current) => [created, ...current]);
-        setToast({ type: "success", message: "User created successfully." });
+        setToast({
+          type: "success",
+          message: `User created. A password setup code was sent to ${email}.`,
+        });
       }
       closeForm();
       setFormOpen(false);
@@ -253,25 +262,6 @@ export default function UserManagement() {
       setToast({ type: "error", message: "Unable to unlock the user." });
     } finally {
       setUnlockTarget(null);
-    }
-  };
-
-  const confirmDelete = async () => {
-    if (!deleteTarget) return;
-    if (isAssignedToSchedule(deleteTarget)) {
-      setToast({ type: "warning", message: "Users assigned to maintenance schedules cannot be deleted." });
-      setDeleteTarget(null);
-      return;
-    }
-    try {
-      await deleteUser(deleteTarget.id);
-      setUsers((current) => current.filter((user) => user.id !== deleteTarget.id));
-      setToast({ type: "success", message: "User deleted successfully." });
-    } catch (error) {
-      console.error("Failed to delete user", error);
-      setToast({ type: "error", message: "Unable to delete the user." });
-    } finally {
-      setDeleteTarget(null);
     }
   };
 
@@ -331,14 +321,16 @@ export default function UserManagement() {
               key: "status",
               header: "Status",
               width: "18%",
-              render: (user) => <StatusBadge status={user.status} />,
+              render: (user) => (
+                <StatusBadge status={user.isLocked ? "Locked" : user.status} />
+              ),
             },
             {
-              key: "lastActive",
-              header: "Last Active",
+              key: "updatedAt",
+              header: "Last Updated",
               width: "24%",
               render: (user) =>
-                user.lastActive ? new Date(user.lastActive).toLocaleString() : "Not available",
+                user.updatedAt ? new Date(user.updatedAt).toLocaleString() : "Not available",
             },
             {
               key: "actions",
@@ -362,18 +354,6 @@ export default function UserManagement() {
                     ...(user.isLocked
                       ? [{ label: "Unlock", icon: Unlock, onClick: () => setUnlockTarget(user) }]
                       : []),
-                    {
-                      label: "Delete",
-                      icon: Trash2,
-                      danger: true,
-                      onClick: () => {
-                        if (user.id === currentUser?.id) {
-                          setToast({ type: "warning", message: "You cannot delete your own account." });
-                          return;
-                        }
-                        setDeleteTarget(user);
-                      },
-                    },
                   ]}
                 />
               ),
@@ -428,16 +408,18 @@ export default function UserManagement() {
               className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)]"
             />
           </label>
-          <label className="grid gap-1.5 text-sm font-medium text-[var(--color-text-secondary)]">
-            {editingUser ? "New Password (optional)" : "Password"}
-            <input
-              type="password"
-              value={form.password}
-              onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-              autoComplete="new-password"
-              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)]"
-            />
-          </label>
+          {editingUser ? (
+            <label className="grid gap-1.5 text-sm font-medium text-[var(--color-text-secondary)]">
+              New Password (optional)
+              <input
+                type="password"
+                value={form.password}
+                onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
+                autoComplete="new-password"
+                className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)]"
+              />
+            </label>
+          ) : null}
           <label className="grid gap-1.5 text-sm font-medium text-[var(--color-text-secondary)]">
             Role
             <select
@@ -449,18 +431,21 @@ export default function UserManagement() {
               {ROLE_OPTIONS.map((role) => <option key={role} value={role}>{role}</option>)}
             </select>
           </label>
+          {!editingUser ? (
+            <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2.5 text-sm font-medium text-[var(--color-text-primary)]">
+              <input
+                type="checkbox"
+                checked={form.isActive}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, isActive: event.target.checked }))
+                }
+                className="h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-brand-primary)]"
+              />
+              Active user
+            </label>
+          ) : null}
         </form>
       </Modal>
-
-      <ConfirmationModal
-        isOpen={Boolean(deleteTarget)}
-        title="Delete User"
-        variant="danger"
-        message={deleteTarget ? `Delete ${deleteTarget.name}? This action cannot be undone.` : ""}
-        confirmLabel="Delete"
-        onConfirm={() => void confirmDelete()}
-        onCancel={() => setDeleteTarget(null)}
-      />
 
       <ConfirmationModal
         isOpen={Boolean(unlockTarget)}

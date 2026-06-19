@@ -11,10 +11,25 @@ interface MaintenanceLog {
   workOrder: string;
   class: MaintenanceClass;
   date: string;
+  garage: string;
+  accountType: string;
+  triggerType: string;
+  intervalKm: string;
+  bufferDistanceKm: string;
+  startReferenceDate: string;
   odometerReading: number;
   status: MaintenanceStatus;
   mechanic: string;
+  checklistCompleted: number;
+  checklistTotal: number;
+  executionCompleted: number;
+  executionTotal: number;
+  changedParts: number;
+  materialCost: number;
+  laborCost: number;
   cost: number;
+  remarks: string;
+  technicianSignature: string;
 }
 
 interface ViewModalProps {
@@ -26,7 +41,7 @@ interface ViewModalProps {
 const modalOverlayClasses =
   "fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm";
 const modalContentClasses =
-  "w-full max-w-lg animate-in rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-2xl fade-in zoom-in-95 duration-200";
+  "w-full max-w-3xl animate-in rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-2xl fade-in zoom-in-95 duration-200";
 const modalHeaderClasses =
   "mb-5 flex items-center justify-between border-b border-[var(--color-divider)] pb-4";
 const modalTitleClasses = "text-lg font-bold text-[var(--color-text-primary)]";
@@ -34,6 +49,10 @@ const modalSubtitleClasses = "mt-0.5 text-xs text-[var(--color-text-secondary)]"
 const closeButtonClasses =
   "rounded-lg p-1.5 text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-input-bg)] hover:text-[var(--color-text-primary)]";
 const infoGridClasses = "grid grid-cols-2 gap-x-4 gap-y-5";
+const sectionClasses =
+  "mt-6 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4";
+const sectionTitleClasses =
+  "mb-4 text-sm font-bold uppercase tracking-wide text-[var(--color-text-primary)]";
 const infoLabelClasses =
   "mb-1 block text-xs font-medium text-[var(--color-text-secondary)]";
 const infoValueClasses = "text-sm font-bold text-[var(--color-text-primary)]";
@@ -121,10 +140,88 @@ export default function ViewModal({ isOpen, log, onClose }: ViewModalProps) {
             <span className={infoValueClasses}>{log.mechanic}</span>
           </div>
           <div>
+            <span className={infoLabelClasses}>Garage</span>
+            <span className={infoValueClasses}>{log.garage}</span>
+          </div>
+          <div>
+            <span className={infoLabelClasses}>Account Type</span>
+            <span className={infoValueClasses}>{log.accountType}</span>
+          </div>
+          <div>
             <span className="mb-1 block text-xs font-medium text-slate-400">Cost</span>
             <span className="text-sm font-bold text-emerald-700">
               ₱{log.cost.toLocaleString()}
             </span>
+          </div>
+        </div>
+
+        <div className={sectionClasses}>
+          <h4 className={sectionTitleClasses}>Schedule Details</h4>
+          <div className={infoGridClasses}>
+            <div>
+              <span className={infoLabelClasses}>Trigger</span>
+              <span className={infoValueClasses}>{log.triggerType}</span>
+            </div>
+            <div>
+              <span className={infoLabelClasses}>Start Reference Date</span>
+              <span className={infoValueClasses}>{log.startReferenceDate}</span>
+            </div>
+            <div>
+              <span className={infoLabelClasses}>Interval Km</span>
+              <span className={infoValueClasses}>{log.intervalKm}</span>
+            </div>
+            <div>
+              <span className={infoLabelClasses}>Buffer Distance Km</span>
+              <span className={infoValueClasses}>{log.bufferDistanceKm}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className={sectionClasses}>
+          <h4 className={sectionTitleClasses}>Work Order Progress</h4>
+          <div className={infoGridClasses}>
+            <div>
+              <span className={infoLabelClasses}>Inspection Checklist</span>
+              <span className={infoValueClasses}>
+                {log.checklistCompleted}/{log.checklistTotal} items
+              </span>
+            </div>
+            <div>
+              <span className={infoLabelClasses}>Execution Checklist</span>
+              <span className={infoValueClasses}>
+                {log.executionCompleted}/{log.executionTotal} items
+              </span>
+            </div>
+            <div>
+              <span className={infoLabelClasses}>Changed Parts</span>
+              <span className={infoValueClasses}>{log.changedParts}</span>
+            </div>
+            <div>
+              <span className={infoLabelClasses}>Technician Signature</span>
+              <span className={infoValueClasses}>{log.technicianSignature}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className={sectionClasses}>
+          <h4 className={sectionTitleClasses}>Cost Breakdown</h4>
+          <div className={infoGridClasses}>
+            <div>
+              <span className={infoLabelClasses}>Material Cost</span>
+              <span className={infoValueClasses}>
+                â‚±{log.materialCost.toLocaleString()}
+              </span>
+            </div>
+            <div>
+              <span className={infoLabelClasses}>Labor Cost</span>
+              <span className={infoValueClasses}>
+                â‚±{log.laborCost.toLocaleString()}
+              </span>
+            </div>
+            <div className="col-span-2">
+              <span className={infoLabelClasses}>Remarks</span>
+              <span className={infoValueClasses}>{log.remarks}</span>
+            </div>
           </div>
         </div>
 

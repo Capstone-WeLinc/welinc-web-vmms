@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { useEffect, useCallback, type ReactNode } from "react";
 import {
   Routes,
   Route,
@@ -9,7 +9,6 @@ import {
 } from "react-router-dom";
 import Sidebar from "./components/Sidebar/Sidebar";
 import { getCurrentUser } from "./lib/api/authService";
-import type { UserRecord } from "./lib/api/authService";
 import Dashboard from "./pages/Dashboard/Dashboard";
 import PlaceholderPage from "./pages/PlaceholderPage/PlaceholderPage";
 import SchedulingPage from "./pages/Maintenance Scheduling/MaintenanceScheduling";
@@ -26,6 +25,7 @@ import { useBackend } from "./lib/api/httpClient";
 import { FileBarChart2 } from "lucide-react";
 import { setLastActivity, msUntilAbsoluteExpiry, msUntilInactivityExpiry, clearSession } from "./lib/utils/session";
 import { isMechanicRole, isOperationsRole } from "./lib/utils/permissions";
+import { useAuthStore } from "./store/authStore";
 
 function RequireAuthWrapper({
   children,
@@ -41,15 +41,13 @@ function RequireAuthWrapper({
 }
 
 function App() {
-  const [authenticated, setAuthenticated] = useState(() => {
-    if (!useBackend) {
-      return true;
-    }
-    return Boolean(window.localStorage.getItem("accessToken"));
-  });
+  const authenticated = useAuthStore((state) => state.authenticated);
+  const currentUser = useAuthStore((state) => state.currentUser);
+  const setAuthenticated = useAuthStore((state) => state.setAuthenticated);
+  const setCurrentUser = useAuthStore((state) => state.setCurrentUser);
+  const clearAuth = useAuthStore((state) => state.clearAuth);
   const location = useLocation();
   const navigate = useNavigate();
-  const [currentUser, setCurrentUser] = useState<UserRecord | null>(null);
 
   const isAuthenticated = useBackend ? authenticated : true;
   const hasIncomingSsoToken =
@@ -61,18 +59,22 @@ function App() {
   const handleLogin = () => {
     setAuthenticated(true);
     getCurrentUser()
-      .then((u) => setCurrentUser(u))
-      .catch(() => setCurrentUser(null));
-    navigate("/users", { replace: true });
+      .then((u) => {
+        setCurrentUser(u);
+        navigate(isMechanicRole(u) ? "/work-orders" : "/users", { replace: true });
+      })
+      .catch(() => {
+        setCurrentUser(null);
+        navigate("/users", { replace: true });
+      });
   };
 
   const handleLogout = useCallback(() => {
     window.localStorage.removeItem("accessToken");
     clearSession();
-    setAuthenticated(false);
-    setCurrentUser(null);
+    clearAuth();
     navigate("/login", { replace: true });
-  }, [navigate]);
+  }, [clearAuth, navigate]);
 
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
@@ -126,8 +128,7 @@ function App() {
   useEffect(() => {
     const handleUnauthorized = () => {
       if (!isAuthenticated) return;
-      setAuthenticated(false);
-      setCurrentUser(null);
+      clearAuth();
       navigate("/login", { replace: true });
     };
 
@@ -183,7 +184,7 @@ function App() {
       activityEvents.forEach((ev) => window.removeEventListener(ev, activityHandler));
       clearTimers();
     };
-  }, [isAuthenticated, handleLogout, navigate]);
+  }, [clearAuth, isAuthenticated, handleLogout, navigate]);
 
   return (
     <div className="min-h-screen bg-[var(--color-page-bg)] text-[var(--color-text-primary)] transition-colors duration-300">

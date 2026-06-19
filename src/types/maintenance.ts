@@ -13,6 +13,8 @@ export interface MaintenanceTask {
   status: MaintenanceStatus;
   date: string;
   assignedDriver: string;
+  assignedMechanicId?: string;
+  assignedMechanicEmail?: string;
   notes: string;
   garageId?: string;
   accountType?: string;
@@ -25,4 +27,5 @@ export interface MaintenanceTask {
   startingReferenceReadingKm?: string;
   intervalType?: "DAILY" | "WEEKLY" | "MONTHLY" | string;
   startReferenceDate?: string;
+  workOrderProgress?: unknown;
 }

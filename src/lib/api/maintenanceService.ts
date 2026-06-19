@@ -7,6 +7,7 @@ export {
   saveChecklistTemplates,
   updateMaintenanceSchedule,
   updateWorkOrder,
+  updateWorkOrderProgress,
 } from "./vmmsApi";
 
 export type {

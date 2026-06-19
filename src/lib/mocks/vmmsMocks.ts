@@ -92,6 +92,7 @@ export type UserRecord = {
   role: "ADMIN" | "MECHANIC" | "OPERATIONS";
   status: UserStatus;
   lastActive: string;
+  updatedAt?: string;
   isLocked?: boolean;
   lockedAt?: string | null;
 };
@@ -103,6 +104,7 @@ export type UserCreateInput = {
   username?: string;
   password?: string;
   role?: UserRole;
+  isActive?: boolean;
 };
 
 export const mockDashboardStats: DashboardStat[] = [

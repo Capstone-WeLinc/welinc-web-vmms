@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { recordLoginActivity } from "../../lib/api/authService";
 import { clearSession, setLoginTime, setLastActivity } from "../../lib/utils/session";
@@ -8,8 +8,19 @@ interface LoginPageProps {
   onLogin: () => void;
 }
 
+const getPortalLoginUrl = () => {
+  const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:8000";
+  const vmmsLoginUrl = `${window.location.origin}/login`;
+  const params = new URLSearchParams({
+    system: "VMMS",
+    redirect: vmmsLoginUrl,
+    returnUrl: vmmsLoginUrl,
+  });
+
+  return `${portalUrl}/login?${params.toString()}`;
+};
+
 export default function LoginPage({ onLogin }: LoginPageProps) {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [error, setError] = useState("");
 
@@ -19,12 +30,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       const existingToken = window.localStorage.getItem("accessToken");
       if (existingToken) {
         onLogin();
-        navigate("/dashboard", { replace: true });
         return;
       }
-      // If no token is provided, redirect directly to the unified portal
-      const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:8000";
-      window.location.href = `${portalUrl}/login`;
+      // If no token is provided, redirect to the unified portal with a VMMS return hint.
+      window.location.href = getPortalLoginUrl();
       return;
     }
 
@@ -43,7 +52,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       );
 
       onLogin();
-      navigate("/dashboard", { replace: true });
     } catch (err) {
       console.error("[SSO Login Error]", err);
       requestAnimationFrame(() => {
@@ -51,7 +59,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       });
       window.localStorage.removeItem("accessToken");
     }
-  }, [searchParams, onLogin, navigate]);
+  }, [searchParams, onLogin]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg-primary)] p-6">
@@ -65,8 +73,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             <p className="text-[var(--color-text-secondary)] text-sm">{error}</p>
             <button
               onClick={() => {
-                const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:8000";
-                window.location.href = `${portalUrl}/login`;
+                window.location.href = getPortalLoginUrl();
               }}
               className="mt-4 w-full bg-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary-hover)] text-white font-bold py-2.5 rounded-xl transition-all cursor-pointer"
             >
@@ -77,7 +84,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           <div className="space-y-4">
             <Loader2 className="animate-spin text-[var(--color-brand-primary)] mx-auto" size={40} />
             <h2 className="text-xl font-bold text-[var(--color-text-primary)]">Verifying SSO Session</h2>
-            <p className="text-[var(--color-text-secondary)] text-sm">Please wait while we redirect you to your dashboard.</p>
+            <p className="text-[var(--color-text-secondary)] text-sm">Please wait while we redirect you to User Management.</p>
           </div>
         )}
       </div>

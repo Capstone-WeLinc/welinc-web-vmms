@@ -736,6 +736,7 @@ const MaintenanceSchedulingCombined = () => {
                 data={paginatedTasks}
                 getRowKey={(task) => task.id}
                 minWidth="900px"
+                density="compact"
                 onRowClick={(task) => openScheduleDetails([task])}
                 emptyMessage={
                   noTasks
@@ -758,7 +759,7 @@ const MaintenanceSchedulingCombined = () => {
                   {
                     key: "workOrder",
                     header: "Work Order",
-                    width: "24%",
+                    width: "17%",
                     render: (task) => task.title,
                   },
                   {
@@ -802,13 +803,13 @@ const MaintenanceSchedulingCombined = () => {
                   {
                     key: "mechanic",
                     header: "Mechanic",
-                    width: "12%",
+                    width: "15%",
                     render: (task) => task.assignedDriver,
                   },
                   {
                     key: "status",
                     header: "Status",
-                    width: "11%",
+                    width: "15%",
                     render: (task) => <StandardStatusBadge status={task.status} />,
                   },
                   {

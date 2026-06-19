@@ -1,4 +1,4 @@
-import { fetchJSON, useBackend } from "./httpClient";
+import { ApiError, fetchJSON, useBackend } from "./httpClient";
 import {
   mockDashboardStats,
   mockRecentActivity,
@@ -17,6 +17,7 @@ export interface VehicleOption {
   value: string;
   label: string;
   status?: string;
+  odometer?: number;
 }
 
 const fallbackVehicleOptions: VehicleOption[] = [
@@ -46,6 +47,88 @@ import type {
   UserCreateInput,
 } from "../mocks/vmmsMocks";
 
+const useMaintenanceScheduleBackend =
+  useBackend && import.meta.env.VITE_USE_BACKEND_MAINTENANCE_SCHEDULES !== "false";
+const localMaintenanceSchedulesKey = "vmmsMaintenanceSchedules:v2";
+const legacyLocalMaintenanceSchedulesKey = "vmmsMaintenanceSchedules";
+
+function parseStoredMaintenanceSchedules(value: string | null) {
+  if (!value) return null;
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? (parsed as MaintenanceTask[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function readLocalMaintenanceSchedules() {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const saved = window.localStorage.getItem(localMaintenanceSchedulesKey);
+    if (!saved) {
+      const legacySchedules = parseStoredMaintenanceSchedules(
+        window.localStorage.getItem(legacyLocalMaintenanceSchedulesKey),
+      );
+
+      if (legacySchedules) {
+        writeLocalMaintenanceSchedules(legacySchedules);
+        return legacySchedules;
+      }
+
+      const initialSchedules = mockWorkOrders.map((workOrder) => ({
+        ...workOrder,
+      }));
+      writeLocalMaintenanceSchedules(initialSchedules);
+      return initialSchedules;
+    }
+
+    return parseStoredMaintenanceSchedules(saved) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalMaintenanceSchedules(schedules: MaintenanceTask[]) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(
+      localMaintenanceSchedulesKey,
+      JSON.stringify(schedules),
+    );
+  } catch {
+    // ignore local storage failures
+  }
+}
+
+function getNextLocalMaintenanceScheduleId(schedules: MaintenanceTask[]) {
+  return getNextWorkOrderId(schedules);
+}
+
+function normalizeMaintenanceStatusValue(status?: string | null): MaintenanceStatus {
+  const normalized = (status ?? "").trim().toLowerCase().replace(/[\s_]+/g, "-");
+
+  if (normalized === "in-progress") return "In Progress";
+  if (normalized === "completed") return "Completed";
+  if (normalized === "overdue") return "Overdue";
+  if (normalized === "flagged") return "Flagged";
+  return "Pending";
+}
+
+function normalizeMaintenanceTask(task: MaintenanceTask): MaintenanceTask {
+  return {
+    ...task,
+    status: normalizeMaintenanceStatusValue(task.status),
+    assignedDriver:
+      task.assignedDriver ??
+      (task as MaintenanceTask & { assignedMechanic?: string }).assignedMechanic ??
+      "",
+  };
+}
+
 function normalizeRole(role?: string | null) {
   return (role ?? "").trim().toUpperCase();
 }
@@ -71,6 +154,12 @@ function normalizeUserRecord(user: unknown): UserRecord {
   return {
     ...userObj,
     role: normalizeRole(fallbackRole) as UserRole,
+    updatedAt:
+      typeof userObj.updatedAt === "string"
+        ? userObj.updatedAt
+        : typeof userObj.lastActive === "string"
+          ? userObj.lastActive
+          : undefined,
     status:
       typeof userObj.status === "string"
         ? userObj.status
@@ -290,13 +379,15 @@ export async function getSystems() {
 
 export async function createUser(user: UserCreateInput) {
   if (!useBackend) {
+    const now = new Date().toISOString();
     const createdUser: UserRecord = {
       id: `u${Date.now()}`,
       name: user.name,
       email: user.email,
       role: user.role ?? "OPERATIONS",
-      status: "Active",
-      lastActive: new Date().toISOString(),
+      status: user.isActive === false ? "Inactive" : "Active",
+      lastActive: now,
+      updatedAt: now,
     };
     mockUsers.unshift(createdUser);
     return createdUser;
@@ -308,6 +399,7 @@ export async function createUser(user: UserCreateInput) {
       name: user.name,
       email: user.email,
       password: user.password,
+      isActive: user.isActive ?? true,
       roleAssignments: [
         {
           role: user.role ?? "OPERATIONS",
@@ -440,15 +532,18 @@ export async function getCurrentUser() {
 }
 
 export async function updateWorkOrder(task: MaintenanceTask) {
-  if (!useBackend) {
-    const index = mockWorkOrders.findIndex((current) => current.id === task.id);
+  if (!useMaintenanceScheduleBackend) {
+    const schedules = readLocalMaintenanceSchedules().map(normalizeMaintenanceTask);
+    const index = schedules.findIndex((current) => current.id === task.id);
+    const updatedTask = normalizeMaintenanceTask(task);
     if (index >= 0) {
-      mockWorkOrders[index] = task;
+      schedules[index] = updatedTask;
+      writeLocalMaintenanceSchedules(schedules);
     }
-    if (isInProgressStatus(task.status)) {
-      saveMockVehicleStatus(task.vehicleId, vehicleMaintenanceStatus);
+    if (isInProgressStatus(updatedTask.status)) {
+      saveMockVehicleStatus(updatedTask.vehicleId, vehicleMaintenanceStatus);
     }
-    return task;
+    return updatedTask;
   }
 
   const updatedTask = await updateMaintenanceSchedule(task);
@@ -461,6 +556,32 @@ export async function updateWorkOrder(task: MaintenanceTask) {
   }
 
   return updatedTask;
+}
+
+export async function updateWorkOrderProgress(
+  taskId: string,
+  progress: unknown,
+) {
+  if (!useMaintenanceScheduleBackend) {
+    const schedules = readLocalMaintenanceSchedules().map(normalizeMaintenanceTask);
+    const index = schedules.findIndex((current) => current.id === taskId);
+    if (index >= 0) {
+      schedules[index] = {
+        ...schedules[index],
+        workOrderProgress: progress,
+      };
+      writeLocalMaintenanceSchedules(schedules);
+    }
+    return { id: taskId, workOrderProgress: progress };
+  }
+
+  return fetchJSON<{ id: string; workOrderProgress: unknown }>(
+    `/maintenance-schedules/${encodeURIComponent(taskId)}/progress`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(progress),
+    },
+  );
 }
 
 export async function getChecklistTemplates() {
@@ -494,8 +615,8 @@ export type CreateMaintenanceScheduleInput = Omit<MaintenanceTask, "id">;
 export async function getMaintenanceSchedules(options?: { statuses?: string[] }) {
   const allowedStatuses = options?.statuses?.map((status) => status.trim()).filter(Boolean);
 
-  if (!useBackend) {
-    const schedules = mockWorkOrders;
+  if (!useMaintenanceScheduleBackend) {
+    const schedules = readLocalMaintenanceSchedules();
     return allowedStatuses?.length
       ? schedules.filter((schedule) => allowedStatuses.includes(schedule.status))
       : schedules;
@@ -508,7 +629,23 @@ export async function getMaintenanceSchedules(options?: { statuses?: string[] })
         ).toString()}`
       : "";
 
-  const schedules = await fetchJSON<MaintenanceTask[]>(`/maintenance-schedules${query}`);
+  let schedules: MaintenanceTask[];
+  try {
+      schedules = (await fetchJSON<MaintenanceTask[]>(
+        `/maintenance-schedules${query}`,
+      )).map(normalizeMaintenanceTask);
+  } catch (error) {
+    if (error instanceof ApiError && error.status >= 500) {
+      console.warn(
+        "Backend maintenance schedule list failed; using local fallback schedules.",
+        error,
+      );
+      schedules = mockWorkOrders.map(normalizeMaintenanceTask);
+    } else {
+      throw error;
+    }
+  }
+
   return allowedStatuses?.length
     ? schedules.filter((schedule) => allowedStatuses.includes(schedule.status))
     : schedules;
@@ -517,12 +654,14 @@ export async function getMaintenanceSchedules(options?: { statuses?: string[] })
 export async function createMaintenanceSchedule(
   schedule: CreateMaintenanceScheduleInput,
 ) {
-  if (!useBackend) {
+  if (!useMaintenanceScheduleBackend) {
+    const schedules = readLocalMaintenanceSchedules();
     const createdTask: MaintenanceTask = {
       ...schedule,
-      id: getNextWorkOrderId(mockWorkOrders),
+      status: normalizeMaintenanceStatusValue(schedule.status),
+      id: getNextLocalMaintenanceScheduleId(schedules),
     };
-    mockWorkOrders.unshift(createdTask);
+    writeLocalMaintenanceSchedules([createdTask, ...schedules]);
     return createdTask;
   }
 
@@ -550,17 +689,20 @@ export async function createMaintenanceSchedule(
   return fetchJSON<MaintenanceTask>("/maintenance-schedules", {
     method: "POST",
     body: JSON.stringify(payload),
-  });
+  }).then(normalizeMaintenanceTask);
 }
 
 export async function updateMaintenanceSchedule(schedule: MaintenanceTask) {
-  if (!useBackend) {
-    const index = mockWorkOrders.findIndex(
+  if (!useMaintenanceScheduleBackend) {
+    const schedules = readLocalMaintenanceSchedules();
+    const index = schedules.findIndex(
       (current) => current.id === schedule.id,
     );
     if (index >= 0) {
-      mockWorkOrders[index] = schedule;
-      return schedule;
+      const updatedSchedule = normalizeMaintenanceTask(schedule);
+      schedules[index] = updatedSchedule;
+      writeLocalMaintenanceSchedules(schedules);
+      return updatedSchedule;
     }
     throw new Error("Maintenance schedule not found");
   }
@@ -591,14 +733,16 @@ export async function updateMaintenanceSchedule(schedule: MaintenanceTask) {
       method: "PUT",
       body: JSON.stringify(payload),
     },
-  );
+  ).then(normalizeMaintenanceTask);
 }
 
 export async function deleteMaintenanceSchedule(id: string) {
-  if (!useBackend) {
-    const index = mockWorkOrders.findIndex((current) => current.id === id);
+  if (!useMaintenanceScheduleBackend) {
+    const schedules = readLocalMaintenanceSchedules();
+    const index = schedules.findIndex((current) => current.id === id);
     if (index >= 0) {
-      mockWorkOrders.splice(index, 1);
+      schedules.splice(index, 1);
+      writeLocalMaintenanceSchedules(schedules);
       return;
     }
     throw new Error("Maintenance schedule not found");
@@ -632,6 +776,7 @@ export async function getVehicles(): Promise<VehicleOption[]> {
       plateNumber: string;
       model: string;
       status?: string;
+      odometer?: number;
     }>
   >("/vehicles");
 
@@ -639,6 +784,7 @@ export async function getVehicles(): Promise<VehicleOption[]> {
     value: vehicle.plateNumber,
     label: `${vehicle.plateNumber} - ${vehicle.model}`,
     status: vehicle.status,
+    odometer: vehicle.odometer,
   }));
 }
 

@@ -27,9 +27,13 @@ import {
   type WorkOrderTemplate,
 } from "../../data/ChecklistData";
 import {
+  createMaintenanceSchedule,
+  getChecklistTemplates,
   getWorkOrders,
   updateWorkOrder,
+  updateWorkOrderProgress,
 } from "../../lib/api/maintenanceService";
+import { getVehicles } from "../../lib/api/vehicleService";
 import { getCurrentUser, type UserRecord } from "../../lib/api/authService";
 import { getGarages } from "../../lib/api/locationService";
 import { isMechanicRole } from "../../lib/utils/permissions";
@@ -114,12 +118,73 @@ const saveWorkOrderProgress = (progress: WorkOrderProgress) => {
   }
 };
 
-// Helper to get templates from local storage or default
-const getTemplates = () => {
-  const saved = localStorage.getItem("checklistTemplates");
-  if (saved) return JSON.parse(saved);
-  return defaultChecklistTemplates;
+const isBackendWorkOrderProgress = (
+  value: unknown,
+): value is { checklist?: ChecklistItem[]; execution?: ExecutionRecord } => {
+  return typeof value === "object" && value !== null;
 };
+
+const normalizeTemplateName = (value?: string | null) =>
+  value?.trim().toLowerCase() ?? "";
+
+const findTemplateItems = (
+  templates: Record<WorkOrderTemplate, ChecklistItemTemplate[]>,
+  templateName: string,
+) => {
+  const exactItems = templates[templateName];
+  if (exactItems) return exactItems;
+
+  const normalizedName = normalizeTemplateName(templateName);
+  const matchedTemplateName = Object.keys(templates).find(
+    (name) => normalizeTemplateName(name) === normalizedName,
+  );
+
+  return matchedTemplateName
+    ? templates[matchedTemplateName]
+    : templates["General Inspection"] || [];
+};
+
+const syncChecklistWithTemplate = (
+  templateItems: ChecklistItemTemplate[],
+  currentItems: ChecklistItem[] = [],
+) =>
+  templateItems.map((item) => {
+    const existing = currentItems.find(
+      (current) =>
+        current.id === item.id ||
+        normalizeTemplateName(current.text) === normalizeTemplateName(item.text),
+    );
+
+    return {
+      id: item.id,
+      text: item.text,
+      status: existing?.status ?? "pending",
+      note: existing?.note ?? "",
+      partsUsed: existing?.partsUsed ?? "",
+    };
+  });
+
+const syncExecutionWithTemplate = (
+  templateItems: ChecklistItemTemplate[],
+  currentItems: ExecutionItem[] = [],
+) =>
+  templateItems.map((item) => {
+    const existing = currentItems.find(
+      (current) =>
+        current.id === item.id ||
+        normalizeTemplateName(current.text) === normalizeTemplateName(item.text),
+    );
+
+    return {
+      id: item.id,
+      text: item.text,
+      status: existing?.status ?? "pending",
+      note: existing?.note ?? "",
+      partsUsed: existing?.partsUsed ?? "",
+      partsCost: existing?.partsCost ?? "",
+      attachments: existing?.attachments ?? [],
+    };
+  });
 
 // Layout & interaction classes
 const containerClasses = 'space-y-6';
@@ -138,6 +203,10 @@ export default function WorkOrders() {
   );
   const [currentUser, setCurrentUser] = useState<UserRecord | null>(null);
   const [garages, setGarages] = useState<{ id: string; name: string }[]>([]);
+  const [templates, setTemplates] =
+    useState<Record<WorkOrderTemplate, ChecklistItemTemplate[]>>(
+      defaultChecklistTemplates,
+    );
 
   const initialProgress = loadWorkOrderProgress();
   const isMechanic = isMechanicRole(currentUser);
@@ -147,6 +216,32 @@ export default function WorkOrders() {
       getWorkOrders()
         .then((loadedTasks) => {
           setTasks(loadedTasks);
+          setChecklists((current) => {
+            const next = new Map(current);
+            loadedTasks.forEach((task) => {
+              const progress = task.workOrderProgress;
+              if (
+                isBackendWorkOrderProgress(progress) &&
+                Array.isArray(progress.checklist)
+              ) {
+                next.set(task.id, progress.checklist);
+              }
+            });
+            return next;
+          });
+          setExecutions((current) => {
+            const next = new Map(current);
+            loadedTasks.forEach((task) => {
+              const progress = task.workOrderProgress;
+              if (
+                isBackendWorkOrderProgress(progress) &&
+                progress.execution
+              ) {
+                next.set(task.id, progress.execution);
+              }
+            });
+            return next;
+          });
           setSelectedTask((current) =>
             current
               ? loadedTasks.find((task) => task.id === current.id) ?? null
@@ -159,6 +254,9 @@ export default function WorkOrders() {
     };
 
     loadWorkOrders();
+    getChecklistTemplates()
+      .then(setTemplates)
+      .catch(() => setTemplates(defaultChecklistTemplates));
     getGarages().then(setGarages).catch(() => setGarages([]));
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
 
@@ -185,6 +283,7 @@ export default function WorkOrders() {
   const [toast, setToast] = useState<ToastState | null>(null);
   const [pendingWorkOrderAction, setPendingWorkOrderAction] =
     useState<PendingWorkOrderAction>(null);
+  const [pendingStartChange, setPendingStartChange] = useState<(() => void) | null>(null);
 
   useEffect(() => {
     const closeActionMenu = () => setOpenActionMenuId(null);
@@ -204,11 +303,15 @@ export default function WorkOrders() {
   const isAssignedToCurrentMechanic = (task: MaintenanceTask) => {
     if (!isMechanic || !currentUser) return true;
 
-    const currentNames = [currentUser.name, currentUser.email]
+    const currentNames = [currentUser.id, currentUser.name, currentUser.email]
       .map(normalizeText)
       .filter(Boolean);
 
-    const assignedNames = [task.assignedDriver]
+    const assignedNames = [
+      task.assignedMechanicId,
+      task.assignedMechanicEmail,
+      task.assignedDriver,
+    ]
       .map(normalizeText)
       .filter(Boolean);
 
@@ -285,56 +388,30 @@ export default function WorkOrders() {
   const handleSelectTask = (task: MaintenanceTask) => {
     setSelectedTask(task);
     setWorkOrderStep(1);
-    if (!checklists.has(task.id)) {
-      setChecklists((prev) => {
-        const next = new Map(prev);
+    const templateItems = findTemplateItems(templates, task.title);
 
-        // Find the template based on task.title
-        const allTemplates = getTemplates();
-        const taskType = task.title as WorkOrderTemplate;
-        const templateItems: ChecklistItemTemplate[] =
-          allTemplates[taskType] || allTemplates["General Inspection"] || [];
+    setChecklists((prev) => {
+      const next = new Map(prev);
+      next.set(
+        task.id,
+        syncChecklistWithTemplate(templateItems, next.get(task.id)),
+      );
+      return next;
+    });
 
-        // Convert to WorkOrder ChecklistItems
-        const checklistItems: ChecklistItem[] = templateItems.map((item) => ({
-          id: item.id,
-          text: item.text,
-          status: "pending",
-          note: "",
-          partsUsed: "",
-        }));
-
-        next.set(task.id, checklistItems);
-        return next;
+    setExecutions((prev) => {
+      const next = new Map(prev);
+      const current = next.get(task.id);
+      next.set(task.id, {
+        done: current?.done ?? false,
+        items: syncExecutionWithTemplate(templateItems, current?.items),
+        attachments: current?.attachments ?? [],
+        remarks: current?.remarks ?? "",
+        technicianSignature: current?.technicianSignature ?? "",
+        laborCost: current?.laborCost ?? "",
       });
-    }
-    if (!executions.has(task.id)) {
-      setExecutions((prev) => {
-        const next = new Map(prev);
-        const allTemplates = getTemplates();
-        const taskType = task.title as WorkOrderTemplate;
-        const templateItems: ChecklistItemTemplate[] =
-          allTemplates[taskType] || allTemplates["General Inspection"] || [];
-
-        const executionItems: ExecutionItem[] = templateItems.map((item) => ({
-          id: item.id,
-          text: item.text,
-          status: "pending",
-          note: "",
-          attachments: [],
-        }));
-
-        next.set(task.id, {
-          done: false,
-          items: executionItems,
-          attachments: [],
-          remarks: "",
-          technicianSignature: "",
-          laborCost: "",
-        });
-        return next;
-      });
-    }
+      return next;
+    });
   };
 
   const currentChecklist = selectedTask
@@ -362,6 +439,32 @@ export default function WorkOrders() {
         laborCost: "",
       }
     : { done: false, items: [] };
+
+  useEffect(() => {
+    if (!selectedTask) return;
+
+    const checklist = checklists.get(selectedTask.id);
+    const execution = executions.get(selectedTask.id);
+    if (!checklist && !execution) return;
+
+    const timeout = window.setTimeout(() => {
+      updateWorkOrderProgress(selectedTask.id, {
+        checklist: checklist ?? [],
+        execution: execution ?? {
+          done: false,
+          items: [],
+          attachments: [],
+          remarks: "",
+          technicianSignature: "",
+          laborCost: "",
+        },
+      }).catch((error) => {
+        console.error("Failed to save work order progress", error);
+      });
+    }, 400);
+
+    return () => window.clearTimeout(timeout);
+  }, [selectedTask, checklists, executions]);
 
   const canMechanicStartTask =
     !selectedTask ||
@@ -742,6 +845,23 @@ export default function WorkOrders() {
     }).format(value);
   const workOrderStatusOptions = ["Pending", "In Progress"];
 
+  const applyChangeOrConfirmStart = (change: () => void) => {
+    if (isMechanic && selectedTask && isPendingStatus(selectedTask.status)) {
+      setPendingStartChange(() => change);
+      return;
+    }
+    change();
+  };
+
+  const confirmStartWorkOrder = () => {
+    if (!selectedTask || !pendingStartChange) return;
+
+    persistTaskStatus(selectedTask.id, "In Progress");
+    pendingStartChange();
+    setPendingStartChange(null);
+    setToast({ type: "success", message: "Work order started successfully." });
+  };
+
   const updateExecutionItemStatus = (
     taskId: string,
     itemId: string,
@@ -749,7 +869,7 @@ export default function WorkOrders() {
   ) => {
     if (!canModifySelectedTask) return;
 
-    setExecutions((prev) => {
+    applyChangeOrConfirmStart(() => setExecutions((prev) => {
       const next = new Map(prev);
       const cur = next.get(taskId) || {
         done: false,
@@ -770,7 +890,7 @@ export default function WorkOrders() {
       }
 
       return next;
-    });
+    }));
   };
 
   const updateExecutionItemNote = (
@@ -780,7 +900,7 @@ export default function WorkOrders() {
   ) => {
     if (!canModifySelectedTask) return;
 
-    setExecutions((prev) => {
+    applyChangeOrConfirmStart(() => setExecutions((prev) => {
       const next = new Map(prev);
       const cur = next.get(taskId) || {
         done: false,
@@ -791,7 +911,7 @@ export default function WorkOrders() {
       );
       next.set(taskId, { ...cur, items });
       return next;
-    });
+    }));
   };
 
   const updateExecutionItemField = (
@@ -802,7 +922,7 @@ export default function WorkOrders() {
   ) => {
     if (!canModifySelectedTask) return;
 
-    setExecutions((prev) => {
+    applyChangeOrConfirmStart(() => setExecutions((prev) => {
       const next = new Map(prev);
       const cur = next.get(taskId) || {
         done: false,
@@ -813,7 +933,7 @@ export default function WorkOrders() {
       );
       next.set(taskId, { ...cur, items });
       return next;
-    });
+    }));
   };
 
   const updateExecutionItemAttachments = (
@@ -824,7 +944,7 @@ export default function WorkOrders() {
     if (!canModifySelectedTask) return;
 
     const names = files ? Array.from(files).map((file) => file.name) : [];
-    setExecutions((prev) => {
+    applyChangeOrConfirmStart(() => setExecutions((prev) => {
       const next = new Map(prev);
       const cur = next.get(taskId) || {
         done: false,
@@ -835,12 +955,12 @@ export default function WorkOrders() {
       );
       next.set(taskId, { ...cur, items });
       return next;
-    });
+    }));
   };
 
   const handleStatusChange = (id: string, newStatus: ItemStatus) => {
     if (!selectedTask || !canModifySelectedTask) return;
-    setChecklists((prev) => {
+    applyChangeOrConfirmStart(() => setChecklists((prev) => {
       const next = new Map(prev);
       const items = next.get(selectedTask.id);
       if (items) {
@@ -854,12 +974,12 @@ export default function WorkOrders() {
         );
       }
       return next;
-    });
+    }));
   };
 
   const handleNoteChange = (id: string, note: string) => {
     if (!selectedTask || !canModifySelectedTask) return;
-    setChecklists((prev) => {
+    applyChangeOrConfirmStart(() => setChecklists((prev) => {
       const next = new Map(prev);
       const items = next.get(selectedTask.id);
       if (items) {
@@ -869,7 +989,7 @@ export default function WorkOrders() {
         );
       }
       return next;
-    });
+    }));
   };
 
   const getExecutionItemData = (itemId: string) => {
@@ -893,24 +1013,106 @@ export default function WorkOrders() {
   const showCannotCompleteWarning =
     canMechanicStartTask && (pendingCount > 0 || !currentExecution.done);
 
-  const handleMarkComplete = () => {
+  const formatDateInput = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const getNextRecurringDate = (completedAt: Date, intervalType?: string) => {
+    const nextDate = new Date(completedAt);
+    if (intervalType === "DAILY") nextDate.setDate(nextDate.getDate() + 1);
+    else if (intervalType === "WEEKLY") nextDate.setDate(nextDate.getDate() + 7);
+    else if (intervalType === "MONTHLY") nextDate.setMonth(nextDate.getMonth() + 1);
+    else return null;
+    return formatDateInput(nextDate);
+  };
+
+  const createNextRecurringSchedule = async (completedTask: MaintenanceTask) => {
+    if (completedTask.triggerType === "MANUAL" || !completedTask.triggerType) {
+      return null;
+    }
+
+    const completedDate = new Date();
+    const completedDateText = formatDateInput(completedDate);
+    let nextSchedule: Omit<MaintenanceTask, "id">;
+
+    if (completedTask.triggerType === "ODOMETER") {
+      const interval = Number(completedTask.intervalKm);
+      if (!Number.isFinite(interval) || interval <= 0) return null;
+
+      const vehicles = await getVehicles().catch(() => []);
+      const vehicle = vehicles.find((item) => item.value === completedTask.vehicleId);
+      const latestOdometer =
+        vehicle?.odometer !== undefined
+          ? String(vehicle.odometer)
+          : completedTask.odometerReading?.trim();
+      if (!latestOdometer) return null;
+
+      const duplicateExists = tasks.some(
+        (task) =>
+          task.id !== completedTask.id &&
+          task.status !== "Completed" &&
+          task.vehicleId === completedTask.vehicleId &&
+          task.title === completedTask.title &&
+          task.triggerType === "ODOMETER" &&
+          task.startingReferenceReadingKm === latestOdometer,
+      );
+      if (duplicateExists) return null;
+
+      nextSchedule = {
+        ...completedTask,
+        status: "Pending",
+        date: completedDateText,
+        odometerReading: latestOdometer,
+        startingReferenceReadingKm: latestOdometer,
+      };
+    } else {
+      const nextDate = getNextRecurringDate(completedDate, completedTask.intervalType);
+      if (!nextDate) return null;
+
+      const duplicateExists = tasks.some(
+        (task) =>
+          task.id !== completedTask.id &&
+          task.status !== "Completed" &&
+          task.vehicleId === completedTask.vehicleId &&
+          task.title === completedTask.title &&
+          task.triggerType === "TIME" &&
+          task.date === nextDate,
+      );
+      if (duplicateExists) return null;
+
+      nextSchedule = {
+        ...completedTask,
+        status: "Pending",
+        date: nextDate,
+        startReferenceDate: completedDateText,
+      };
+    }
+
+    const created = await createMaintenanceSchedule(nextSchedule);
+    setTasks((current) => [created, ...current]);
+    return created;
+  };
+
+  const handleMarkComplete = async () => {
     if (!selectedTask || !canModifySelectedTask) return;
 
     const completedTask = { ...selectedTask, status: "Completed" as const };
     setTasks((prev) =>
       prev.map((t) => (t.id === selectedTask.id ? completedTask : t)),
     );
-    updateWorkOrder(completedTask).catch(() => {
-      // ignore service failure, keep local state
-    });
     // keep the task visible but update it to Completed
     setSelectedTask(completedTask);
+    await updateWorkOrder(completedTask);
+    return createNextRecurringSchedule(completedTask);
   };
 
   const setExecutionDone = (taskId: string, done: boolean) => {
     if (!canModifySelectedTask) return;
 
-    setExecutions((prev) => {
+    applyChangeOrConfirmStart(() => setExecutions((prev) => {
       const next = new Map(prev);
       const cur = next.get(taskId) || { done: false, items: [] };
       const updatedExecution = { ...cur, done };
@@ -925,7 +1127,7 @@ export default function WorkOrders() {
       }
 
       return next;
-    });
+    }));
 
     if (done) {
       setChecklists((prev) => {
@@ -957,7 +1159,7 @@ export default function WorkOrders() {
     }
   };
 
-  const confirmWorkOrderAction = () => {
+  const confirmWorkOrderAction = async () => {
     if (!selectedTask) return;
 
     if (pendingWorkOrderAction === "executionComplete") {
@@ -969,11 +1171,21 @@ export default function WorkOrders() {
     }
 
     if (pendingWorkOrderAction === "inspectionComplete") {
-      handleMarkComplete();
-      setToast({
-        type: "success",
-        message: "Work order completed successfully.",
-      });
+      try {
+        const nextSchedule = await handleMarkComplete();
+        setToast({
+          type: "success",
+          message: nextSchedule
+            ? "Work order completed and the next recurring schedule was created."
+            : "Work order completed successfully.",
+        });
+      } catch (error) {
+        console.error("Failed to complete recurring work order", error);
+        setToast({
+          type: "warning",
+          message: "Work order was completed, but the next recurring schedule could not be created.",
+        });
+      }
     }
 
     setPendingWorkOrderAction(null);
@@ -986,7 +1198,7 @@ export default function WorkOrders() {
   ) => {
     if (!canModifySelectedTask) return;
 
-    setExecutions((prev) => {
+    applyChangeOrConfirmStart(() => setExecutions((prev) => {
       const next = new Map(prev);
       const cur = next.get(taskId) || {
         done: false,
@@ -1008,7 +1220,7 @@ export default function WorkOrders() {
       }
       next.set(taskId, cur);
       return next;
-    });
+    }));
   };
 
   return (
@@ -1115,6 +1327,7 @@ export default function WorkOrders() {
             data={paginatedTasks}
             getRowKey={(task) => task.id}
             minWidth="900px"
+            density="compact"
             emptyMessage="No active work orders found."
             onRowClick={handleSelectTask}
             columns={[
@@ -1133,7 +1346,7 @@ export default function WorkOrders() {
               {
                 key: "type",
                 header: "Maintenance Type",
-                width: "25%",
+                width: "18%",
                 render: (task) => task.title,
               },
               {
@@ -1157,13 +1370,13 @@ export default function WorkOrders() {
               {
                 key: "status",
                 header: "Status",
-                width: "13%",
+                width: "17%",
                 render: (task) => <StatusBadge status={task.status} />,
               },
               {
                 key: "actions",
                 header: "Actions",
-                width: "6%",
+                width: "9%",
                 align: "center",
                 render: (task) => (
                   <ActionMenu
@@ -1917,6 +2130,15 @@ export default function WorkOrders() {
           )}
         </div>
       )}
+      <ConfirmationModal
+        isOpen={Boolean(pendingStartChange)}
+        title="Start Work Order"
+        variant="primary"
+        message="Making this change will start the work order and set its status to In Progress. Do you want to continue?"
+        confirmLabel="Start Work Order"
+        onConfirm={confirmStartWorkOrder}
+        onCancel={() => setPendingStartChange(null)}
+      />
       <ConfirmationModal
         isOpen={Boolean(pendingWorkOrderAction)}
         variant="primary"
