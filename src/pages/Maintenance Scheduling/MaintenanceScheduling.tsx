@@ -52,6 +52,7 @@ import { getGarages } from "../../lib/api/locationService";
 import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
 import {
   formatWorkOrderNumber,
+  getCalculatedMaintenanceStatus,
   isInProgressStatus,
   isDueStatus,
   isOverdueStatus,
@@ -306,12 +307,14 @@ const MaintenanceSchedulingCombined = () => {
 
   useBodyScrollLock(Boolean(pendingAction));
 
-  const loadMaintenanceSchedules = () => {
-    getMaintenanceSchedules().then(setTasks).catch(console.error);
+  const loadMaintenanceSchedules = async () => {
+    const loadedTasks = await getMaintenanceSchedules();
+    setTasks(loadedTasks);
+    return loadedTasks;
   };
 
   useEffect(() => {
-    loadMaintenanceSchedules();
+    loadMaintenanceSchedules().catch(console.error);
     getVehicles()
       .then((loadedVehicles) => setVehicles(loadedVehicles))
       .catch(() => console.error("Failed to load vehicles"));
@@ -535,19 +538,37 @@ const MaintenanceSchedulingCombined = () => {
     return garages.find((garage) => garage.id === garageId)?.name ?? garageId;
   };
 
+  const isInProgressScheduleLocked = (task: MaintenanceTask) =>
+    isInProgressStatus(task.status);
+
   const openFullScheduleEdit = (task: MaintenanceTask) => {
+    if (isInProgressScheduleLocked(task)) {
+      setToast({
+        type: "warning",
+        message: "In-progress schedules cannot be edited.",
+      });
+      return;
+    }
     setEditingTask(task);
     setIsOdometerUpdateOpen(false);
     setIsModalOpen(true);
   };
 
   const openOdometerUpdate = (task: MaintenanceTask) => {
+    if (isInProgressScheduleLocked(task)) {
+      setToast({
+        type: "warning",
+        message: "In-progress schedules cannot be updated.",
+      });
+      return;
+    }
     setEditingTask(task);
     setIsOdometerUpdateOpen(true);
     setIsModalOpen(true);
   };
 
   const canShowScheduleUpdate = (task: MaintenanceTask) =>
+    !isInProgressScheduleLocked(task) &&
     task.status !== MaintenanceStatus.COMPLETED &&
     task.status !== MaintenanceStatus.CANCELLED &&
     (task.triggerType === MaintenanceTriggerType.ODOMETER ||
@@ -556,6 +577,15 @@ const MaintenanceSchedulingCombined = () => {
   const confirmScheduleAction = async () => {
     if (!pendingAction) return;
     const { action, task } = pendingAction;
+
+    if (action === "cancel" && isInProgressScheduleLocked(task)) {
+      setToast({
+        type: "warning",
+        message: "In-progress schedules cannot be cancelled.",
+      });
+      setPendingAction(null);
+      return;
+    }
 
     try {
       if (action === "cancel" || action === "activate") {
@@ -902,14 +932,16 @@ const MaintenanceSchedulingCombined = () => {
                           );
                         }}
                         items={[
-                          {
-                            label: "Edit",
-                            icon: Edit2,
-                            onClick: () => {
-                              setOpenActionMenuId(null);
-                              openFullScheduleEdit(task);
-                            },
-                          },
+                          ...(!isInProgressScheduleLocked(task)
+                            ? [{
+                                label: "Edit",
+                                icon: Edit2,
+                                onClick: () => {
+                                  setOpenActionMenuId(null);
+                                  openFullScheduleEdit(task);
+                                },
+                              }]
+                            : []),
                           ...(canShowScheduleUpdate(task)
                             ? [{
                                 label: "Update",
@@ -920,7 +952,8 @@ const MaintenanceSchedulingCombined = () => {
                                 },
                               }]
                             : []),
-                          ...(task.status !== MaintenanceStatus.CANCELLED
+                          ...(!isInProgressScheduleLocked(task) &&
+                          task.status !== MaintenanceStatus.CANCELLED
                             ? [{
                                 label: "Cancel",
                                 icon: Ban,
@@ -930,14 +963,16 @@ const MaintenanceSchedulingCombined = () => {
                                   setPendingAction({ action: "cancel", task });
                                 },
                               }]
-                            : [{
+                            : task.status === MaintenanceStatus.CANCELLED
+                            ? [{
                                 label: "Activate",
                                 icon: Power,
                                 onClick: () => {
                                   setOpenActionMenuId(null);
                                   setPendingAction({ action: "activate", task });
                                 },
-                              }]),
+                              }]
+                            : []),
                           {
                             label: "Deactivate",
                             icon: PowerOff,
@@ -1156,15 +1191,17 @@ const MaintenanceSchedulingCombined = () => {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      closeScheduleDetails();
-                      openFullScheduleEdit(selectedSchedule);
-                    }}
-                  >
-                    Edit
-                  </Button>
+                  {!isInProgressScheduleLocked(selectedSchedule) ? (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        closeScheduleDetails();
+                        openFullScheduleEdit(selectedSchedule);
+                      }}
+                    >
+                      Edit
+                    </Button>
+                  ) : null}
                   {canShowScheduleUpdate(selectedSchedule) ? (
                     <Button
                       size="sm"
@@ -1302,16 +1339,29 @@ const MaintenanceSchedulingCombined = () => {
           setEditingTask(null);
           setIsOdometerUpdateOpen(false);
         }}
-        onSaved={(task) => {
+        onSaved={async (task) => {
+          const recalculatedTask = {
+            ...task,
+            status: getCalculatedMaintenanceStatus(task),
+          };
+
+          // Update immediately, then refresh the entire collection so schedules
+          // on every pagination page receive server-calculated status changes.
           setTasks((current) =>
-            current.some((existingTask) => existingTask.id === task.id)
+            current.some((existingTask) => existingTask.id === recalculatedTask.id)
               ? current.map((existingTask) =>
-                  existingTask.id === task.id
-                    ? { ...existingTask, ...task }
+                  existingTask.id === recalculatedTask.id
+                    ? { ...existingTask, ...recalculatedTask }
                     : existingTask,
                 )
-              : [task, ...current],
+              : [recalculatedTask, ...current],
           );
+
+          try {
+            await loadMaintenanceSchedules();
+          } catch (error) {
+            console.error("Failed to refresh maintenance schedules", error);
+          }
           setIsModalOpen(false);
           setEditingTask(null);
           setIsOdometerUpdateOpen(false);

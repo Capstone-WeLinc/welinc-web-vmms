@@ -555,6 +555,25 @@ export async function unlockUser(userId: string) {
   ).then((user) => normalizeUserRecord(user));
 }
 
+export async function resetUserPassword(userId: string) {
+  const password = "Password123!";
+
+  if (!useBackend) {
+    const index = mockUsers.findIndex((user) => user.id === userId);
+    if (index < 0) throw new Error("User not found");
+    mockUsers[index] = { ...mockUsers[index], updatedAt: new Date().toISOString() };
+    return normalizeUserRecord(mockUsers[index]);
+  }
+
+  return fetchJSON<UserRecord>(
+    `/auth/users/${encodeURIComponent(userId)}/password`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ password }),
+    },
+  ).then((user) => normalizeUserRecord(user));
+}
+
 export async function deleteUser(userId: string) {
   if (!useBackend) {
     const me = await getCurrentUser();

@@ -531,7 +531,10 @@ export const ActionMenu = ({
             <button
               key={item.label}
               type="button"
-              onClick={item.onClick}
+              onClick={(event) => {
+                event.stopPropagation();
+                item.onClick();
+              }}
               className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-[#f8fafc] ${
                 item.danger ? "text-[#ff4040] hover:bg-[#fff1f1]" : "text-[#344158]"
               }`}
@@ -542,17 +545,17 @@ export const ActionMenu = ({
           );
         })}
         {onView && (
-          <button type="button" onClick={onView} className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-[#344158] hover:bg-[#f8fafc]">
+          <button type="button" onClick={(event) => { event.stopPropagation(); onView(); }} className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-[#344158] hover:bg-[#f8fafc]">
             <Eye className="h-4 w-4" /> View
           </button>
         )}
         {onEdit && (
-          <button type="button" onClick={onEdit} className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-[#344158] hover:bg-[#f8fafc]">
+          <button type="button" onClick={(event) => { event.stopPropagation(); onEdit(); }} className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-[#344158] hover:bg-[#f8fafc]">
             <Edit2 className="h-4 w-4" /> Edit
           </button>
         )}
         {onDelete && (
-          <button type="button" onClick={onDelete} className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-[#ff4040] hover:bg-[#fff1f1]">
+          <button type="button" onClick={(event) => { event.stopPropagation(); onDelete(); }} className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-[#ff4040] hover:bg-[#fff1f1]">
             <Trash2 className="h-4 w-4" /> Delete
           </button>
         )}
@@ -564,7 +567,10 @@ export const ActionMenu = ({
       <button
         ref={buttonRef}
         type="button"
-        onClick={onToggle}
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggle(event);
+        }}
         className="flex h-8 w-8 items-center justify-center rounded-full text-[#070b45] transition hover:bg-[#f1f5f9]"
         aria-expanded={open}
         aria-label="Open row actions"
@@ -629,7 +635,37 @@ export const Pagination = ({
   onPageChange,
   onPageSizeChange,
 }: PaginationProps) => {
-  const pages = Array.from({ length: Math.min(totalPages, 5) }, (_, index) => index + 1);
+  const pages: Array<number | "start-ellipsis" | "end-ellipsis"> = (() => {
+    if (totalPages <= 6) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    if (page <= 3) {
+      return [1, 2, 3, 4, 5, "end-ellipsis", totalPages];
+    }
+
+    if (page >= totalPages - 2) {
+      return [
+        1,
+        "start-ellipsis",
+        totalPages - 4,
+        totalPages - 3,
+        totalPages - 2,
+        totalPages - 1,
+        totalPages,
+      ];
+    }
+
+    return [
+      1,
+      "start-ellipsis",
+      page - 1,
+      page,
+      page + 1,
+      "end-ellipsis",
+      totalPages,
+    ];
+  })();
 
   return (
     <div className="flex flex-col gap-3 px-0 py-4 text-sm text-[#70747c] sm:flex-row sm:items-center sm:justify-between">
@@ -637,27 +673,25 @@ export const Pagination = ({
         {Math.min(pageSize, totalItems)} of {totalItems} items
       </span>
       <div className="flex items-center gap-2">
-        {pages.map((item) => (
-          <button
-            key={item}
-            type="button"
-            onClick={() => onPageChange(item)}
-            className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
-              item === page ? "bg-[#070b45] text-white" : "text-[#070b45] hover:bg-[#f1f5f9]"
-            }`}
-          >
-            {item}
-          </button>
-        ))}
-        {totalPages > 6 && <span className="font-bold text-[#070b45]">...</span>}
-        {totalPages > 5 && (
-          <button
-            type="button"
-            onClick={() => onPageChange(totalPages)}
-            className="flex h-8 min-w-8 items-center justify-center rounded-full px-2 text-sm font-bold text-[#070b45] hover:bg-[#f1f5f9]"
-          >
-            {totalPages}
-          </button>
+        {pages.map((item) =>
+          typeof item === "number" ? (
+            <button
+              key={item}
+              type="button"
+              onClick={() => onPageChange(item)}
+              aria-label={`Go to page ${item}`}
+              aria-current={item === page ? "page" : undefined}
+              className={`flex h-8 min-w-8 items-center justify-center rounded-full px-1 text-sm font-bold ${
+                item === page ? "bg-[#070b45] text-white" : "text-[#070b45] hover:bg-[#f1f5f9]"
+              }`}
+            >
+              {item}
+            </button>
+          ) : (
+            <span key={item} className="font-bold text-[#070b45]" aria-hidden="true">
+              ...
+            </span>
+          ),
         )}
       </div>
       {onPageSizeChange && (

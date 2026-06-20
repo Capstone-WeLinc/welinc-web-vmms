@@ -80,7 +80,7 @@ export default function CreateScheduleModal({
   odometerOnly?: boolean;
   existingSchedules: MaintenanceTask[];
   onClose: () => void;
-  onSaved?: (task: MaintenanceTask) => void;
+  onSaved?: (task: MaintenanceTask) => void | Promise<void>;
 }) {
   const [checklistTemplate, setChecklistTemplateName] =
     useState<ChecklistTemplateName>("");
@@ -314,11 +314,11 @@ export default function CreateScheduleModal({
             };
         try {
           const saved = await updateMaintenanceSchedule(updated);
-          onSaved?.(saved);
+          await onSaved?.(saved);
         } catch (err) {
           console.error("Failed to update schedule", err);
           // fallback to local update
-          onSaved?.(updated);
+          await onSaved?.(updated);
         }
       } else {
         const task = await createMaintenanceSchedule({
@@ -343,7 +343,7 @@ export default function CreateScheduleModal({
           startingReferenceReadingKm: submittedStartingReferenceReadingKm,
           intervalType: submittedIntervalType,
         });
-        onSaved?.(task);
+        await onSaved?.(task);
       }
 
       // Reset form state

@@ -3,6 +3,7 @@ export {
   deleteUser,
   getManagedUsers,
   getUsers,
+  resetUserPassword,
   unlockUser,
   updateUser,
   updateUserRole,

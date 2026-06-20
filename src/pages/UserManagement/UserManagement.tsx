@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Edit2, Plus, Unlock, UserRoundCheck, Users } from "lucide-react";
+import { Edit2, KeyRound, Plus, Unlock, UserRoundCheck, Users } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import {
   ActionButton,
@@ -15,6 +15,7 @@ import {
 import {
   createUser,
   getManagedUsers,
+  resetUserPassword,
   unlockUser,
   updateUser,
   updateUserRole,
@@ -60,6 +61,7 @@ export default function UserManagement() {
   const [processing, setProcessing] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [unlockTarget, setUnlockTarget] = useState<UserRecord | null>(null);
+  const [resetPasswordTarget, setResetPasswordTarget] = useState<UserRecord | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<UserRecord | null>(null);
   const [editConfirmationOpen, setEditConfirmationOpen] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -135,6 +137,7 @@ export default function UserManagement() {
   };
 
   const openEdit = (user: UserRecord) => {
+    setOpenMenuId(null);
     setEditingUser(user);
     setForm({
       name: user.name,
@@ -193,6 +196,7 @@ export default function UserManagement() {
     } catch (error) {
       console.error("Failed to save user", error);
       setToast({ type: "error", message: "Unable to save the user." });
+      if (editingUser) setFormOpen(true);
     } finally {
       setProcessing(false);
     }
@@ -219,6 +223,7 @@ export default function UserManagement() {
     }
 
     if (editingUser) {
+      setFormOpen(false);
       setEditConfirmationOpen(true);
       return;
     }
@@ -266,6 +271,23 @@ export default function UserManagement() {
       setToast({ type: "error", message: "Unable to unlock the user." });
     } finally {
       setUnlockTarget(null);
+    }
+  };
+
+  const confirmPasswordReset = async () => {
+    if (!resetPasswordTarget) return;
+    const target = resetPasswordTarget;
+    try {
+      const updated = await resetUserPassword(target.id);
+      setUsers((current) =>
+        current.map((user) => (user.id === target.id ? { ...user, ...updated } : user)),
+      );
+      setToast({ type: "success", message: `Password reset successfully for ${target.name}.` });
+    } catch (error) {
+      console.error("Failed to reset user password", error);
+      setToast({ type: "error", message: "Unable to reset the user's password." });
+    } finally {
+      setResetPasswordTarget(null);
     }
   };
 
@@ -351,9 +373,18 @@ export default function UserManagement() {
                   items={[
                     { label: "Edit", icon: Edit2, onClick: () => openEdit(user) },
                     {
+                      label: "Reset Password",
+                      icon: KeyRound,
+                      onClick: () => {
+                        setOpenMenuId(null);
+                        setResetPasswordTarget(user);
+                      },
+                    },
+                    {
                       label: user.status === "Active" ? "Deactivate" : "Activate",
                       icon: UserRoundCheck,
                       onClick: () => {
+                        setOpenMenuId(null);
                         if (user.status === "Active") {
                           setDeactivateTarget(user);
                         } else {
@@ -362,7 +393,14 @@ export default function UserManagement() {
                       },
                     },
                     ...(user.isLocked
-                      ? [{ label: "Unlock", icon: Unlock, onClick: () => setUnlockTarget(user) }]
+                      ? [{
+                          label: "Unlock",
+                          icon: Unlock,
+                          onClick: () => {
+                            setOpenMenuId(null);
+                            setUnlockTarget(user);
+                          },
+                        }]
                       : []),
                   ]}
                 />
@@ -451,7 +489,10 @@ export default function UserManagement() {
         message={editingUser ? `Save changes to ${editingUser.name}'s account?` : ""}
         confirmLabel="Save Changes"
         onConfirm={confirmEdit}
-        onCancel={() => setEditConfirmationOpen(false)}
+        onCancel={() => {
+          setEditConfirmationOpen(false);
+          setFormOpen(true);
+        }}
       />
 
       <ConfirmationModal
@@ -476,6 +517,21 @@ export default function UserManagement() {
         onConfirm={() => void confirmUnlock()}
         onCancel={() => setUnlockTarget(null)}
       />
+
+      <ConfirmationModal
+        isOpen={Boolean(resetPasswordTarget)}
+        title="Reset Password"
+        message={
+          resetPasswordTarget
+            ? `Are you sure you want to reset the password for ${resetPasswordTarget.name} to the system default (Password123!)? They will be required to change it on their next login.`
+            : ""
+        }
+        confirmLabel="Reset Password"
+        variant="danger"
+        onConfirm={() => void confirmPasswordReset()}
+        onCancel={() => setResetPasswordTarget(null)}
+      />
+
     </div>
   );
 }
