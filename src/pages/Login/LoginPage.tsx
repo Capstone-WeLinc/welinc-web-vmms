@@ -1,0 +1,93 @@
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { AlertCircle, Loader2 } from "lucide-react";
+import { recordLoginActivity } from "../../lib/api/authService";
+import { clearSession, setLoginTime, setLastActivity } from "../../lib/utils/session";
+
+interface LoginPageProps {
+  onLogin: () => void;
+}
+
+const getPortalLoginUrl = () => {
+  const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:8000";
+  const vmmsLoginUrl = `${window.location.origin}/login`;
+  const params = new URLSearchParams({
+    system: "VMMS",
+    redirect: vmmsLoginUrl,
+    returnUrl: vmmsLoginUrl,
+  });
+
+  return `${portalUrl}/login?${params.toString()}`;
+};
+
+export default function LoginPage({ onLogin }: LoginPageProps) {
+  const [searchParams] = useSearchParams();
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const ssoToken = searchParams.get("token");
+    if (!ssoToken) {
+      const existingToken = window.localStorage.getItem("accessToken");
+      if (existingToken) {
+        onLogin();
+        return;
+      }
+      // If no token is provided, redirect to the unified portal with a VMMS return hint.
+      window.location.href = getPortalLoginUrl();
+      return;
+    }
+
+    try {
+      window.localStorage.removeItem("accessToken");
+      clearSession();
+      window.localStorage.setItem("accessToken", ssoToken);
+      
+      // Session timestamps: login time and last activity
+      setLoginTime(new Date());
+      setLastActivity(new Date());
+      
+      // Async notify activity (non-blocking)
+      recordLoginActivity().catch((err: unknown) =>
+        console.error("Failed to record activity", err),
+      );
+
+      onLogin();
+    } catch (err) {
+      console.error("[SSO Login Error]", err);
+      requestAnimationFrame(() => {
+        setError("Invalid or expired authentication token.");
+      });
+      window.localStorage.removeItem("accessToken");
+    }
+  }, [searchParams, onLogin]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg-primary)] p-6">
+      <div className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-3xl p-8 max-w-md w-full shadow-2xl text-center">
+        {error ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-center text-red-500">
+              <AlertCircle size={48} />
+            </div>
+            <h2 className="text-xl font-bold text-[var(--color-text-primary)]">Authentication Failed</h2>
+            <p className="text-[var(--color-text-secondary)] text-sm">{error}</p>
+            <button
+              onClick={() => {
+                window.location.href = getPortalLoginUrl();
+              }}
+              className="mt-4 w-full bg-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary-hover)] text-white font-bold py-2.5 rounded-xl transition-all cursor-pointer"
+            >
+              Back to Portal Login
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <Loader2 className="animate-spin text-[var(--color-brand-primary)] mx-auto" size={40} />
+            <h2 className="text-xl font-bold text-[var(--color-text-primary)]">Verifying SSO Session</h2>
+            <p className="text-[var(--color-text-secondary)] text-sm">Please wait while we redirect you to User Management.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,93 @@
+export const AccountType = {
+  IN_HOUSE: "IN_HOUSE",
+  OUTSOURCED: "OUTSOURCED",
+} as const;
+
+export type AccountType = (typeof AccountType)[keyof typeof AccountType];
+
+export const MaintenanceStatus = {
+  PENDING: "PENDING",
+  DUE: "DUE",
+  IN_PROGRESS: "IN_PROGRESS",
+  COMPLETED: "COMPLETED",
+  OVERDUE: "OVERDUE",
+  CANCELLED: "CANCELLED",
+} as const;
+
+export type MaintenanceStatus =
+  (typeof MaintenanceStatus)[keyof typeof MaintenanceStatus];
+
+export const MaintenanceTriggerType = {
+  MANUAL: "MANUAL",
+  ODOMETER: "ODOMETER",
+  TIME: "TIME",
+} as const;
+
+export type MaintenanceTriggerType =
+  (typeof MaintenanceTriggerType)[keyof typeof MaintenanceTriggerType];
+
+export const MaintenanceIntervalType = {
+  DAILY: "DAILY",
+  WEEKLY: "WEEKLY",
+  MONTHLY: "MONTHLY",
+  QUARTERLY: "QUARTERLY",
+  SEMI_ANNUALLY: "SEMI_ANNUALLY",
+  ANNUALLY: "ANNUALLY",
+} as const;
+
+export type MaintenanceIntervalType =
+  (typeof MaintenanceIntervalType)[keyof typeof MaintenanceIntervalType];
+
+export const maintenanceStatusLabels: Record<MaintenanceStatus, string> = {
+  [MaintenanceStatus.PENDING]: "Pending",
+  [MaintenanceStatus.DUE]: "Due",
+  [MaintenanceStatus.IN_PROGRESS]: "In Progress",
+  [MaintenanceStatus.COMPLETED]: "Completed",
+  [MaintenanceStatus.OVERDUE]: "Overdue",
+  [MaintenanceStatus.CANCELLED]: "Cancelled",
+};
+
+export const accountTypeLabels: Record<AccountType, string> = {
+  [AccountType.IN_HOUSE]: "In-House",
+  [AccountType.OUTSOURCED]: "Outsourced",
+};
+
+export const maintenanceTriggerTypeLabels: Record<MaintenanceTriggerType, string> = {
+  [MaintenanceTriggerType.MANUAL]: "Manual",
+  [MaintenanceTriggerType.ODOMETER]: "Odometer",
+  [MaintenanceTriggerType.TIME]: "Time-Based",
+};
+
+export const maintenanceIntervalTypeLabels: Record<MaintenanceIntervalType, string> = {
+  [MaintenanceIntervalType.DAILY]: "Daily",
+  [MaintenanceIntervalType.WEEKLY]: "Weekly",
+  [MaintenanceIntervalType.MONTHLY]: "Monthly",
+  [MaintenanceIntervalType.QUARTERLY]: "Quarterly",
+  [MaintenanceIntervalType.SEMI_ANNUALLY]: "Semi-Annually",
+  [MaintenanceIntervalType.ANNUALLY]: "Annually",
+};
+
+export interface MaintenanceTask {
+  id: string;
+  vehicleId: string;
+  title: string;
+  status: MaintenanceStatus;
+  date: string;
+  assignedDriver: string;
+  assignedMechanicId?: string;
+  assignedMechanicEmail?: string;
+  notes: string;
+  garageId?: string;
+  accountType?: AccountType;
+  outsourcedProvider?: string;
+  odometerReading?: string;
+  systemAffected?: string;
+  triggerType?: MaintenanceTriggerType;
+  intervalKm?: string;
+  bufferDistanceKm?: string;
+  startingReferenceReadingKm?: string;
+  intervalType?: MaintenanceIntervalType;
+  startReferenceDate?: string;
+  workOrderProgress?: unknown;
+  deletedAt?: string | null;
+}
