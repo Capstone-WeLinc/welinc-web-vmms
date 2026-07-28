@@ -20,6 +20,7 @@ import FuelManagement from "./pages/FuelManagement/FuelManagement";
 import UserManagement from "./pages/UserManagement/UserManagement";
 import LoginPage from "./pages/Login/LoginPage";
 import Profile from "./pages/Profile/Profile";
+import AIAnalyticsPage from "./pages/AIAnalytics/AIAnalytics";
 import { useBackend } from "./lib/api/httpClient";
 
 import { FileBarChart2 } from "lucide-react";
@@ -300,6 +301,17 @@ function App() {
                 location={location}
               >
                 <Profile />
+              </RequireAuthWrapper>
+            }
+          />
+          <Route
+            path="/ai-analytics"
+            element={
+              <RequireAuthWrapper
+                isAuthenticated={isAuthenticated}
+                location={location}
+              >
+                <AIAnalyticsPage />
               </RequireAuthWrapper>
             }
           />

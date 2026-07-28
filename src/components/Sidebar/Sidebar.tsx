@@ -13,6 +13,7 @@ import {
   Wrench,
   ClipboardList,
   ClipboardCheck,
+  BrainCircuit,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -26,6 +27,7 @@ const navItems = [
   { label: "Work Orders", icon: Wrench, path: "/work-orders" },
   { label: "Checklist Templates", icon: ClipboardCheck, path: "/checklist-templates" },
   { label: "Maintenance Logs", icon: ClipboardList, path: "/maintenance-logs" },
+  { label: "AI / Analytics", icon: BrainCircuit, path: "/ai-analytics" },
 //  { label: "Maintenance Reports", icon: FileBarChart2, path: "/maintenance-reports" },
 //  { label: "Fuel Management", icon: Fuel, path: "/fuel-management" },
 //  { label: "Expense & Profitability", icon: DollarSign, path: "/expense-profitability" },
@@ -63,7 +65,7 @@ export default function Sidebar({ currentUser }: SidebarProps) {
     ? navItems.filter((item) => ["/dashboard", "/work-orders", "/maintenance-logs"].includes(item.path))
     : isOperations
       ? navItems.filter((item) =>
-          ["/dashboard", "/maintenance-scheduling", "/work-orders", "/maintenance-logs", "/maintenance-reports", "/fuel-management"].includes(item.path),
+          ["/dashboard", "/maintenance-scheduling", "/work-orders", "/maintenance-logs", "/maintenance-reports", "/fuel-management", "/ai-analytics"].includes(item.path),
         )
       : navItems;
 
