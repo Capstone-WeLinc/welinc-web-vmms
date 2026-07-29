@@ -50,24 +50,58 @@ function MetricTile({ label, value, hint, icon: Icon }: { label: string; value: 
   );
 }
 
+function parseNumericValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/[^\d.-]/g, ""));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function resolveProgressPercentage(item: Record<string, unknown>, totalCount?: number): number {
+  const candidateKeys = ["percentage", "percent", "progress", "progressPercent", "completionRate", "completion", "score", "value", "ratio"];
+
+  for (const key of candidateKeys) {
+    const value = parseNumericValue(item[key]);
+    if (value === null) continue;
+    if (value > 0 && value <= 1) {
+      return Math.round(value * 100);
+    }
+    if (value > 0 && value <= 100) {
+      return Math.round(value);
+    }
+  }
+
+  const countValue = parseNumericValue(item.scheduleCount) ?? parseNumericValue(item.count) ?? parseNumericValue(item.totalCount);
+  if (typeof totalCount === "number" && totalCount > 0 && countValue !== null) {
+    return Math.round((countValue / totalCount) * 100);
+  }
+
+  return 0;
+}
+
 function StatusBars({ items }: { items: Array<{ status: string; percentage?: number; scheduleCount?: number }> }) {
   const normalizedItems = items.map((item) => ({
     status: String(item.status ?? "Unknown"),
     percentage: Number(item.percentage ?? item.scheduleCount ?? 0),
     scheduleCount: Number(item.scheduleCount ?? 0),
   }));
-  const maxValue = Math.max(1, ...normalizedItems.map((item) => Number(item.percentage ?? item.scheduleCount ?? 0)));
+  const totalCount = normalizedItems.reduce((sum, item) => sum + (item.scheduleCount || 0), 0);
 
   return (
     <div className="space-y-3">
       {normalizedItems.map((item) => {
-        const value = Number(item.percentage ?? item.scheduleCount ?? 0);
-        const width = Math.max(8, Math.round((value / maxValue) * 100));
+        const record = item as unknown as Record<string, unknown>;
+        const displayPercentage = resolveProgressPercentage(record, totalCount);
+        const width = displayPercentage > 0 ? displayPercentage : 0;
         return (
           <div key={item.status}>
             <div className="mb-1 flex items-center justify-between text-sm">
               <span className="font-medium text-[var(--color-text-primary)]">{item.status}</span>
-              <span className="text-[var(--color-text-secondary)]">{value}%</span>
+              <span className="text-[var(--color-text-secondary)]">{displayPercentage}%</span>
             </div>
             <div className="h-2.5 rounded-full bg-[var(--color-input-bg)]">
               <div className="h-2.5 rounded-full bg-[var(--color-brand-primary)]" style={{ width: `${width}%` }} />
@@ -87,19 +121,20 @@ function TrendBars({ items }: { items: Array<{ monthKey: string; scheduledCount?
     activeCount: Number(item.activeCount ?? 0),
     overdueCount: Number(item.overdueCount ?? 0),
   }));
-  const maxValue = Math.max(1, ...normalizedItems.map((item) => item.scheduledCount));
+  const maxScheduled = Math.max(1, ...normalizedItems.map((item) => item.scheduledCount));
 
   return (
     <div className="mt-4 flex items-end gap-3 overflow-x-auto pb-2">
       {normalizedItems.map((item) => {
         const scheduled = item.scheduledCount;
         const completed = item.completedCount;
-        const height = Math.max(24, Math.round((scheduled / maxValue) * 100));
+        const scheduledHeight = Math.max(24, Math.round((scheduled / maxScheduled) * 100));
+        const completedHeight = scheduled > 0 ? Math.max(8, Math.round((completed / scheduled) * 100)) : 0;
         return (
           <div key={item.monthKey} className="min-w-[70px] flex-1 text-center">
             <div className="flex h-28 items-end justify-center gap-1 rounded-2xl bg-[var(--color-input-bg)] p-2">
-              <div className="w-full rounded-t-xl bg-[var(--color-brand-primary)]" style={{ height: `${height}%` }} />
-              <div className="w-full rounded-t-xl bg-emerald-500/70" style={{ height: `${Math.max(8, Math.round((completed / maxValue) * 100))}%` }} />
+              <div className="w-full rounded-t-xl bg-[var(--color-brand-primary)]" style={{ height: `${scheduledHeight}%` }} />
+              <div className="w-full rounded-t-xl bg-emerald-500/70" style={{ height: `${completedHeight}%` }} />
             </div>
             <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">{item.monthKey.slice(5)}</p>
           </div>
@@ -203,6 +238,17 @@ export default function AIAnalyticsPage() {
     return { value: completed, max: total || 1 };
   }, [overview]);
 
+  const hasAnalyticsData = useMemo(() => {
+    const snapshot = overview?.snapshot ?? {};
+    return Boolean(
+      Object.keys(snapshot).length > 0 ||
+        (overview?.statusBreakdown?.length ?? 0) > 0 ||
+        (overview?.monthlyTrend?.length ?? 0) > 0 ||
+        (vehicles?.vehicles?.length ?? 0) > 0 ||
+        (alerts?.alerts?.length ?? 0) > 0,
+    );
+  }, [overview, vehicles, alerts]);
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -246,14 +292,24 @@ export default function AIAnalyticsPage() {
                   <p className="text-sm text-[var(--color-text-secondary)]">{result.vehicleId}</p>
                 </div>
                 {typeof result.score === "number" ? (
-                  <span className="rounded-full bg-[var(--color-status-info)]/15 px-2.5 py-1 text-xs font-medium text-[var(--color-text-primary)]">{result.score.toFixed(2)}</span>
+                  <span className="rounded-full bg-[var(--color-status-info)]/15 px-2.5 py-1 text-xs font-medium text-[var(--color-text-primary)]">
+                    {Math.round(result.score)}%
+                  </span>
                 ) : null}
               </div>
               <div className="mt-3 flex items-center justify-between text-sm text-[var(--color-text-secondary)]">
                 <span>Status: {result.status}</span>
                 <span className="inline-flex items-center gap-1 font-medium text-[var(--color-brand-primary)]">
-                  Open <ArrowUpRight className="h-3.5 w-3.5" />
+                  Progress <ArrowUpRight className="h-3.5 w-3.5" />
                 </span>
+              </div>
+              <div className="mt-3 h-2 rounded-full bg-[var(--color-input-bg)]">
+                {typeof result.score === "number" && result.score > 0 ? (
+                  <div
+                    className="h-2 rounded-full bg-[var(--color-brand-primary)]"
+                    style={{ width: `${Math.min(100, Math.max(0, result.score))}%` }}
+                  />
+                ) : null}
               </div>
             </div>
           ))}
@@ -263,6 +319,12 @@ export default function AIAnalyticsPage() {
       {loading ? (
         <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-8 text-sm text-[var(--color-text-secondary)]">
           Loading analytics from the backend...
+        </div>
+      ) : null}
+
+      {!loading && !hasAnalyticsData ? (
+        <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-card-bg)] p-8 text-sm text-[var(--color-text-secondary)]">
+          No analytics data is currently available from the backend.
         </div>
       ) : null}
 

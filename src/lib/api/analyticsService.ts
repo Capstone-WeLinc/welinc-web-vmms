@@ -83,70 +83,91 @@ export interface ScheduleSearchResult {
   score?: number;
 }
 
-const fallbackOverview: AnalyticsOverviewResponse = {
+function calculateScheduleProgress(schedule: { status?: string; workOrderProgress?: unknown }): number {
+  const progress = schedule.workOrderProgress;
+
+  if (progress && typeof progress === "object" && !Array.isArray(progress)) {
+    const progressData = progress as Record<string, unknown>;
+    const checklist = Array.isArray(progressData.checklist)
+      ? (progressData.checklist as Array<Record<string, unknown>>)
+      : [];
+
+    if (checklist.length > 0) {
+      const completedItems = checklist.filter((item) => {
+        const status = String(item.status ?? "").toLowerCase();
+        return ["done", "completed", "complete", "pass", "passed", "checked", "finished", "success"].includes(status);
+      }).length;
+
+      return Math.round((completedItems / checklist.length) * 100);
+    }
+
+    const execution = progressData.execution;
+    if (execution && typeof execution === "object" && !Array.isArray(execution)) {
+      const executionData = execution as Record<string, unknown>;
+      const items = Array.isArray(executionData.items)
+        ? (executionData.items as Array<Record<string, unknown>>)
+        : [];
+
+      if (items.length > 0) {
+        const completedItems = items.filter((item) => {
+          const status = String(item.status ?? "").toLowerCase();
+          return ["done", "completed", "complete", "pass", "passed", "checked", "finished", "success"].includes(status);
+        }).length;
+
+        return Math.round((completedItems / items.length) * 100);
+      }
+
+      if (executionData.done === true) {
+        return 100;
+      }
+    }
+  }
+
+  switch (String(schedule.status ?? "").toUpperCase()) {
+    case "COMPLETED":
+      return 100;
+    case "IN_PROGRESS":
+      return 60;
+    case "OVERDUE":
+      return 35;
+    case "DUE":
+      return 20;
+    default:
+      return 0;
+  }
+}
+
+const emptyOverview: AnalyticsOverviewResponse = {
   dataSource: {
-    type: "LOCAL_FALLBACK",
-    authoritativeFor: "PREPARED_ANALYTICS_AND_REPORTING",
-    generatedAt: new Date().toISOString(),
+    type: "UNAVAILABLE",
+    authoritativeFor: "",
+    generatedAt: "",
     sourceMaxUpdatedAt: null,
-    ageSeconds: 0,
-    isStale: false,
-    maxAgeMinutes: 1440,
+    ageSeconds: null,
+    isStale: true,
+    maxAgeMinutes: 0,
   },
-  snapshot: {
-    totalVehicles: 14,
-    totalSchedules: 28,
-    pendingSchedules: 8,
-    dueSchedules: 4,
-    inProgressSchedules: 3,
-    completedSchedules: 9,
-    overdueSchedules: 4,
-    totalMaintenanceCost: 125000,
-  },
-  statusBreakdown: [
-    { status: "PENDING", scheduleCount: 8, percentage: 29 },
-    { status: "DUE", scheduleCount: 4, percentage: 14 },
-    { status: "IN_PROGRESS", scheduleCount: 3, percentage: 11 },
-    { status: "COMPLETED", scheduleCount: 9, percentage: 32 },
-    { status: "OVERDUE", scheduleCount: 4, percentage: 14 },
-  ],
-  monthlyTrend: [
-    { monthKey: "2026-01", scheduledCount: 6, completedCount: 4, activeCount: 2, overdueCount: 1, maintenanceCost: 32000 },
-    { monthKey: "2026-02", scheduledCount: 7, completedCount: 5, activeCount: 3, overdueCount: 1, maintenanceCost: 38000 },
-    { monthKey: "2026-03", scheduledCount: 8, completedCount: 6, activeCount: 4, overdueCount: 2, maintenanceCost: 42000 },
-  ],
+  snapshot: {},
+  statusBreakdown: [],
+  monthlyTrend: [],
 };
 
-const fallbackAlerts: AnalyticsAlertResponse = {
-  dataSource: fallbackOverview.dataSource,
-  alerts: [
-    {
-      alertId: "ALERT-001",
-      severity: "HIGH",
-      alertType: "OVERDUE",
-      maintenanceTitle: "Brake inspection",
-      message: "Brake inspection is overdue for Truck Alpha.",
-      recommendedAction: "Assign a mechanic immediately.",
-      dueDate: new Date().toISOString(),
-    },
-    {
-      alertId: "ALERT-002",
-      severity: "MEDIUM",
-      alertType: "UPCOMING",
-      maintenanceTitle: "Oil change",
-      message: "Oil change is due in the next 7 days.",
-      recommendedAction: "Schedule the service window.",
-      dueDate: new Date().toISOString(),
-    },
-  ],
+const emptyVehicles: AnalyticsVehicleResponse = {
+  dataSource: emptyOverview.dataSource,
+  vehicles: [],
+};
+
+const emptyAlerts: AnalyticsAlertResponse = {
+  dataSource: emptyOverview.dataSource,
+  alerts: [],
 };
 
 export async function getAnalyticsOverview(): Promise<AnalyticsOverviewResponse> {
   try {
     return await fetchJSON<AnalyticsOverviewResponse>("/vmms/analytics/overview");
   } catch (error) {
-    console.warn("Analytics overview unavailable, using fallback data.", error);
-    return fallbackOverview;
+    console.warn("Analytics overview unavailable.", error);
+    return emptyOverview;
   }
 }
 
@@ -154,29 +175,8 @@ export async function getAnalyticsVehicles(): Promise<AnalyticsVehicleResponse> 
   try {
     return await fetchJSON<AnalyticsVehicleResponse>("/vmms/analytics/vehicles");
   } catch (error) {
-    console.warn("Analytics vehicle KPIs unavailable, using fallback data.", error);
-    return {
-      dataSource: fallbackOverview.dataSource,
-      vehicles: [
-        {
-          vehicleId: "V-001",
-          plateNumber: "ABC 1234",
-          vehicleModel: "Isuzu FVZ",
-          vehicleStatus: "AVAILABLE",
-          currentOdometer: 126500,
-          totalSchedules: 5,
-          activeSchedules: 2,
-          completedSchedules: 3,
-          overdueSchedules: 0,
-          dueWithin7Days: 1,
-          maintenanceCost: 18000,
-          completionRate: 60,
-          latestMaintenanceDate: new Date().toISOString(),
-          nextDueDate: new Date().toISOString(),
-          riskLevel: "MEDIUM",
-        },
-      ],
-    };
+    console.warn("Analytics vehicle KPIs unavailable.", error);
+    return emptyVehicles;
   }
 }
 
@@ -184,8 +184,8 @@ export async function getAnalyticsAlerts(): Promise<AnalyticsAlertResponse> {
   try {
     return await fetchJSON<AnalyticsAlertResponse>("/vmms/analytics/alerts");
   } catch (error) {
-    console.warn("Analytics alerts unavailable, using fallback data.", error);
-    return fallbackAlerts;
+    console.warn("Analytics alerts unavailable.", error);
+    return emptyAlerts;
   }
 }
 
@@ -193,9 +193,9 @@ export async function getAnalyticsReport(): Promise<AnalyticsReportResponse> {
   try {
     return await fetchJSON<AnalyticsReportResponse>("/vmms/analytics/report");
   } catch (error) {
-    console.warn("Analytics report unavailable, using fallback data.", error);
+    console.warn("Analytics report unavailable.", error);
     return {
-      ...fallbackOverview,
+      ...emptyOverview,
       vehicles: [],
       alerts: [],
       schedules: [],
@@ -210,16 +210,10 @@ export async function searchMaintenanceSchedules(query: string, limit = 8): Prom
   }
 
   try {
-    const results = await fetchJSON<ScheduleSearchResult[]>(
-      `/maintenance-schedules/search?q=${encodeURIComponent(trimmedQuery)}&limit=${limit}`,
-    );
-    return results;
-  } catch (error) {
-    console.warn("Schedule search endpoint unavailable, falling back to local search.", error);
     const schedules = await getMaintenanceSchedules();
     const normalizedQuery = trimmedQuery.toLowerCase();
 
-    const fallbackResults = schedules
+    return schedules
       .filter((schedule) => {
         const haystack = [
           schedule.title,
@@ -256,9 +250,10 @@ export async function searchMaintenanceSchedules(query: string, limit = 8): Prom
         startReferenceDate: schedule.startReferenceDate ?? null,
         previousScheduleId: null,
         workOrderProgress: schedule.workOrderProgress ?? null,
-        score: 1,
+        score: calculateScheduleProgress(schedule),
       }));
-
-    return fallbackResults;
+  } catch (error) {
+    console.warn("Schedule search is unavailable.", error);
+    return [];
   }
 }
