@@ -322,11 +322,7 @@ function App() {
                 isAuthenticated={isAuthenticated}
                 location={location}
               >
-                <PlaceholderPage
-                  icon={FileBarChart2}
-                  title="Maintenance Reports"
-                  subtitle="Generate and view maintenance analytics"
-                />
+                <AIAnalyticsPage initialTab="report" />
               </RequireAuthWrapper>
             }
           />

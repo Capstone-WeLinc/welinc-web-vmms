@@ -1,16 +1,46 @@
-import { useEffect, useMemo, useState } from "react";
-import { BrainCircuit, Search, TrendingUp, AlertTriangle, ShieldCheck, Activity, Sparkles, ArrowUpRight } from "lucide-react";
-import PageHeader from "../../components/PageHeader/PageHeader";
-import { Card } from "../../components/ui";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  BrainCircuit,
+  Search,
+  TrendingUp,
+  AlertTriangle,
+  ShieldCheck,
+  Activity,
+  Sparkles,
+  ArrowUpRight,
+  RefreshCw,
+  FileText,
+  Filter,
+  AlertOctagon,
+  Download,
+  Server,
+  Car,
+  Clock,
+  Layers,
+  Wrench,
+  CheckCircle2,
+} from "lucide-react";
+import PageHeader from "../../components/PageHeader/PageHeader";
+import { Card, Button, Badge } from "../../components/ui";
+import {
+  getAnalyticsHealth,
   getAnalyticsOverview,
   getAnalyticsVehicles,
   getAnalyticsAlerts,
+  getAnalyticsInsights,
+  getAnalyticsReport,
   searchMaintenanceSchedules,
+  type AnalyticsHealthResponse,
   type AnalyticsOverviewResponse,
   type AnalyticsVehicleResponse,
+  type AnalyticsVehicle,
   type AnalyticsAlertResponse,
+  type AnalyticsAlert,
+  type AnalyticsInsightsResponse,
+  type AnalyticsReportResponse,
+  type ScheduleSearchResult,
 } from "../../lib/api/analyticsService";
+import { formatWorkOrderNumber } from "../../lib/utils/workOrders";
 
 const formatValue = (value: unknown) => {
   if (typeof value === "number") {
@@ -25,7 +55,7 @@ const formatValue = (value: unknown) => {
 const formatDate = (value?: string | null) => {
   if (!value) return "—";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
+  if (Number.isNaN(date.getTime())) return String(value);
   return new Intl.DateTimeFormat("en", {
     month: "short",
     day: "numeric",
@@ -33,54 +63,151 @@ const formatDate = (value?: string | null) => {
   }).format(date);
 };
 
+/** Inline bold: **text** → <strong>text</strong> */
+function renderInline(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  if (parts.length === 1) return text;
+  return parts.map((part, i) =>
+    part.startsWith("**") && part.endsWith("**")
+      ? <strong key={i} className="font-semibold text-[var(--color-text-primary)]">{part.slice(2, -2)}</strong>
+      : part
+  );
+}
+
+type AiBlock =
+  | { kind: "heading"; text: string }
+  | { kind: "paragraph"; text: string }
+  | { kind: "bullet"; items: string[] }
+  | { kind: "numbered"; items: string[] };
+
+function parseAiSummary(raw: string): AiBlock[] {
+  // Normalise line endings and strip markdown heading hashes
+  const text = raw
+    .replace(/\r\n?/g, "\n")
+    .replace(/^#{1,6}\s+/gm, "")
+    .trim();
+
+  const lines = text.split("\n");
+  const blocks: AiBlock[] = [];
+
+  let bulletAccum: string[] = [];
+  let numberedAccum: string[] = [];
+
+  const flushBullet = () => {
+    if (bulletAccum.length) { blocks.push({ kind: "bullet", items: [...bulletAccum] }); bulletAccum = []; }
+  };
+  const flushNumbered = () => {
+    if (numberedAccum.length) { blocks.push({ kind: "numbered", items: [...numberedAccum] }); numberedAccum = []; }
+  };
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue; // treat blank lines as visual breaks only
+
+    // Numbered list item: "1. …" or "1) …"
+    const numberedMatch = line.match(/^\d+[\).]\s+(.+)/);
+    if (numberedMatch) {
+      flushBullet();
+      numberedAccum.push(numberedMatch[1]);
+      continue;
+    }
+
+    // Bullet list item: "- …" or "* …" or "• …"
+    const bulletMatch = line.match(/^[-*•]\s+(.+)/);
+    if (bulletMatch) {
+      flushNumbered();
+      bulletAccum.push(bulletMatch[1]);
+      continue;
+    }
+
+    // Anything else — flush lists first
+    flushBullet();
+    flushNumbered();
+
+    // Detect inline section heading patterns: ends with ":" and is short, or is ALL-CAPS short phrase
+    const isHeading =
+      (line.endsWith(":") && line.length < 80 && !line.includes(".")) ||
+      /^[A-Z][A-Z\s\d&/–-]{4,}$/.test(line);
+
+    if (isHeading) {
+      blocks.push({ kind: "heading", text: line.replace(/:$/, "") });
+    } else {
+      blocks.push({ kind: "paragraph", text: line });
+    }
+  }
+
+  flushBullet();
+  flushNumbered();
+
+  return blocks;
+}
+
+function renderAiSummary(summary?: string) {
+  if (!summary?.trim()) {
+    return (
+      <p className="text-sm text-[var(--color-text-secondary)]">No AI insights available.</p>
+    );
+  }
+
+  const blocks = parseAiSummary(summary);
+
+  return (
+    <div className="space-y-3">
+      {blocks.map((block, i) => {
+        if (block.kind === "heading") {
+          return (
+            <p key={i} className={`${i > 0 ? "pt-2" : ""} text-xs font-bold uppercase tracking-wider text-[var(--color-brand-primary)]`}>
+              {block.text}
+            </p>
+          );
+        }
+
+        if (block.kind === "numbered") {
+          return (
+            <ol key={i} className="space-y-1.5 pl-4 text-sm leading-relaxed text-[var(--color-text-secondary)]" style={{ listStyleType: "decimal" }}>
+              {block.items.map((item, j) => (
+                <li key={j}>{renderInline(item)}</li>
+              ))}
+            </ol>
+          );
+        }
+
+        if (block.kind === "bullet") {
+          return (
+            <ul key={i} className="space-y-1.5 pl-4 text-sm leading-relaxed text-[var(--color-text-secondary)]" style={{ listStyleType: "disc" }}>
+              {block.items.map((item, j) => (
+                <li key={j}>{renderInline(item)}</li>
+              ))}
+            </ul>
+          );
+        }
+
+        // paragraph
+        return (
+          <p key={i} className="text-sm leading-relaxed text-[var(--color-text-secondary)]">
+            {renderInline(block.text)}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 function MetricTile({ label, value, hint, icon: Icon }: { label: string; value: string; hint: string; icon: typeof Activity }) {
   return (
     <Card className="p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm text-[var(--color-text-secondary)]">{label}</p>
-          <p className="mt-3 text-2xl font-semibold text-[var(--color-text-primary)]">{value}</p>
-          <p className="mt-2 text-sm text-[var(--color-text-secondary)]">{hint}</p>
+          <p className="mt-3 text-2xl font-bold text-[var(--color-text-primary)]">{value}</p>
+          <p className="mt-2 text-xs text-[var(--color-text-secondary)]">{hint}</p>
         </div>
-        <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-2.5 text-[var(--color-brand-primary)]">
+        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-2.5 text-[var(--color-brand-primary)]">
           <Icon className="h-5 w-5" />
         </div>
       </div>
     </Card>
   );
-}
-
-function parseNumericValue(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string") {
-    const parsed = Number(value.replace(/[^\d.-]/g, ""));
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
-function resolveProgressPercentage(item: Record<string, unknown>, totalCount?: number): number {
-  const candidateKeys = ["percentage", "percent", "progress", "progressPercent", "completionRate", "completion", "score", "value", "ratio"];
-
-  for (const key of candidateKeys) {
-    const value = parseNumericValue(item[key]);
-    if (value === null) continue;
-    if (value > 0 && value <= 1) {
-      return Math.round(value * 100);
-    }
-    if (value > 0 && value <= 100) {
-      return Math.round(value);
-    }
-  }
-
-  const countValue = parseNumericValue(item.scheduleCount) ?? parseNumericValue(item.count) ?? parseNumericValue(item.totalCount);
-  if (typeof totalCount === "number" && totalCount > 0 && countValue !== null) {
-    return Math.round((countValue / totalCount) * 100);
-  }
-
-  return 0;
 }
 
 function StatusBars({ items }: { items: Array<{ status: string; percentage?: number; scheduleCount?: number }> }) {
@@ -94,17 +221,22 @@ function StatusBars({ items }: { items: Array<{ status: string; percentage?: num
   return (
     <div className="space-y-3">
       {normalizedItems.map((item) => {
-        const record = item as unknown as Record<string, unknown>;
-        const displayPercentage = resolveProgressPercentage(record, totalCount);
-        const width = displayPercentage > 0 ? displayPercentage : 0;
+        const displayPercentage = totalCount > 0 ? Math.round((item.scheduleCount / totalCount) * 100) : item.percentage;
+        const width = Math.min(100, Math.max(0, displayPercentage));
+
+        let badgeColor = "bg-[var(--color-brand-primary)]";
+        if (item.status.toUpperCase() === "OVERDUE") badgeColor = "bg-rose-500";
+        if (item.status.toUpperCase() === "COMPLETED") badgeColor = "bg-emerald-500";
+        if (item.status.toUpperCase() === "IN_PROGRESS") badgeColor = "bg-amber-500";
+
         return (
           <div key={item.status}>
             <div className="mb-1 flex items-center justify-between text-sm">
               <span className="font-medium text-[var(--color-text-primary)]">{item.status}</span>
-              <span className="text-[var(--color-text-secondary)]">{displayPercentage}%</span>
+              <span className="text-[var(--color-text-secondary)]">{item.scheduleCount} ({displayPercentage}%)</span>
             </div>
             <div className="h-2.5 rounded-full bg-[var(--color-input-bg)]">
-              <div className="h-2.5 rounded-full bg-[var(--color-brand-primary)]" style={{ width: `${width}%` }} />
+              <div className={`h-2.5 rounded-full ${badgeColor}`} style={{ width: `${width}%` }} />
             </div>
           </div>
         );
@@ -131,10 +263,10 @@ function TrendBars({ items }: { items: Array<{ monthKey: string; scheduledCount?
         const scheduledHeight = Math.max(24, Math.round((scheduled / maxScheduled) * 100));
         const completedHeight = scheduled > 0 ? Math.max(8, Math.round((completed / scheduled) * 100)) : 0;
         return (
-          <div key={item.monthKey} className="min-w-[70px] flex-1 text-center">
-            <div className="flex h-28 items-end justify-center gap-1 rounded-2xl bg-[var(--color-input-bg)] p-2">
-              <div className="w-full rounded-t-xl bg-[var(--color-brand-primary)]" style={{ height: `${scheduledHeight}%` }} />
-              <div className="w-full rounded-t-xl bg-emerald-500/70" style={{ height: `${completedHeight}%` }} />
+          <div key={item.monthKey} className="min-w-[75px] flex-1 text-center">
+            <div className="flex h-28 items-end justify-center gap-1.5 rounded-xl bg-[var(--color-input-bg)] p-2">
+              <div className="w-full rounded-t-md bg-[var(--color-brand-primary)]" style={{ height: `${scheduledHeight}%` }} title={`Scheduled: ${scheduled}`} />
+              <div className="w-full rounded-t-md bg-emerald-500/80" style={{ height: `${completedHeight}%` }} title={`Completed: ${completed}`} />
             </div>
             <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">{item.monthKey.slice(5)}</p>
           </div>
@@ -144,55 +276,65 @@ function TrendBars({ items }: { items: Array<{ monthKey: string; scheduledCount?
   );
 }
 
-function DonutChart({ value, max, label }: { value: number; max: number; label: string }) {
-  const percentage = max ? Math.min(100, Math.round((value / max) * 100)) : 0;
-  return (
-    <div className="flex items-center gap-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
-      <div
-        className="flex h-16 w-16 items-center justify-center rounded-full border-[8px] border-[var(--color-input-bg)]"
-        style={{ background: `conic-gradient(var(--color-brand-primary) ${percentage}%, rgba(148,163,184,0.2) 0)` }}
-      >
-        <span className="text-sm font-semibold text-[var(--color-text-primary)]">{percentage}%</span>
-      </div>
-      <div>
-        <p className="text-sm font-semibold text-[var(--color-text-primary)]">{label}</p>
-        <p className="text-sm text-[var(--color-text-secondary)]">{value} / {max}</p>
-      </div>
-    </div>
-  );
-}
-
-export default function AIAnalyticsPage() {
+export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTab?: "overview" | "vehicles" | "alerts" | "report" }) {
+  const [activeTab, setActiveTab] = useState<"overview" | "vehicles" | "alerts" | "report">(initialTab);
+  const [health, setHealth] = useState<AnalyticsHealthResponse | null>(null);
   const [overview, setOverview] = useState<AnalyticsOverviewResponse | null>(null);
   const [vehicles, setVehicles] = useState<AnalyticsVehicleResponse | null>(null);
   const [alerts, setAlerts] = useState<AnalyticsAlertResponse | null>(null);
+  const [aiInsights, setAiInsights] = useState<AnalyticsInsightsResponse | null>(null);
+  const [fullReport, setFullReport] = useState<AnalyticsReportResponse | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<Array<{ id: string; title: string; vehicleId: string; status: string; score?: number }>>([]);
+  const [searchResults, setSearchResults] = useState<ScheduleSearchResult[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshingInsights, setRefreshingInsights] = useState(false);
+  const [vehicleRiskFilter, setVehicleRiskFilter] = useState<"ALL" | "HIGH" | "MEDIUM" | "LOW">("ALL");
+  const [vehicleSearch, setVehicleSearch] = useState("");
+  const [alertSeverityFilter, setAlertSeverityFilter] = useState<"ALL" | "HIGH" | "MEDIUM" | "LOW">("ALL");
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [healthData, overviewData, vehicleData, alertsData, aiInsightsData, reportData] = await Promise.all([
+        getAnalyticsHealth(),
+        getAnalyticsOverview(),
+        getAnalyticsVehicles(),
+        getAnalyticsAlerts(),
+        getAnalyticsInsights(),
+        getAnalyticsReport(),
+      ]);
+      setHealth(healthData);
+      setOverview(overviewData);
+      setVehicles(vehicleData);
+      setAlerts(alertsData);
+      setAiInsights(aiInsightsData);
+      setFullReport(reportData);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const [overviewData, vehicleData, alertsData] = await Promise.all([
-          getAnalyticsOverview(),
-          getAnalyticsVehicles(),
-          getAnalyticsAlerts(),
-        ]);
-        setOverview(overviewData);
-        setVehicles(vehicleData);
-        setAlerts(alertsData);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    void load();
+    void loadData();
   }, []);
+
+  const handleRefreshInsights = async () => {
+    setRefreshingInsights(true);
+    try {
+      const insightsData = await getAnalyticsInsights();
+      setAiInsights(insightsData);
+    } finally {
+      setRefreshingInsights(false);
+    }
+  };
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       void (async () => {
+        if (!searchQuery.trim()) {
+          setSearchResults([]);
+          return;
+        }
         const results = await searchMaintenanceSchedules(searchQuery, 6);
         setSearchResults(results);
       })();
@@ -201,234 +343,657 @@ export default function AIAnalyticsPage() {
     return () => window.clearTimeout(timeout);
   }, [searchQuery]);
 
+  const snapshot = overview?.snapshot ?? {};
+  const summaryMetrics = overview?.summaryMetrics;
+  const forecast = overview?.forecast;
+  const anomalies = overview?.anomalies;
+  const trends = overview?.trends;
+
   const stats = useMemo(() => {
-    const snapshot = overview?.snapshot ?? {};
     return [
       {
-        label: "Fleet vehicles",
+        label: "Total Vehicles",
         value: formatValue(snapshot.totalVehicles),
-        hint: "Tracked assets",
-        icon: Activity,
+        hint: `Active Fleet Rate: ${summaryMetrics?.activeFleetRate ?? 0}%`,
+        icon: Car,
       },
       {
-        label: "Active schedules",
-        value: formatValue(snapshot.totalSchedules),
-        hint: "Scheduled work",
-        icon: TrendingUp,
+        label: "Total Maintenance Cost",
+        value: snapshot.totalMaintenanceCost !== undefined ? `$${Number(snapshot.totalMaintenanceCost).toLocaleString()}` : "—",
+        hint: `Avg/Vehicle: $${summaryMetrics?.avgCostPerVehicle ?? 0}`,
+        icon: ShieldCheck,
       },
       {
-        label: "Overdue items",
+        label: "Overdue Schedules",
         value: formatValue(snapshot.overdueSchedules),
-        hint: "Needs attention",
+        hint: `Overdue Rate: ${summaryMetrics?.overdueRate ?? 0}%`,
         icon: AlertTriangle,
       },
       {
-        label: "Maintenance cost",
-        value: formatValue(snapshot.totalMaintenanceCost),
-        hint: "Estimated spend",
-        icon: ShieldCheck,
+        label: "Completion Rate",
+        value: snapshot.completionRate !== undefined ? `${snapshot.completionRate}%` : "—",
+        hint: `Due in 7 days: ${forecast?.dueIn7Days ?? snapshot.dueWithin7Days ?? 0}`,
+        icon: TrendingUp,
       },
     ];
-  }, [overview]);
+  }, [snapshot, summaryMetrics, forecast]);
 
-  const completionRatio = useMemo(() => {
-    const snapshot = overview?.snapshot ?? {};
-    const total = Number(snapshot.totalSchedules ?? 0);
-    const completed = Number(snapshot.completedSchedules ?? 0);
-    return { value: completed, max: total || 1 };
-  }, [overview]);
+  const filteredVehicles = useMemo(() => {
+    let list = vehicles?.vehicles ?? [];
+    if (vehicleRiskFilter !== "ALL") {
+      list = list.filter((v) => String(v.riskLevel).toUpperCase() === vehicleRiskFilter);
+    }
+    if (vehicleSearch.trim()) {
+      const q = vehicleSearch.toLowerCase();
+      list = list.filter(
+        (v) =>
+          String(v.plateNumber ?? "").toLowerCase().includes(q) ||
+          String(v.vehicleModel ?? "").toLowerCase().includes(q) ||
+          String(v.riskReason ?? "").toLowerCase().includes(q),
+      );
+    }
+    return list;
+  }, [vehicles, vehicleRiskFilter, vehicleSearch]);
 
-  const hasAnalyticsData = useMemo(() => {
-    const snapshot = overview?.snapshot ?? {};
-    return Boolean(
-      Object.keys(snapshot).length > 0 ||
-        (overview?.statusBreakdown?.length ?? 0) > 0 ||
-        (overview?.monthlyTrend?.length ?? 0) > 0 ||
-        (vehicles?.vehicles?.length ?? 0) > 0 ||
-        (alerts?.alerts?.length ?? 0) > 0,
-    );
-  }, [overview, vehicles, alerts]);
+  const filteredAlerts = useMemo(() => {
+    let list = alerts?.alerts ?? [];
+    if (alertSeverityFilter !== "ALL") {
+      list = list.filter((a) => String(a.severity).toUpperCase() === alertSeverityFilter);
+    }
+    return list;
+  }, [alerts, alertSeverityFilter]);
+
+  const handleExportJson = () => {
+    if (!fullReport) return;
+    const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(fullReport, null, 2))}`;
+    const downloadAnchor = document.createElement("a");
+    downloadAnchor.setAttribute("href", jsonString);
+    downloadAnchor.setAttribute("download", `analytics_report_${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        icon={BrainCircuit}
-        title="AI / ANALYTICS"
-        subtitle="Operational intelligence from the backend analytics data mart and smart schedule search"
-      />
+      {/* Page Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <PageHeader
+          icon={BrainCircuit}
+          title="AI / ANALYTICS & FLEET INTELLIGENCE"
+          subtitle="Real-time operational analytics, predictive maintenance forecasts, risk assessment, and DuckDB search"
+        />
 
-      <Card className="overflow-hidden border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-card-bg)] to-[var(--color-input-bg)] p-6">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-1 text-sm text-[var(--color-text-secondary)]">
-              <Sparkles className="h-4 w-4 text-[var(--color-brand-primary)]" />
-              AI-powered fleet insights
-            </div>
-            <h2 className="mt-3 text-xl font-semibold text-[var(--color-text-primary)]">Semantic schedule search</h2>
-            <p className="mt-2 text-sm text-[var(--color-text-secondary)]">Search maintenance schedules by title, vehicle, mechanic, or status using the backend search flow.</p>
+        {/* Microservice Health Status Badge */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-2 text-xs font-semibold shadow-sm">
+            <Server className="h-4 w-4 text-[var(--color-brand-primary)]" />
+            <span>Service: {health?.service ?? "analytics-ai"}</span>
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                health?.status === "ok" ? "bg-emerald-500/15 text-emerald-500" : "bg-amber-500/15 text-amber-500"
+              }`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${health?.status === "ok" ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
+              {health?.status === "ok" ? "Online" : "Connecting"}
+            </span>
+            <span className="text-[var(--color-text-secondary)]">:{health?.port ?? 3001}</span>
           </div>
-          <div className="relative w-full max-w-xl">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" />
-            <input
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Try “brake”, “oil”, or a vehicle plate"
-              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2.5 pl-10 pr-3 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
-            />
-          </div>
-        </div>
 
-        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {searchResults.length === 0 && searchQuery.trim() ? (
-            <div className="rounded-xl border border-dashed border-[var(--color-border)] p-4 text-sm text-[var(--color-text-secondary)] md:col-span-2 xl:col-span-3">
-              No schedule matches for that query yet.
-            </div>
-          ) : null}
-          {searchResults.map((result) => (
-            <div key={result.id} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold text-[var(--color-text-primary)]">{result.title}</p>
-                  <p className="text-sm text-[var(--color-text-secondary)]">{result.vehicleId}</p>
-                </div>
-                {typeof result.score === "number" ? (
-                  <span className="rounded-full bg-[var(--color-status-info)]/15 px-2.5 py-1 text-xs font-medium text-[var(--color-text-primary)]">
-                    {Math.round(result.score)}%
-                  </span>
-                ) : null}
-              </div>
-              <div className="mt-3 flex items-center justify-between text-sm text-[var(--color-text-secondary)]">
-                <span>Status: {result.status}</span>
-                <span className="inline-flex items-center gap-1 font-medium text-[var(--color-brand-primary)]">
-                  Progress <ArrowUpRight className="h-3.5 w-3.5" />
-                </span>
-              </div>
-              <div className="mt-3 h-2 rounded-full bg-[var(--color-input-bg)]">
-                {typeof result.score === "number" && result.score > 0 ? (
-                  <div
-                    className="h-2 rounded-full bg-[var(--color-brand-primary)]"
-                    style={{ width: `${Math.min(100, Math.max(0, result.score))}%` }}
-                  />
-                ) : null}
-              </div>
-            </div>
-          ))}
+          <Button variant="outline" size="sm" onClick={() => void loadData()} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          </Button>
         </div>
-      </Card>
+      </div>
+
+      {/* Navigation Tabs */}
+      <div className="flex flex-wrap gap-2 border-b border-[var(--color-border)] pb-2">
+        <button
+          onClick={() => setActiveTab("overview")}
+          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+            activeTab === "overview"
+              ? "bg-[var(--color-brand-primary)] text-white shadow-sm"
+              : "bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+          }`}
+        >
+          <Layers className="h-4 w-4" />
+          Overview & Intelligence
+        </button>
+        <button
+          onClick={() => setActiveTab("vehicles")}
+          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+            activeTab === "vehicles"
+              ? "bg-[var(--color-brand-primary)] text-white shadow-sm"
+              : "bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+          }`}
+        >
+          <Car className="h-4 w-4" />
+          Vehicle Risk Matrix ({vehicles?.vehicles?.length ?? 0})
+        </button>
+        <button
+          onClick={() => setActiveTab("alerts")}
+          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+            activeTab === "alerts"
+              ? "bg-[var(--color-brand-primary)] text-white shadow-sm"
+              : "bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+          }`}
+        >
+          <AlertOctagon className="h-4 w-4" />
+          Priority Alerts ({alerts?.alerts?.length ?? 0})
+        </button>
+        <button
+          onClick={() => setActiveTab("report")}
+          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+            activeTab === "report"
+              ? "bg-[var(--color-brand-primary)] text-white shadow-sm"
+              : "bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+          }`}
+        >
+          <FileText className="h-4 w-4" />
+          Full Report & Export
+        </button>
+      </div>
 
       {loading ? (
-        <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-8 text-sm text-[var(--color-text-secondary)]">
-          Loading analytics from the backend...
-        </div>
-      ) : null}
-
-      {!loading && !hasAnalyticsData ? (
-        <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-card-bg)] p-8 text-sm text-[var(--color-text-secondary)]">
-          No analytics data is currently available from the backend.
-        </div>
-      ) : null}
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {stats.map((stat) => (
-          <MetricTile key={stat.label} label={stat.label} value={stat.value} hint={stat.hint} icon={stat.icon} />
-        ))}
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-        <Card className="p-6">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-semibold text-[var(--color-text-primary)]">Maintenance trend</h3>
-              <p className="text-sm text-[var(--color-text-secondary)]">Recent monthly cycle across scheduled, completed, and overdue work.</p>
-            </div>
-            <div className="rounded-full bg-[var(--color-status-success)]/15 px-3 py-1 text-sm font-medium text-emerald-600">Improving</div>
-          </div>
-          <TrendBars items={(overview?.monthlyTrend ?? []).map((item) => ({
-            monthKey: String((item as Record<string, unknown>).monthKey ?? "Unknown"),
-            scheduledCount: Number((item as Record<string, unknown>).scheduledCount ?? 0),
-            completedCount: Number((item as Record<string, unknown>).completedCount ?? 0),
-            activeCount: Number((item as Record<string, unknown>).activeCount ?? 0),
-            overdueCount: Number((item as Record<string, unknown>).overdueCount ?? 0),
-          }))} />
-        </Card>
-
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-[var(--color-text-primary)]">Status distribution</h3>
-          <p className="mt-1 text-sm text-[var(--color-text-secondary)]">How the fleet maintenance workload is currently segmented.</p>
-          <div className="mt-5">
-            <StatusBars items={(overview?.statusBreakdown ?? []).map((item) => ({
-              status: String((item as Record<string, unknown>).status ?? "Unknown"),
-              percentage: Number((item as Record<string, unknown>).percentage ?? (item as Record<string, unknown>).scheduleCount ?? 0),
-              scheduleCount: Number((item as Record<string, unknown>).scheduleCount ?? 0),
-            }))} />
+        <Card className="p-8 text-center text-sm text-[var(--color-text-secondary)]">
+          <div className="flex items-center justify-center gap-3">
+            <RefreshCw className="h-5 w-5 animate-spin text-[var(--color-brand-primary)]" />
+            <span>Fetching analytics data from microservice (port 3001)...</span>
           </div>
         </Card>
-      </div>
+      ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[0.75fr_1.25fr]">
-        <div className="space-y-4">
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-[var(--color-text-primary)]">Completion health</h3>
-            <div className="mt-4 space-y-3">
-              <DonutChart value={completionRatio.value} max={completionRatio.max} label="Completed schedules" />
-              <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 text-sm text-[var(--color-text-secondary)]">
-                Average response window is trending well with fewer overdue items than the previous cycle.
-              </div>
-            </div>
-          </Card>
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-[var(--color-text-primary)]">Data freshness</h3>
-            <p className="mt-2 text-sm text-[var(--color-text-secondary)]">Last generated {formatDate(overview?.dataSource?.generatedAt as string | undefined)}</p>
-            <div className="mt-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 text-sm text-[var(--color-text-secondary)]">
-              Source: {String(overview?.dataSource?.type ?? "—")}
-            </div>
-          </Card>
-        </div>
-
-        <Card className="p-6">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-semibold text-[var(--color-text-primary)]">Priority alerts</h3>
-              <p className="text-sm text-[var(--color-text-secondary)]">The most urgent maintenance follow-ups for the next window.</p>
-            </div>
-            <span className="rounded-full bg-amber-500/15 px-3 py-1 text-sm font-medium text-amber-700">{alerts?.alerts?.length ?? 0} active</span>
-          </div>
-          <div className="mt-4 space-y-3">
-            {(alerts?.alerts ?? []).map((alert) => (
-              <div key={String(alert.alertId)} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-[var(--color-text-primary)]">{String(alert.maintenanceTitle)}</p>
-                    <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{String(alert.message)}</p>
-                  </div>
-                  <span className="rounded-full bg-[var(--color-status-info)]/15 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-primary)]">{String(alert.severity)}</span>
+      {/* OVERVIEW & INTELLIGENCE TAB */}
+      {!loading && activeTab === "overview" && (
+        <div className="space-y-6">
+          {/* AI Operational Report — full-width premium card */}
+          <Card className="overflow-hidden border border-[var(--color-border)] p-0 shadow-sm">
+            {/* Card header bar */}
+            <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-gradient-to-r from-[var(--color-card-bg)] to-[var(--color-input-bg)] px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)]">
+                  <Sparkles className="h-4 w-4" />
                 </div>
-                <p className="mt-3 text-sm text-[var(--color-text-secondary)]">Recommended action: {String(alert.recommendedAction ?? "Review the work order")}</p>
+                <div>
+                  <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">AI Operational Report</h3>
+                  <p className="text-xs text-[var(--color-text-secondary)]">Automated fleet intelligence analysis generated from DuckDB analytics mart</p>
+                </div>
               </div>
+              <button
+                onClick={() => void handleRefreshInsights()}
+                disabled={refreshingInsights}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-brand-primary)] hover:text-[var(--color-brand-primary)] disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${refreshingInsights ? "animate-spin" : ""}`} />
+                {refreshingInsights ? "Generating…" : "Refresh"}
+              </button>
+            </div>
+
+            {/* Report body */}
+            <div className="px-6 py-5">
+              {refreshingInsights ? (
+                <div className="flex items-center gap-3 py-6 text-sm text-[var(--color-text-secondary)]">
+                  <RefreshCw className="h-4 w-4 animate-spin text-[var(--color-brand-primary)]" />
+                  Generating new AI analysis from fleet data…
+                </div>
+              ) : (
+                <div className="prose prose-sm max-w-none text-[var(--color-text-secondary)]">
+                  {renderAiSummary(typeof aiInsights === "string" ? aiInsights : aiInsights?.aiSummary)}
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* DuckDB Schedule Search — standalone card */}
+          <Card className="border border-[var(--color-border)] p-6 shadow-sm">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)]">
+                  <Search className="h-4 w-4 text-[var(--color-brand-primary)]" />
+                  Schedule Search
+                </h3>
+                <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">Search maintenance schedules by title, vehicle plate, mechanic, or status via the backend datamart.</p>
+              </div>
+              <div className="relative w-full max-w-sm flex-shrink-0">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" />
+                <input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Try 'brake', 'oil', or plate number…"
+                  className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2.5 pl-10 pr-3 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Search Results */}
+            {searchResults.length > 0 && (
+              <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {searchResults.map((res) => (
+                  <div
+                    key={res.id}
+                    className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)]/50 p-3 text-xs transition-colors hover:border-[var(--color-brand-primary)]/40 hover:bg-[var(--color-input-bg)]"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-semibold leading-snug text-[var(--color-text-primary)]">{res.title}</span>
+                      <span className="shrink-0 rounded-md bg-[var(--color-brand-primary)]/12 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-brand-primary)]">
+                        {res.status}
+                      </span>
+                    </div>
+                    <div className="mt-2 space-y-1 text-[var(--color-text-secondary)]">
+                      <div className="flex items-center gap-1">
+                        <Car className="h-3 w-3 shrink-0" />
+                        {res.vehicleId}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Wrench className="h-3 w-3 shrink-0" />
+                        {res.assignedMechanic ?? "Unassigned"}
+                      </div>
+                      {res.date && (
+                        <div className="flex items-center gap-1">
+                          <Clock className="h-3 w-3 shrink-0" />
+                          Due: {formatDate(res.date)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {searchQuery.trim() && searchResults.length === 0 && (
+              <p className="mt-4 text-xs text-[var(--color-text-secondary)]">No schedules found matching that query.</p>
+            )}
+          </Card>
+
+          {/* Metric Tiles */}
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {stats.map((stat) => (
+              <MetricTile key={stat.label} label={stat.label} value={stat.value} hint={stat.hint} icon={stat.icon} />
             ))}
           </div>
-        </Card>
-      </div>
 
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold text-[var(--color-text-primary)]">Vehicle KPI snapshot</h3>
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {(vehicles?.vehicles ?? []).map((vehicle) => (
-            <div key={String(vehicle.vehicleId)} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-semibold text-[var(--color-text-primary)]">{String(vehicle.plateNumber)}</p>
-                <span className="rounded-full bg-[var(--color-status-info)]/15 px-2.5 py-1 text-xs font-medium text-[var(--color-text-primary)]">{String(vehicle.riskLevel)}</span>
+          {/* Predictive Forecast & Anomalies Cards */}
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Predictive Forecast Card */}
+            <Card className="p-6">
+              <div className="flex items-center justify-between">
+                <h3 className="flex items-center gap-2 text-base font-semibold text-[var(--color-text-primary)]">
+                  <Clock className="h-5 w-5 text-amber-500" />
+                  Predictive Maintenance Forecast
+                </h3>
+                <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-600">Upcoming Workload</span>
               </div>
-              <p className="mt-2 text-sm text-[var(--color-text-secondary)]">{String(vehicle.vehicleModel)}</p>
-              <div className="mt-3 grid gap-2 text-sm text-[var(--color-text-secondary)]">
-                <div>Completion rate: {formatValue(vehicle.completionRate)}%</div>
-                <div>Overdue: {formatValue(vehicle.overdueSchedules)}</div>
-                <div>Next due: {formatValue(vehicle.nextDueDate)}</div>
+              <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Microservice projected maintenance due windows based on cycle intervals.</p>
+              <div className="mt-5 grid grid-cols-3 gap-3 text-center">
+                <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4">
+                  <p className="text-2xl font-bold text-rose-500">{forecast?.dueIn7Days ?? 0}</p>
+                  <p className="mt-1 text-xs font-medium text-[var(--color-text-secondary)]">Next 7 Days</p>
+                </div>
+                <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4">
+                  <p className="text-2xl font-bold text-amber-500">{forecast?.dueIn30Days ?? 0}</p>
+                  <p className="mt-1 text-xs font-medium text-[var(--color-text-secondary)]">Next 30 Days</p>
+                </div>
+                <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4">
+                  <p className="text-2xl font-bold text-[var(--color-brand-primary)]">{forecast?.dueIn90Days ?? 0}</p>
+                  <p className="mt-1 text-xs font-medium text-[var(--color-text-secondary)]">Next 90 Days</p>
+                </div>
+              </div>
+            </Card>
+
+            {/* Anomalies Panel */}
+            <Card className="p-6">
+              <div className="flex items-center justify-between">
+                <h3 className="flex items-center gap-2 text-base font-semibold text-[var(--color-text-primary)]">
+                  <AlertTriangle className="h-5 w-5 text-rose-500" />
+                  Detected Fleet Anomalies
+                </h3>
+                <span className="rounded-full bg-rose-500/15 px-2.5 py-0.5 text-xs font-semibold text-rose-600">Data Integrity</span>
+              </div>
+              <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Automated detection of repeated vehicle component failures and missing due dates.</p>
+
+              <div className="mt-4 space-y-2.5">
+                {(anomalies?.repeatedFailures?.length ?? 0) === 0 && (anomalies?.missingDates?.length ?? 0) === 0 ? (
+                  <p className="text-xs text-[var(--color-text-secondary)]">No anomalies detected in current cycle.</p>
+                ) : (
+                  <>
+                    {(anomalies?.repeatedFailures ?? []).slice(0, 2).map((r, i) => (
+                      <div key={i} className="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
+                        <div>
+                          <p className="font-semibold text-amber-600">Repeated Failure: {r.vehiclePlate}</p>
+                          <p className="text-[var(--color-text-secondary)]">{r.incidentCount} instances of "{r.maintenanceTitle}"</p>
+                        </div>
+                        <Badge variant="warning">{r.incidentCount}x</Badge>
+                      </div>
+                    ))}
+                    {(anomalies?.missingDates ?? []).slice(0, 2).map((m, i) => (
+                      <div key={i} className="flex items-center justify-between rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs">
+                        <div>
+                          <p className="font-semibold text-rose-600">Missing Next Due Date: {m.vehiclePlate}</p>
+                          <p className="text-[var(--color-text-secondary)]">{formatWorkOrderNumber(m.scheduleId)} ({m.maintenanceTitle})</p>
+                        </div>
+                        <Badge variant="danger">Date Missing</Badge>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            </Card>
+          </div>
+
+          {/* Charts Row */}
+          <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+            <Card className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-semibold text-[var(--color-text-primary)]">Monthly Maintenance Cycles</h3>
+                  <p className="text-xs text-[var(--color-text-secondary)]">Comparison between scheduled work and completed maintenance cycles.</p>
+                </div>
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="flex items-center gap-1 text-[var(--color-brand-primary)]"><span className="h-2 w-2 rounded-full bg-[var(--color-brand-primary)]" /> Scheduled</span>
+                  <span className="flex items-center gap-1 text-emerald-500"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Completed</span>
+                </div>
+              </div>
+              <TrendBars
+                items={(overview?.monthlyTrend ?? []).map((item) => ({
+                  monthKey: String(item.monthKey ?? "Unknown"),
+                  scheduledCount: Number(item.scheduledCount ?? 0),
+                  completedCount: Number(item.completedCount ?? 0),
+                  activeCount: Number(item.activeCount ?? 0),
+                  overdueCount: Number(item.overdueCount ?? 0),
+                }))}
+              />
+            </Card>
+
+            <Card className="p-6">
+              <h3 className="text-base font-semibold text-[var(--color-text-primary)]">Maintenance Status Distribution</h3>
+              <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Breakdown of current schedule statuses in DuckDB analytics mart.</p>
+              <div className="mt-5">
+                <StatusBars
+                  items={(overview?.statusBreakdown ?? []).map((item) => ({
+                    status: String(item.status ?? "Unknown"),
+                    percentage: Number(item.percentage ?? item.scheduleCount ?? 0),
+                    scheduleCount: Number(item.scheduleCount ?? 0),
+                  }))}
+                />
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* VEHICLE RISK MATRIX TAB */}
+      {!loading && activeTab === "vehicles" && (
+        <div className="space-y-4">
+          <Card className="p-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-[var(--color-text-primary)]">Vehicle Maintenance KPI & Risk Assessment Matrix</h3>
+                <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Dynamic risk scoring (0-100) based on overdue workloads, schedule gaps, and completion history.</p>
+              </div>
+
+              {/* Filters */}
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="relative w-full max-w-xs">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" />
+                  <input
+                    value={vehicleSearch}
+                    onChange={(e) => setVehicleSearch(e.target.value)}
+                    placeholder="Search plate or model..."
+                    className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2 pl-9 pr-3 text-xs text-[var(--color-text-primary)] focus:outline-none"
+                  />
+                </div>
+                <div className="flex items-center gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-1 text-xs font-medium">
+                  <button
+                    onClick={() => setVehicleRiskFilter("ALL")}
+                    className={`rounded-lg px-2.5 py-1 ${vehicleRiskFilter === "ALL" ? "bg-[var(--color-brand-primary)] text-white" : "text-[var(--color-text-secondary)]"}`}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setVehicleRiskFilter("HIGH")}
+                    className={`rounded-lg px-2.5 py-1 ${vehicleRiskFilter === "HIGH" ? "bg-rose-500 text-white" : "text-[var(--color-text-secondary)]"}`}
+                  >
+                    High Risk
+                  </button>
+                  <button
+                    onClick={() => setVehicleRiskFilter("MEDIUM")}
+                    className={`rounded-lg px-2.5 py-1 ${vehicleRiskFilter === "MEDIUM" ? "bg-amber-500 text-white" : "text-[var(--color-text-secondary)]"}`}
+                  >
+                    Medium Risk
+                  </button>
+                  <button
+                    onClick={() => setVehicleRiskFilter("LOW")}
+                    className={`rounded-lg px-2.5 py-1 ${vehicleRiskFilter === "LOW" ? "bg-emerald-500 text-white" : "text-[var(--color-text-secondary)]"}`}
+                  >
+                    Low Risk
+                  </button>
+                </div>
               </div>
             </div>
-          ))}
+
+            {/* Vehicle Grid */}
+            <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {filteredVehicles.map((v) => {
+                const riskLevel = String(v.riskLevel).toUpperCase();
+                let borderClass = "border-[var(--color-border)]";
+                let badgeVariant: "danger" | "warning" | "success" = "success";
+                if (riskLevel === "HIGH") {
+                  borderClass = "border-rose-500/40 bg-rose-500/5";
+                  badgeVariant = "danger";
+                } else if (riskLevel === "MEDIUM") {
+                  borderClass = "border-amber-500/40 bg-amber-500/5";
+                  badgeVariant = "warning";
+                }
+
+                return (
+                  <div key={String(v.vehicleId ?? v.plateNumber)} className={`rounded-xl border p-4 shadow-sm transition-all ${borderClass}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-base font-bold text-[var(--color-text-primary)]">{v.plateNumber}</p>
+                        <p className="text-xs text-[var(--color-text-secondary)]">{v.vehicleModel ?? "Standard Vehicle"}</p>
+                      </div>
+                      <div className="text-right">
+                        <Badge variant={badgeVariant}>{riskLevel} RISK</Badge>
+                        <p className="mt-1 text-xs font-semibold text-[var(--color-text-secondary)]">Score: {v.riskScore ?? 0}/100</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 rounded-lg border border-[var(--color-border)]/60 bg-[var(--color-card-bg)] p-3 text-xs leading-relaxed text-[var(--color-text-secondary)]">
+                      <span className="font-semibold text-[var(--color-text-primary)]">Reason: </span>
+                      {v.riskReason ?? "No immediate maintenance risk recorded."}
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-lg bg-[var(--color-input-bg)] p-2">
+                        <span className="text-[var(--color-text-secondary)]">Active Work:</span>
+                        <p className="font-semibold text-[var(--color-text-primary)]">{formatValue(v.activeSchedules)}</p>
+                      </div>
+                      <div className="rounded-lg bg-[var(--color-input-bg)] p-2">
+                        <span className="text-[var(--color-text-secondary)]">Overdue:</span>
+                        <p className="font-semibold text-rose-500">{formatValue(v.overdueSchedules)}</p>
+                      </div>
+                      <div className="rounded-lg bg-[var(--color-input-bg)] p-2">
+                        <span className="text-[var(--color-text-secondary)]">Completion Rate:</span>
+                        <p className="font-semibold text-[var(--color-brand-primary)]">{formatValue(v.completionRate)}%</p>
+                      </div>
+                      <div className="rounded-lg bg-[var(--color-input-bg)] p-2">
+                        <span className="text-[var(--color-text-secondary)]">Next Due:</span>
+                        <p className="font-semibold text-[var(--color-text-primary)]">{formatDate(v.nextDueDate)}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {filteredVehicles.length === 0 && (
+              <p className="mt-6 text-center text-xs text-[var(--color-text-secondary)]">No vehicles found matching the filter criteria.</p>
+            )}
+          </Card>
         </div>
-      </Card>
+      )}
+
+      {/* PRIORITY ALERTS TAB */}
+      {!loading && activeTab === "alerts" && (
+        <div className="space-y-4">
+          <Card className="p-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-[var(--color-text-primary)]">Priority Maintenance Alerts</h3>
+                <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Actionable alerts generated automatically by the analytics datamart engine.</p>
+              </div>
+
+              {/* Severity Filter Pills */}
+              <div className="flex items-center gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-1 text-xs font-medium">
+                <button
+                  onClick={() => setAlertSeverityFilter("ALL")}
+                  className={`rounded-lg px-3 py-1 ${alertSeverityFilter === "ALL" ? "bg-[var(--color-brand-primary)] text-white" : "text-[var(--color-text-secondary)]"}`}
+                >
+                  All ({alerts?.alerts?.length ?? 0})
+                </button>
+                <button
+                  onClick={() => setAlertSeverityFilter("HIGH")}
+                  className={`rounded-lg px-3 py-1 ${alertSeverityFilter === "HIGH" ? "bg-rose-500 text-white" : "text-[var(--color-text-secondary)]"}`}
+                >
+                  High
+                </button>
+                <button
+                  onClick={() => setAlertSeverityFilter("MEDIUM")}
+                  className={`rounded-lg px-3 py-1 ${alertSeverityFilter === "MEDIUM" ? "bg-amber-500 text-white" : "text-[var(--color-text-secondary)]"}`}
+                >
+                  Medium
+                </button>
+                <button
+                  onClick={() => setAlertSeverityFilter("LOW")}
+                  className={`rounded-lg px-3 py-1 ${alertSeverityFilter === "LOW" ? "bg-emerald-500 text-white" : "text-[var(--color-text-secondary)]"}`}
+                >
+                  Low
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-6 space-y-3">
+              {filteredAlerts.map((alert) => {
+                const severity = String(alert.severity).toUpperCase();
+                let badgeVariant: "danger" | "warning" | "info" = "info";
+                if (severity === "HIGH") badgeVariant = "danger";
+                if (severity === "MEDIUM") badgeVariant = "warning";
+
+                return (
+                  <div key={String(alert.alertId)} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-sm">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-[var(--color-text-primary)]">{alert.maintenanceTitle}</span>
+                          <Badge variant={badgeVariant}>{severity}</Badge>
+                          {alert.alertType && (
+                            <span className="rounded bg-[var(--color-input-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--color-text-secondary)]">
+                              {alert.alertType}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1.5 text-xs text-[var(--color-text-secondary)]">{alert.message}</p>
+                      </div>
+
+                      <div className="text-right text-xs text-[var(--color-text-secondary)]">
+                        <p className="font-semibold text-[var(--color-text-primary)]">Plate: {alert.vehiclePlate}</p>
+                        {alert.dueDate && <p className="mt-1">Due Date: {formatDate(alert.dueDate)}</p>}
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between rounded-lg bg-[var(--color-input-bg)] p-3 text-xs">
+                      <span className="text-[var(--color-text-secondary)]">
+                        <strong className="text-[var(--color-brand-primary)]">Recommended Action: </strong>
+                        {alert.recommendedAction ?? "Inspect vehicle and update maintenance work order."}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+              {filteredAlerts.length === 0 && (
+                <p className="py-6 text-center text-xs text-[var(--color-text-secondary)]">No alerts matching selected severity filter.</p>
+              )}
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* FULL REPORT & EXPORT TAB */}
+      {!loading && activeTab === "report" && (
+        <div className="space-y-4">
+          <Card className="p-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-[var(--color-text-primary)]">Full Aggregated Analytics Report</h3>
+                <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Complete datamart dump including snapshots, vehicles, alerts, monthly trends, and schedule summaries.</p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button variant="outline" size="sm" onClick={handleExportJson}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Export JSON Report
+                </Button>
+                <Button variant="primary" size="sm" onClick={() => window.print()}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  Print Summary
+                </Button>
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4 text-xs space-y-2">
+                <p className="font-bold text-[var(--color-text-primary)]">Report Metadata</p>
+                <p>Data Source Type: {fullReport?.dataSource?.type ?? "DUCKDB_DATAMART"}</p>
+                <p>Generated At: {formatDate(fullReport?.dataSource?.generatedAt)}</p>
+                <p>Total Tracked Vehicles: {fullReport?.vehicles?.length ?? 0}</p>
+                <p>Total Active Alerts: {fullReport?.alerts?.length ?? 0}</p>
+                <p>Total Maintenance Schedules: {fullReport?.schedules?.length ?? 0}</p>
+              </div>
+
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4 text-xs space-y-2">
+                <p className="font-bold text-[var(--color-text-primary)]">Fleet Snapshot Summary</p>
+                <p>Total Fleet Vehicles: {formatValue(fullReport?.snapshot?.totalVehicles)}</p>
+                <p>Total Fleet Schedules: {formatValue(fullReport?.snapshot?.totalSchedules)}</p>
+                <p>Fleet Completion Rate: {formatValue(fullReport?.snapshot?.completionRate)}%</p>
+                <p>Fleet Total Maintenance Spend: ${formatValue(fullReport?.snapshot?.totalMaintenanceCost)}</p>
+              </div>
+            </div>
+
+            {/* Schedule Summary Table */}
+            <div className="mt-6">
+              <h4 className="text-sm font-semibold text-[var(--color-text-primary)]">Scheduled Maintenance Jobs Overview</h4>
+              <div className="mt-3 overflow-x-auto rounded-xl border border-[var(--color-border)]">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-[var(--color-border)] bg-[var(--color-input-bg)] font-semibold text-[var(--color-text-primary)]">
+                    <tr>
+                      <th className="p-3">Work Order No.</th>
+                      <th className="p-3">Plate</th>
+                      <th className="p-3">Maintenance Title</th>
+                      <th className="p-3">Mechanic</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3">Next Due</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--color-border)]">
+                    {(fullReport?.schedules ?? []).slice(0, 10).map((s) => (
+                      <tr key={String(s.scheduleId)} className="hover:bg-[var(--color-input-bg)]/40">
+                        <td className="p-3 font-mono font-semibold">{formatWorkOrderNumber(s.scheduleId)}</td>
+                        <td className="p-3 font-semibold">{s.vehiclePlate}</td>
+                        <td className="p-3">{s.maintenanceTitle}</td>
+                        <td className="p-3">{s.assignedMechanic ?? "Unassigned"}</td>
+                        <td className="p-3">
+                          <Badge variant={s.scheduleStatus === "COMPLETED" ? "success" : s.scheduleStatus === "OVERDUE" ? "danger" : "warning"}>
+                            {s.scheduleStatus ?? "PENDING"}
+                          </Badge>
+                        </td>
+                        <td className="p-3">{formatDate(s.nextDueDate)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

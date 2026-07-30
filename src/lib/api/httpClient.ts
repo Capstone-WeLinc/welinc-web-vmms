@@ -30,10 +30,19 @@ const buildUrl = (path: string) => {
   }
 
   // Route analytics calls to the standalone analytics microservice if configured
-  if (resolvedPath.startsWith("/vmms/analytics") && ANALYTICS_API_BASE && ANALYTICS_API_BASE !== API_BASE) {
-    // Transform /vmms/analytics/* to /analytics/analytics/*
-    const analyticsPath = resolvedPath.replace(/^\/vmms\/analytics/, "/analytics/analytics");
-    return new URL(analyticsPath.replace(/^\/+/, ""), `${ANALYTICS_API_BASE}/`).toString();
+  if (ANALYTICS_API_BASE) {
+    if (resolvedPath.startsWith("/vmms/analytics")) {
+      const analyticsPath = resolvedPath.replace(/^\/vmms\/analytics/, "/analytics");
+      return new URL(analyticsPath.replace(/^\/+/, ""), `${ANALYTICS_API_BASE}/`).toString();
+    }
+
+    if (resolvedPath.startsWith("/analytics")) {
+      return new URL(resolvedPath.replace(/^\/+/, ""), `${ANALYTICS_API_BASE}/`).toString();
+    }
+
+    if (resolvedPath.startsWith("/maintenance-schedules/search")) {
+      return new URL(resolvedPath.replace(/^\/+/, ""), `${ANALYTICS_API_BASE}/`).toString();
+    }
   }
 
   return new URL(path.replace(/^\/{1,}/, ""), `${API_BASE}/`).toString();

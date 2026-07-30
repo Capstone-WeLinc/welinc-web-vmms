@@ -1,6 +1,71 @@
 import { fetchJSON } from "./httpClient";
 import { getMaintenanceSchedules } from "./maintenanceService";
 
+export interface AnalyticsHealthResponse {
+  status: string;
+  service: string;
+  mode: string;
+  port: number | string;
+}
+
+export interface AnalyticsSnapshot {
+  totalVehicles?: number;
+  totalSchedules?: number;
+  pendingSchedules?: number;
+  inProgressSchedules?: number;
+  overdueSchedules?: number;
+  completedSchedules?: number;
+  dueWithin7Days?: number;
+  activeMaintenanceVehicles?: number;
+  totalMaintenanceCost?: number;
+  averageOdometer?: number;
+  completionRate?: number;
+  fleetPerformance?: string;
+  generatedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface SummaryMetrics {
+  overdueRate: number;
+  dueSoonRate: number;
+  pendingRate: number;
+  activeFleetRate: number;
+  avgCostPerSchedule: number;
+  avgCostPerVehicle: number;
+}
+
+export interface PredictiveForecast {
+  dueIn7Days: number;
+  dueIn30Days: number;
+  dueIn90Days: number;
+}
+
+export interface RepeatedFailureAnomaly {
+  vehiclePlate: string;
+  maintenanceTitle: string;
+  incidentCount: number;
+}
+
+export interface MissingDateAnomaly {
+  vehiclePlate: string;
+  maintenanceTitle: string;
+  scheduleId: string | number;
+}
+
+export interface AnomaliesResponse {
+  repeatedFailures: RepeatedFailureAnomaly[];
+  missingDates: MissingDateAnomaly[];
+}
+
+export interface TopMaintenanceType {
+  maintenanceTitle: string;
+  count: number;
+}
+
+export interface ExpandedTrendsResponse {
+  topTypes: TopMaintenanceType[];
+}
+
 export interface AnalyticsOverviewResponse {
   dataSource: {
     type: string;
@@ -11,9 +76,34 @@ export interface AnalyticsOverviewResponse {
     isStale: boolean;
     maxAgeMinutes: number;
   };
-  snapshot: Record<string, unknown>;
-  statusBreakdown: Array<Record<string, unknown>>;
-  monthlyTrend: Array<Record<string, unknown>>;
+  snapshot: AnalyticsSnapshot;
+  summaryMetrics?: SummaryMetrics;
+  statusBreakdown: Array<{ status: string; scheduleCount: number; percentage: number; [key: string]: unknown }>;
+  monthlyTrend: Array<{ monthKey: string; scheduledCount: number; completedCount: number; activeCount: number; overdueCount: number; maintenanceCost: number; [key: string]: unknown }>;
+  forecast?: PredictiveForecast;
+  anomalies?: AnomaliesResponse;
+  trends?: ExpandedTrendsResponse;
+}
+
+export interface AnalyticsVehicle {
+  vehicleId: string | number;
+  plateNumber: string;
+  vehicleModel?: string;
+  vehicleStatus?: string;
+  currentOdometer?: number;
+  totalSchedules?: number;
+  activeSchedules?: number;
+  completedSchedules?: number;
+  overdueSchedules?: number;
+  dueWithin7Days?: number;
+  maintenanceCost?: number;
+  completionRate?: number;
+  latestMaintenanceDate?: string;
+  nextDueDate?: string;
+  riskLevel: "HIGH" | "MEDIUM" | "LOW" | string;
+  riskScore: number;
+  riskReason?: string;
+  [key: string]: unknown;
 }
 
 export interface AnalyticsVehicleResponse {
@@ -26,7 +116,24 @@ export interface AnalyticsVehicleResponse {
     isStale: boolean;
     maxAgeMinutes: number;
   };
-  vehicles: Array<Record<string, unknown>>;
+  vehicles: AnalyticsVehicle[];
+}
+
+export interface AnalyticsAlert {
+  alertId: string | number;
+  scheduleId?: string | number;
+  vehiclePlate: string;
+  severity: "HIGH" | "MEDIUM" | "LOW" | string;
+  alertType?: string;
+  maintenanceTitle: string;
+  message: string;
+  recommendedAction?: string;
+  dueDate?: string;
+  generatedAt?: string;
+  vehicleStatus?: string;
+  completionRate?: number;
+  overdueSchedules?: number;
+  [key: string]: unknown;
 }
 
 export interface AnalyticsAlertResponse {
@@ -39,7 +146,24 @@ export interface AnalyticsAlertResponse {
     isStale: boolean;
     maxAgeMinutes: number;
   };
-  alerts: Array<Record<string, unknown>>;
+  alerts: AnalyticsAlert[];
+}
+
+export type AnalyticsInsightsResponse =
+  | { aiSummary: string }
+  | string;
+
+export interface BackendScheduleItem {
+  scheduleId: string | number;
+  vehiclePlate: string;
+  maintenanceTitle: string;
+  triggerType?: string;
+  intervalType?: string;
+  assignedMechanic?: string;
+  scheduleStatus?: string;
+  odometerReading?: string | number;
+  nextDueDate?: string;
+  [key: string]: unknown;
 }
 
 export interface AnalyticsReportResponse {
@@ -52,12 +176,12 @@ export interface AnalyticsReportResponse {
     isStale: boolean;
     maxAgeMinutes: number;
   };
-  snapshot: Record<string, unknown>;
+  snapshot: AnalyticsSnapshot;
   statusBreakdown: Array<Record<string, unknown>>;
   monthlyTrend: Array<Record<string, unknown>>;
-  vehicles: Array<Record<string, unknown>>;
-  alerts: Array<Record<string, unknown>>;
-  schedules: Array<Record<string, unknown>>;
+  vehicles: AnalyticsVehicle[];
+  alerts: AnalyticsAlert[];
+  schedules: BackendScheduleItem[];
 }
 
 export interface ScheduleSearchResult {
@@ -137,34 +261,50 @@ function calculateScheduleProgress(schedule: { status?: string; workOrderProgres
   }
 }
 
+const emptyDataSource = {
+  type: "UNAVAILABLE",
+  authoritativeFor: "",
+  generatedAt: "",
+  sourceMaxUpdatedAt: null,
+  ageSeconds: null,
+  isStale: true,
+  maxAgeMinutes: 0,
+};
+
 const emptyOverview: AnalyticsOverviewResponse = {
-  dataSource: {
-    type: "UNAVAILABLE",
-    authoritativeFor: "",
-    generatedAt: "",
-    sourceMaxUpdatedAt: null,
-    ageSeconds: null,
-    isStale: true,
-    maxAgeMinutes: 0,
-  },
+  dataSource: emptyDataSource,
   snapshot: {},
   statusBreakdown: [],
   monthlyTrend: [],
 };
 
 const emptyVehicles: AnalyticsVehicleResponse = {
-  dataSource: emptyOverview.dataSource,
+  dataSource: emptyDataSource,
   vehicles: [],
 };
 
 const emptyAlerts: AnalyticsAlertResponse = {
-  dataSource: emptyOverview.dataSource,
+  dataSource: emptyDataSource,
   alerts: [],
 };
 
+export async function getAnalyticsHealth(): Promise<AnalyticsHealthResponse> {
+  try {
+    return await fetchJSON<AnalyticsHealthResponse>("/analytics/health");
+  } catch (error) {
+    console.warn("Analytics health check unavailable.", error);
+    return {
+      status: "offline",
+      service: "welinc-backend-vmms-analytics-ai",
+      mode: "unavailable",
+      port: 3001,
+    };
+  }
+}
+
 export async function getAnalyticsOverview(): Promise<AnalyticsOverviewResponse> {
   try {
-    return await fetchJSON<AnalyticsOverviewResponse>("/vmms/analytics/overview");
+    return await fetchJSON<AnalyticsOverviewResponse>("/analytics/overview");
   } catch (error) {
     console.warn("Analytics overview unavailable.", error);
     return emptyOverview;
@@ -173,7 +313,7 @@ export async function getAnalyticsOverview(): Promise<AnalyticsOverviewResponse>
 
 export async function getAnalyticsVehicles(): Promise<AnalyticsVehicleResponse> {
   try {
-    return await fetchJSON<AnalyticsVehicleResponse>("/vmms/analytics/vehicles");
+    return await fetchJSON<AnalyticsVehicleResponse>("/analytics/vehicles");
   } catch (error) {
     console.warn("Analytics vehicle KPIs unavailable.", error);
     return emptyVehicles;
@@ -182,16 +322,25 @@ export async function getAnalyticsVehicles(): Promise<AnalyticsVehicleResponse> 
 
 export async function getAnalyticsAlerts(): Promise<AnalyticsAlertResponse> {
   try {
-    return await fetchJSON<AnalyticsAlertResponse>("/vmms/analytics/alerts");
+    return await fetchJSON<AnalyticsAlertResponse>("/analytics/alerts");
   } catch (error) {
     console.warn("Analytics alerts unavailable.", error);
     return emptyAlerts;
   }
 }
 
+export async function getAnalyticsInsights(): Promise<AnalyticsInsightsResponse> {
+  try {
+    return await fetchJSON<AnalyticsInsightsResponse>("/analytics/insights");
+  } catch (error) {
+    console.warn("Analytics insights unavailable.", error);
+    return { aiSummary: "AI insights unavailable." };
+  }
+}
+
 export async function getAnalyticsReport(): Promise<AnalyticsReportResponse> {
   try {
-    return await fetchJSON<AnalyticsReportResponse>("/vmms/analytics/report");
+    return await fetchJSON<AnalyticsReportResponse>("/analytics/report");
   } catch (error) {
     console.warn("Analytics report unavailable.", error);
     return {
@@ -209,6 +358,55 @@ export async function searchMaintenanceSchedules(query: string, limit = 8): Prom
     return [];
   }
 
+  // First attempt: call microservice backend DuckDB search endpoint directly
+  try {
+    const backendRes = await fetchJSON<{
+      dataSource?: unknown;
+      schedules?: Array<{
+        scheduleId?: string | number;
+        vehiclePlate?: string;
+        maintenanceTitle?: string;
+        triggerType?: string;
+        intervalType?: string;
+        assignedMechanic?: string;
+        scheduleStatus?: string;
+        odometerReading?: string | number;
+        nextDueDate?: string;
+      }>;
+    }>(`/maintenance-schedules/search?q=${encodeURIComponent(trimmedQuery)}&limit=${limit}`);
+
+    if (backendRes?.schedules && Array.isArray(backendRes.schedules)) {
+      return backendRes.schedules.map((item) => {
+        const statusStr = String(item.scheduleStatus ?? "DUE");
+        return {
+          id: String(item.scheduleId ?? ""),
+          vehicleId: String(item.vehiclePlate ?? ""),
+          title: String(item.maintenanceTitle ?? ""),
+          status: statusStr,
+          date: item.nextDueDate ? String(item.nextDueDate) : "",
+          assignedMechanic: item.assignedMechanic ? String(item.assignedMechanic) : null,
+          assignedDriver: null,
+          accountType: null,
+          checklistTemplateId: null,
+          garageId: null,
+          odometerReading: item.odometerReading ? String(item.odometerReading) : null,
+          triggerType: item.triggerType ? String(item.triggerType) : null,
+          intervalKm: null,
+          bufferDistanceKm: null,
+          startingReferenceReadingKm: null,
+          intervalType: item.intervalType ? String(item.intervalType) : null,
+          startReferenceDate: null,
+          previousScheduleId: null,
+          workOrderProgress: null,
+          score: calculateScheduleProgress({ status: statusStr }),
+        };
+      });
+    }
+  } catch (backendError) {
+    console.warn("Backend schedule search endpoint unavailable, falling back to local search.", backendError);
+  }
+
+  // Fallback: local schedule search
   try {
     const schedules = await getMaintenanceSchedules();
     const normalizedQuery = trimmedQuery.toLowerCase();
