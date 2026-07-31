@@ -1,4 +1,4 @@
-import { useEffect, useCallback, type ReactNode } from "react";
+import { useEffect, useCallback, useLayoutEffect, useRef, type ReactNode } from "react";
 import {
   Routes,
   Route,
@@ -10,22 +10,19 @@ import {
 import Sidebar from "./components/Sidebar/Sidebar";
 import { getCurrentUser } from "./lib/api/authService";
 import Dashboard from "./pages/Dashboard/Dashboard";
-import PlaceholderPage from "./pages/PlaceholderPage/PlaceholderPage";
 import SchedulingPage from "./pages/Maintenance Scheduling/MaintenanceScheduling";
 import ChecklistTemplates from "./pages/ChecklistTemplates/ChecklistTemplates";
 import WorkOrders from "./pages/WorkOrders/WorkOrders";
-import ExpenseTrackingPage from "./pages/Expense/ExpenseTrackingPage";
+import MaintenanceExpenses from "./pages/MaintenanceExpenses/MaintenanceExpenses";
+import MaintenanceReports from "./pages/MaintenanceReports/MaintenanceReports";
 import MaintenanceLogs from "./pages/MaintenanceLogs/MaintenanceLogs";
 import FuelManagement from "./pages/FuelManagement/FuelManagement";
 import UserManagement from "./pages/UserManagement/UserManagement";
 import LoginPage from "./pages/Login/LoginPage";
 import Profile from "./pages/Profile/Profile";
-import AIAnalyticsPage from "./pages/AIAnalytics/AIAnalytics";
-import { useBackend } from "./lib/api/httpClient";
 
-import { FileBarChart2 } from "lucide-react";
 import { setLastActivity, msUntilAbsoluteExpiry, msUntilInactivityExpiry, clearSession } from "./lib/utils/session";
-import { isMechanicRole, isOperationsRole } from "./lib/utils/permissions";
+import { isChiefMechanicRole, isMechanicRole, isOperationsRole } from "./lib/utils/permissions";
 import { useAuthStore } from "./store/authStore";
 
 function RequireAuthWrapper({
@@ -49,12 +46,14 @@ function App() {
   const clearAuth = useAuthStore((state) => state.clearAuth);
   const location = useLocation();
   const navigate = useNavigate();
+  const mainRef = useRef<HTMLElement | null>(null);
 
-  const isAuthenticated = useBackend ? authenticated : true;
+  const isAuthenticated = authenticated;
   const hasIncomingSsoToken =
     location.pathname === "/login" &&
     new URLSearchParams(location.search).has("token");
   const isMechanic = isMechanicRole(currentUser);
+  const isChiefMechanic = isChiefMechanicRole(currentUser);
   const isOperations = isOperationsRole(currentUser);
 
   const handleLogin = () => {
@@ -97,12 +96,16 @@ function App() {
   useEffect(() => {
     if (!isAuthenticated || !currentUser) return;
 
-    if (isMechanic) {
+    if (isMechanic || isChiefMechanic) {
+      const allowedMechanicPaths = [
+        "/dashboard",
+        "/maintenance-scheduling",
+        "/work-orders",
+        "/maintenance-logs",
+        "/profile",
+      ];
       if (
-        location.pathname !== "/dashboard" &&
-        location.pathname !== "/work-orders" &&
-        location.pathname !== "/maintenance-logs" &&
-        location.pathname !== "/profile"
+        !allowedMechanicPaths.includes(location.pathname)
       ) {
         navigate("/dashboard", { replace: true });
       }
@@ -112,20 +115,27 @@ function App() {
     if (isOperations) {
       const allowedOperationsPaths = [
         "/dashboard",
-        "/users",
         "/maintenance-scheduling",
         "/work-orders",
         "/maintenance-logs",
+        "/checklist-templates",
         "/profile",
         "/maintenance-reports",
-        "/fuel-management",
+        "/fuel-expenses",
       ];
 
       if (!allowedOperationsPaths.includes(location.pathname)) {
         navigate("/dashboard", { replace: true });
       }
     }
-  }, [currentUser, isAuthenticated, isMechanic, isOperations, location.pathname, navigate]);
+  }, [currentUser, isAuthenticated, isChiefMechanic, isMechanic, isOperations, location.pathname, navigate]);
+
+  useLayoutEffect(() => {
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    mainRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [location.pathname]);
 
   useEffect(() => {
     const handleUnauthorized = () => {
@@ -196,9 +206,10 @@ function App() {
         />
       )}
       <main
+        ref={mainRef}
         className={`transition-all duration-300 ease-in-out ${
           isAuthenticated
-            ? "ml-20 px-6 py-8 md:px-8 lg:px-10"
+            ? "ml-20 px-6 pb-8 pt-4 md:px-8 lg:px-10"
             : "h-screen"
         }`}
       >
@@ -305,29 +316,18 @@ function App() {
             }
           />
           <Route
-            path="/ai-analytics"
-            element={
-              <RequireAuthWrapper
-                isAuthenticated={isAuthenticated}
-                location={location}
-              >
-                <AIAnalyticsPage />
-              </RequireAuthWrapper>
-            }
-          />
-          <Route
             path="/maintenance-reports"
             element={
               <RequireAuthWrapper
                 isAuthenticated={isAuthenticated}
                 location={location}
               >
-                <AIAnalyticsPage initialTab="report" />
+                <MaintenanceReports />
               </RequireAuthWrapper>
             }
           />
           <Route
-            path="/fuel-management"
+            path="/fuel-expenses"
             element={
               <RequireAuthWrapper
                 isAuthenticated={isAuthenticated}
@@ -338,15 +338,23 @@ function App() {
             }
           />
           <Route
-            path="/expense-profitability"
+            path="/maintenance-expenses"
             element={
               <RequireAuthWrapper
                 isAuthenticated={isAuthenticated}
                 location={location}
               >
-                <ExpenseTrackingPage />
+                <MaintenanceExpenses />
               </RequireAuthWrapper>
             }
+          />
+          <Route
+            path="/fuel-management"
+            element={<Navigate to="/fuel-expenses" replace />}
+          />
+          <Route
+            path="/expense-profitability"
+            element={<Navigate to="/maintenance-expenses" replace />}
           />
           <Route
             path="*"

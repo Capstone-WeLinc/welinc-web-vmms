@@ -1,7 +1,9 @@
 import type { FuelFillUp } from '../types';
-import { Download, Calendar, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { printToPDF } from "../../../lib/utils/fuelExport";
+import { DropdownSelect, ExportButton, LegendHelp, Pagination } from '../../../components/ui';
+import { exportRowsToCsv, exportRowsToExcel } from "../../../lib/utils/frontendExport";
 
 interface FuelCostSummaryProps {
   fillUps: FuelFillUp[];
@@ -27,6 +29,7 @@ export default function FuelCostSummary({ fillUps = [] }: FuelCostSummaryProps) 
   const datePickerRef = useRef<HTMLDivElement>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const itemsPerPage = 5;
 
   useEffect(() => {
@@ -148,13 +151,50 @@ export default function FuelCostSummary({ fillUps = [] }: FuelCostSummaryProps) 
     };
   }, [summaryData, filteredFillUps]);
 
+  const getExportRows = () => {
+    const headers = ['Vehicle', 'Model', 'Total Fill-Ups', 'Total Liters', 'Avg Price/L', 'Total Fuel Cost', 'Avg Efficiency'];
+    const rows = summaryData.map((item) => {
+      const avgPrice = item.totalLiters > 0 ? item.totalCost / item.totalLiters : 0;
+      const avgEfficiency = item.fillUpsCount > 0 ? item.totalEfficiencyPoints / item.fillUpsCount : 0;
+      return [
+        item.vehicleId,
+        item.model,
+        item.fillUpsCount,
+        item.totalLiters,
+        avgPrice.toFixed(2),
+        item.totalCost,
+        avgEfficiency.toFixed(1),
+      ];
+    });
+    const totalRow = [
+      'Fleet Total',
+      '',
+      fleetTotals.fillUps,
+      fleetTotals.liters,
+      fleetTotals.avgPricePerLiter.toFixed(2),
+      fleetTotals.totalCost,
+      fleetTotals.avgEfficiency.toFixed(1),
+    ];
+    return { headers, rows: [...rows, totalRow] };
+  };
+
+  const handleExportCSV = () => {
+    const { headers, rows } = getExportRows();
+    exportRowsToCsv('fuel-cost-summary.csv', headers, rows);
+  };
+
+  const handleExportExcel = () => {
+    const { headers, rows } = getExportRows();
+    exportRowsToExcel('fuel-cost-summary.xls', headers, rows);
+  };
+
   return (
     <div className="space-y-6">
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[var(--color-border)] pb-5">
         <div className="flex flex-wrap items-center gap-3">
 
-          <div className="relative flex items-center h-11 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3.5 focus-within:border-[var(--color-brand-primary)]/50 focus-within:ring-1 focus-within:ring-[var(--color-brand-primary)]/30 transition-all duration-200 w-full sm:w-60">
+          <div className="relative flex h-10 items-center rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3.5 focus-within:border-[var(--color-brand-primary)]/50 focus-within:ring-1 focus-within:ring-[var(--color-brand-primary)]/30 transition-all duration-200 w-full sm:w-60">
             <input
               type="text"
               value={searchQuery}
@@ -167,31 +207,36 @@ export default function FuelCostSummary({ fillUps = [] }: FuelCostSummaryProps) 
             />
           </div>
 
-          <div className="relative flex items-center h-11 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-4 hover:bg-[var(--color-card-bg-hover)] transition-all duration-200 cursor-pointer">
-            <Filter size={16} className="text-[var(--color-text-secondary)] mr-2 shrink-0" strokeWidth={1.8} />
-            <span className="text-sm font-bold text-[var(--color-text-primary)] tracking-wide select-none">
-              Filters
-            </span>
-            <select
-              value={selectedVehicle}
-              onChange={(e) => {
-                setSelectedVehicle(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer appearance-none"
-            >
-              {uniqueVehicles.map((vId) => (
-                <option key={vId} value={vId} className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)] text-sm">
-                  {vId === 'All' ? 'All Vehicles' : vId}
-                </option>
-              ))}
-            </select>
+          <div className="flex items-center gap-2">
+            <div className="w-44">
+              <DropdownSelect
+                value={selectedVehicle}
+                onChange={(value) => {
+                  setSelectedVehicle(value);
+                  setCurrentPage(1);
+                }}
+                label="Filter vehicle"
+                buttonClassName="font-bold"
+                options={uniqueVehicles.map((vId) => ({
+                  value: vId,
+                  label: vId === 'All' ? 'All Vehicles' : vId,
+                }))}
+              />
+            </div>
+            <LegendHelp
+              title="Fuel Cost Legend"
+              items={[
+                { label: "Total Cost", description: "Liters multiplied by price per liter for selected records.", tone: "#0f766e" },
+                { label: "Avg Efficiency", description: "Average km/L from filtered fuel fill-ups.", tone: "#2563eb" },
+                { label: "Timeline", description: "Date range used to limit summary records.", tone: "#7c3aed" },
+              ]}
+            />
           </div>
 
           <div className="relative" ref={datePickerRef}>
             <button
               onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
-              className={`flex items-center gap-2.5 h-11 rounded-xl border px-3.5 text-sm font-medium transition active:scale-[0.98] cursor-pointer whitespace-nowrap ${isDatePickerOpen
+              className={`flex h-10 items-center gap-2.5 rounded-xl border px-3.5 text-sm font-medium transition active:scale-[0.98] cursor-pointer whitespace-nowrap ${isDatePickerOpen
                 ? 'active-filter text-[var(--color-text-primary)]'
                 : 'border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)]'
                 }`}
@@ -203,7 +248,7 @@ export default function FuelCostSummary({ fillUps = [] }: FuelCostSummaryProps) 
             </button>
 
             {isDatePickerOpen && (
-              <div className="absolute top-full left-0 mt-3 z-50 w-160 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-2xl space-y-4">
+              <div className="absolute top-full left-0 mt-3 z-50 w-160 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-2xl space-y-4">
                 <div className="flex justify-end">
                   <div className="flex items-center gap-2 h-7 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 font-mono text-[11px] text-cyan-400">
                     <Calendar size={13} />
@@ -234,7 +279,7 @@ export default function FuelCostSummary({ fillUps = [] }: FuelCostSummaryProps) 
                             type="button"
                             onClick={() => handleDayClick(2026, 5, day)}
                             className={`h-8 w-8 text-xs font-medium relative mx-auto flex items-center justify-center transition-all ${state === 'endpoint'
-                                  ? 'bg-[var(--color-brand-warning)] text-[var(--color-brand-black)] font-extrabold rounded-full shadow-md z-10 scale-105'
+                                  ? 'bg-[var(--color-brand-warning)] text-[var(--color-brand-black)] font-extrabold rounded-full z-10 scale-105'
                                   : state === 'range'
                                     ? 'bg-[var(--color-card-bg)] text-[var(--color-brand-primary)] w-full font-medium'
                                     : isSunday
@@ -269,7 +314,7 @@ export default function FuelCostSummary({ fillUps = [] }: FuelCostSummaryProps) 
                             type="button"
                             onClick={() => handleDayClick(2026, 6, day)}
                             className={`h-8 w-8 text-xs font-medium relative mx-auto flex items-center justify-center transition-all ${state === 'endpoint'
-                              ? 'bg-[var(--color-brand-warning)] text-[var(--color-brand-black)] font-extrabold rounded-full shadow-md z-10 scale-105'
+                              ? 'bg-[var(--color-brand-warning)] text-[var(--color-brand-black)] font-extrabold rounded-full z-10 scale-105'
                               : state === 'range'
                                 ? 'bg-[var(--color-card-bg)] text-[var(--color-brand-primary)] w-full font-semibold'
                                 : isSunday
@@ -296,7 +341,7 @@ export default function FuelCostSummary({ fillUps = [] }: FuelCostSummaryProps) 
                   <button
                     type="button"
                     onClick={() => setIsDatePickerOpen(false)}
-                    className="h-9 px-5 rounded-xl bg-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary)]/80 text-xs font-semibold text-white transition active:scale-[0.98] shadow-lg flex items-center justify-center"
+                    className="h-9 px-5 rounded-xl bg-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary)]/80 text-xs font-semibold text-white transition active:scale-[0.98] flex items-center justify-center"
                   >
                     Select dates
                   </button>
@@ -306,20 +351,29 @@ export default function FuelCostSummary({ fillUps = [] }: FuelCostSummaryProps) 
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <button className="rounded-xl bg-[var(--color-brand-success)]/15 border border-[var(--color-brand-success)]/20 px-4 h-11 text-sm font-medium text-[var(--color-brand-success)] hover:bg-[var(--color-brand-success)]/25 transition active:scale-95 cursor-pointer flex items-center gap-2">
-            <Download size={16} />
-            Export .xlsx
-          </button>
-          <button onClick={handleExportPDF} className="rounded-xl bg-[var(--color-brand-primary)]/15 border border-[var(--color-brand-primary)]/20 px-4 h-11 text-sm font-medium text-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary)]/25 transition active:scale-95 cursor-pointer flex items-center gap-2">
-            <Download size={16} />
-            Export PDF
-          </button>
-        </div>
+        <ExportButton
+          open={isExportMenuOpen}
+          onToggle={(event) => {
+            event.stopPropagation();
+            setIsExportMenuOpen((current) => !current);
+          }}
+          onPdf={() => {
+            setIsExportMenuOpen(false);
+            handleExportPDF();
+          }}
+          onCsv={() => {
+            setIsExportMenuOpen(false);
+            handleExportCSV();
+          }}
+          onExcel={() => {
+            setIsExportMenuOpen(false);
+            handleExportExcel();
+          }}
+        />
 
       </div>
 
-      <div id="fuel-cost-summary-table" className="overflow-auto overscroll-contain rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card lg:max-h-[min(40rem,calc(100vh-12rem))]">
+      <div id="fuel-cost-summary-table" className="overflow-auto overscroll-contain rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] lg:max-h-[min(40rem,calc(100vh-12rem))]">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]">
@@ -375,36 +429,13 @@ export default function FuelCostSummary({ fillUps = [] }: FuelCostSummaryProps) 
         </table>
       </div>
 
-      <div className="pt-2 flex items-center justify-between text-sm text-[var(--color-text-secondary)]">
-        <div>
-          Showing <span className="text-[var(--color-text-primary)] font-semibold">{paginatedSummaryData.length}</span> of{' '}
-          <span className="text-[var(--color-text-primary)] font-semibold">{summaryData.length}</span> matching entries
-        </div>
-
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-            disabled={currentPage === 1}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-20 transition cursor-pointer disabled:cursor-not-allowed"
-            aria-label="Previous Page"
-          >
-            <ChevronLeft size={16} />
-          </button>
-
-          <span className="text-xs text-[var(--color-text-secondary)] select-none font-medium">
-            Page {currentPage} of {totalPages || 1}
-          </span>
-
-          <button
-            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-            disabled={currentPage === totalPages || totalPages === 0}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-20 transition cursor-pointer disabled:cursor-not-allowed"
-            aria-label="Next Page"
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
-      </div>
+      <Pagination
+        page={Math.min(currentPage, Math.max(1, totalPages))}
+        totalPages={Math.max(1, totalPages)}
+        totalItems={summaryData.length}
+        pageSize={itemsPerPage}
+        onPageChange={setCurrentPage}
+      />
     </div>
   );
 }

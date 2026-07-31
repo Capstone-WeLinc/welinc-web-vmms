@@ -10,6 +10,9 @@ export interface FuelFillUp {
   odometer: number;
   station: string;
   filledBy: string;
+  receiptFileName?: string;
+  receiptFileSize?: number;
+  receiptFileType?: string;
   efficiency: number;
   trend: 'above' | 'below' | 'normal';
 }

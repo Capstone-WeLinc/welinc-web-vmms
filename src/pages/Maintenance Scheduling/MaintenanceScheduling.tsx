@@ -12,8 +12,7 @@ import {
   Play,
   CheckCircle2,
   AlertCircle,
-  ArrowUp,
-  ArrowDown,
+  Bell,
   Edit2,
   RefreshCw,
   Ban,
@@ -27,11 +26,15 @@ import {
   ActionButton,
   ConfirmationModal,
   DataTable,
+  DropdownSelect,
   FilterDropdown,
+  LegendHelp,
   Modal,
   Pagination,
   SearchInput,
+  SortSelect,
   StatusBadge as StandardStatusBadge,
+  TableToolbar,
   ToastNotification,
 } from "../../components/ui";
 import CreateSchedule from "./CreateSchedule";
@@ -53,11 +56,15 @@ import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
 import {
   formatWorkOrderNumber,
   getCalculatedMaintenanceStatus,
+  getOdometerActivationRange,
+  getTimeBasedActivationDate,
   isInProgressStatus,
   isDueStatus,
   isOverdueStatus,
   isPendingStatus,
 } from "../../lib/utils/workOrders";
+import { isMechanicRole } from "../../lib/utils/permissions";
+import { useAuthStore } from "../../store/authStore";
 
 type GarageOption = { id: string; name: string };
 type ToastState = {
@@ -66,6 +73,8 @@ type ToastState = {
 };
 
 type ScheduleStatusAction = "cancel" | "activate" | "deactivate";
+type ScheduleSortField = "date" | "vehicle" | "workOrder" | "mechanic" | "status";
+type SortDirection = "asc" | "desc";
 type PendingScheduleAction = {
   action: ScheduleStatusAction;
   task: MaintenanceTask;
@@ -90,7 +99,7 @@ const KPIStatCard = ({
 }: KPIStatCardProps) => (
   <Card
     padding="none"
-    className="p-5 transition duration-200 hover:-translate-y-0.5"
+    className="p-5"
   >
     <div className="flex items-start justify-between gap-4">
       <div>
@@ -103,7 +112,7 @@ const KPIStatCard = ({
         </p>
       </div>
       <div
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[var(--color-border)]"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--color-border)]"
         style={{ background: iconBgColor, color: iconColor }}
       >
         {icon}
@@ -146,19 +155,19 @@ const Button = ({
   let sizeClass = "";
   switch (size) {
     case "sm":
-      sizeClass = "px-3 py-1.5 text-xs";
+      sizeClass = "h-10 px-3 text-xs";
       break;
     case "md":
-      sizeClass = "px-4 py-2 text-sm";
+      sizeClass = "h-10 px-4 text-sm";
       break;
     case "lg":
-      sizeClass = "px-6 py-3 text-base";
+      sizeClass = "h-10 px-6 text-base";
       break;
   }
 
   return (
     <button
-      className={`font-semibold rounded-xl transition-all duration-200 active:scale-95 focus:outline-hidden ${variantClass} ${sizeClass} ${className}`}
+      className={`inline-flex items-center justify-center font-semibold rounded-xl transition-all duration-200 active:scale-95 focus:outline-hidden ${variantClass} ${sizeClass} ${className}`}
       onClick={props.onClick}
       disabled={props.disabled}
       type={props.type || "button"}
@@ -173,18 +182,18 @@ const StatusBadge = ({ status }: { status: MaintenanceStatus }) => {
   const getStatusDetails = () => {
     switch (status) {
       case MaintenanceStatus.OVERDUE:
-        return "text-[#c41c3b] bg-[var(--color-status-error)]/15 border-[var(--color-status-error)]/30";
+        return "border-[#fca5a5] bg-[#fee2e2] text-[#dc2626]";
       case MaintenanceStatus.DUE:
-        return "text-[#6d28d9] bg-[#ede9fe] border-[#c4b5fd]";
+        return "border-[#93c5fd] bg-[#dbeafe] text-[#2563eb]";
       case MaintenanceStatus.IN_PROGRESS:
-        return "text-[#047857] bg-[var(--color-status-success)]/15 border-[var(--color-status-success)]/30";
+        return "border-[#5eead4] bg-[#ccfbf1] text-[#0f766e]";
       case MaintenanceStatus.COMPLETED:
-        return "text-[var(--color-text-secondary)] bg-[var(--color-card-bg)] border-[var(--color-border)]";
+        return "border-[#86efac] bg-[#dcfce7] text-[#059669]";
       case MaintenanceStatus.CANCELLED:
-        return "text-slate-600 bg-slate-100 border-slate-300";
+        return "border-[#fca5a5] bg-[#fee2e2] text-[#dc2626]";
       case MaintenanceStatus.PENDING:
       default:
-        return "text-[#0369a1] bg-[var(--color-status-info)]/15 border-[var(--color-status-info)]/30";
+        return "border-[#fcd34d] bg-[#fef3c7] text-[#d97706]";
     }
   };
 
@@ -196,49 +205,31 @@ const StatusBadge = ({ status }: { status: MaintenanceStatus }) => {
     </span>
   );
 };
-const SelectField = ({
-  label,
-  id,
-  options,
-  className = "",
-  onChange,
-  value,
-  disabled,
-}: {
-  label: string;
-  id: string;
-  options: { value: string; label: string }[];
-  className?: string;
-} & React.SelectHTMLAttributes<HTMLSelectElement>) => (
-  <div className="w-full text-left">
-    {label && (
-      <label
-        htmlFor={id}
-        className="block text-sm font-medium mb-1.5 text-[var(--color-text-secondary)]"
-      >
-        {label}
-      </label>
-    )}
-    <select
-      id={id}
-      className={`w-full px-4 py-2.5 rounded-xl border bg-[var(--color-input-bg)] border-[var(--color-border)] text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 focus:outline-hidden appearance-none ${className}`}
-      onChange={onChange}
-      value={value}
-      disabled={disabled}
-    >
-      {options.map((option) => (
-        <option
-          key={option.value}
-          value={option.value}
-          className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]"
-        >
-          {option.label}
-        </option>
-      ))}
-    </select>
-  </div>
-);
 
+const formatScheduleDate = (task: MaintenanceTask) =>
+  task.startReferenceDate || task.date || "Not scheduled";
+
+const formatNextDueDate = (task: MaintenanceTask) => {
+  if (task.triggerType === MaintenanceTriggerType.TIME) {
+    return getTimeBasedActivationDate(task)?.toLocaleDateString("en-CA") ?? "Needs start date";
+  }
+
+  return task.startReferenceDate || task.date || "Manual review";
+};
+
+const formatNextDueOdometer = (task: MaintenanceTask) => {
+  if (task.triggerType !== MaintenanceTriggerType.ODOMETER) return "N/A";
+  const range = getOdometerActivationRange(task);
+  return range ? `${range.dueMileage.toLocaleString()} km` : "Needs interval";
+};
+
+const formatOdometerRange = (task: MaintenanceTask) => {
+  if (task.triggerType !== MaintenanceTriggerType.ODOMETER) return "N/A";
+  const range = getOdometerActivationRange(task);
+  return range
+    ? `${range.activationMileage.toLocaleString()}-${range.dueMileage.toLocaleString()} km`
+    : "Needs setup";
+};
 const getDaysInMonth = (date: Date) => {
   const y = date.getFullYear();
   const m = date.getMonth();
@@ -270,6 +261,8 @@ const getTaskStyle = (status: MaintenanceStatus) => {
 
 const MaintenanceSchedulingCombined = () => {
   const location = useLocation();
+  const currentUser = useAuthStore((state) => state.currentUser);
+  const isMechanic = isMechanicRole(currentUser);
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -278,16 +271,14 @@ const MaintenanceSchedulingCombined = () => {
   const [viewMode, setViewMode] = useState<"calendar" | "list">("list");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatusFilters, setSelectedStatusFilters] = useState<string[]>([]);
-  const [vehicleFilter, setVehicleFilter] = useState<string>("All");
-  const [checklistTemplateFilter, setChecklistTemplateNameFilter] =
-    useState<string>("All");
-  const [dateRangeFilter, setDateRangeFilter] = useState<string>("All");
+  const [vehicleFilter, setVehicleFilter] = useState("All");
+  const [workOrderFilter, setWorkOrderFilter] = useState("All");
+  const [mechanicFilter, setMechanicFilter] = useState("All");
   const [dateFromFilter, setDateFromFilter] = useState("");
   const [dateToFilter, setDateToFilter] = useState("");
   const [showFilters, setShowFilters] = useState(false);
-  const [dateSortDirection, setDateSortDirection] = useState<"asc" | "desc">(
-    "desc",
-  );
+  const [scheduleSortField, setScheduleSortField] = useState<ScheduleSortField>("date");
+  const [dateSortDirection, setDateSortDirection] = useState<SortDirection>("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const [schedulesPerPage, setSchedulesPerPage] = useState(8);
   const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
@@ -303,6 +294,8 @@ const MaintenanceSchedulingCombined = () => {
   const [pendingAction, setPendingAction] =
     useState<PendingScheduleAction | null>(null);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
 
   useBodyScrollLock(Boolean(pendingAction));
@@ -325,10 +318,11 @@ const MaintenanceSchedulingCombined = () => {
 
   useEffect(() => {
     if (new URLSearchParams(location.search).get("create") !== "true") return;
+    if (isMechanic) return;
     setEditingTask(null);
     setIsOdometerUpdateOpen(false);
     setIsModalOpen(true);
-  }, [location.search]);
+  }, [isMechanic, location.search]);
 
   useEffect(() => {
     const closeActionMenu = () => setOpenActionMenuId(null);
@@ -348,51 +342,6 @@ const MaintenanceSchedulingCombined = () => {
     const day = String(date.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   };
-  const getDateRangeFilter = () => {
-    return (taskDate: Date) => {
-      if (dateRangeFilter === "All") return true;
-
-      const taskDateStr = formatLocalDate(taskDate);
-      const todayStr = formatLocalDate(today);
-
-      if (dateRangeFilter === "Today") {
-        return taskDateStr === todayStr;
-      }
-
-      if (dateRangeFilter === "This Week") {
-        const weekStart = new Date(today);
-        weekStart.setDate(today.getDate() - today.getDay());
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekStart.getDate() + 6);
-
-        return taskDate >= weekStart && taskDate <= weekEnd;
-      }
-
-      if (dateRangeFilter === "This Month") {
-        return (
-          taskDate.getMonth() === today.getMonth() &&
-          taskDate.getFullYear() === today.getFullYear()
-        );
-      }
-
-      return true;
-    };
-  };
-
-  const dateFilter = getDateRangeFilter();
-
-  const checklistTemplates = Array.from(
-    new Set(tasks.map((task) => task.title)),
-  ).sort();
-  const checklistTemplateOptions = [
-    { value: "All", label: "All Types" },
-    ...checklistTemplates.map((template) => ({
-      value: template,
-      label: template,
-    })),
-  ];
-
-  const vehicleOptions = [{ value: "All", label: "All Vehicles" }, ...vehicles];
   const getVehicleOption = (vehicleId?: string) =>
     vehicles.find(
       (vehicle) =>
@@ -405,6 +354,30 @@ const MaintenanceSchedulingCombined = () => {
     const vehicle = getVehicleOption(vehicleId);
     return vehicle?.plateNumber ?? vehicle?.value ?? vehicleId;
   };
+  const isAssignedToCurrentMechanic = (task: MaintenanceTask) => {
+    if (!isMechanic || !currentUser) return true;
+
+    const currentNames = [currentUser.id, currentUser.name, currentUser.email]
+      .map((value) => String(value ?? "").trim().toLowerCase())
+      .filter(Boolean);
+    const assignedNames = [
+      task.assignedMechanicId,
+      task.assignedMechanicEmail,
+      task.assignedDriver,
+    ]
+      .map((value) => String(value ?? "").trim().toLowerCase())
+      .filter(Boolean);
+
+    return currentNames.some((name) =>
+      assignedNames.some(
+        (assigned) =>
+          assigned === name ||
+          assigned.includes(name) ||
+          name.includes(assigned),
+      ),
+    );
+  };
+  const visibleTasks = tasks.filter(isAssignedToCurrentMechanic);
   const scheduleStatusOptions = [
     MaintenanceStatus.PENDING,
     MaintenanceStatus.DUE,
@@ -412,8 +385,20 @@ const MaintenanceSchedulingCombined = () => {
     MaintenanceStatus.OVERDUE,
     MaintenanceStatus.CANCELLED,
   ];
+  const scheduleVehicleOptions = useMemo(
+    () => ["All", ...Array.from(new Set(visibleTasks.map((task) => getVehiclePlateNumber(task.vehicleId)).filter(Boolean))).sort()],
+    [visibleTasks, vehicles],
+  );
+  const scheduleWorkOrderOptions = useMemo(
+    () => ["All", ...Array.from(new Set(visibleTasks.map((task) => task.title).filter(Boolean))).sort()],
+    [visibleTasks],
+  );
+  const scheduleMechanicOptions = useMemo(
+    () => ["All", ...Array.from(new Set(visibleTasks.map((task) => task.assignedDriver || "Unassigned").filter(Boolean))).sort()],
+    [visibleTasks],
+  );
 
-  const filteredTasks = tasks
+  const filteredTasks = visibleTasks
     .filter((task) => {
       const isVisibleSchedule =
         isPendingStatus(task.status) ||
@@ -431,20 +416,17 @@ const MaintenanceSchedulingCombined = () => {
             (status === MaintenanceStatus.OVERDUE && isOverdueStatus(task.status)) ||
             status === task.status,
         );
-      const taskVehicle = getVehicleOption(task.vehicleId);
-      const vehicleMatches =
-        vehicleFilter === "All" ||
-        task.vehicleId === vehicleFilter ||
-        taskVehicle?.value === vehicleFilter ||
-        taskVehicle?.id === vehicleFilter ||
-        taskVehicle?.plateNumber === vehicleFilter;
-      const templateMatches =
-        checklistTemplateFilter === "All" ||
-        task.title === checklistTemplateFilter;
       const dateMatches =
-        dateFilter(new Date(task.date)) &&
         (!dateFromFilter || task.date >= dateFromFilter) &&
         (!dateToFilter || task.date <= dateToFilter);
+      const vehicleMatches =
+        vehicleFilter === "All" ||
+        getVehiclePlateNumber(task.vehicleId) === vehicleFilter;
+      const workOrderMatches =
+        workOrderFilter === "All" || task.title === workOrderFilter;
+      const mechanicMatches =
+        mechanicFilter === "All" ||
+        (task.assignedDriver || "Unassigned") === mechanicFilter;
       const searchMatches =
         task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         task.vehicleId.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -455,18 +437,30 @@ const MaintenanceSchedulingCombined = () => {
       return (
         isVisibleSchedule &&
         statusMatches &&
-        vehicleMatches &&
-        templateMatches &&
         dateMatches &&
+        vehicleMatches &&
+        workOrderMatches &&
+        mechanicMatches &&
         searchMatches
       );
     })
     .sort((left, right) => {
-      const dateComparison = left.date.localeCompare(right.date);
-      if (dateComparison !== 0) {
-        return dateSortDirection === "asc" ? dateComparison : -dateComparison;
+      const direction = dateSortDirection === "asc" ? 1 : -1;
+      if (scheduleSortField === "date") {
+        const dateComparison = left.date.localeCompare(right.date);
+        if (dateComparison !== 0) return dateComparison * direction;
+        return right.id.localeCompare(left.id);
       }
-      return right.id.localeCompare(left.id);
+      if (scheduleSortField === "vehicle") {
+        return getVehiclePlateNumber(left.vehicleId).localeCompare(getVehiclePlateNumber(right.vehicleId)) * direction;
+      }
+      if (scheduleSortField === "workOrder") {
+        return left.title.localeCompare(right.title) * direction;
+      }
+      if (scheduleSortField === "mechanic") {
+        return left.assignedDriver.localeCompare(right.assignedDriver) * direction;
+      }
+      return maintenanceStatusLabels[left.status].localeCompare(maintenanceStatusLabels[right.status]) * direction;
     });
   const totalPages = Math.max(
     1,
@@ -478,25 +472,60 @@ const MaintenanceSchedulingCombined = () => {
     activePage * schedulesPerPage,
   );
 
-  const noTasks = tasks.length === 0;
+  const noTasks = visibleTasks.length === 0;
 
-  const pendingCount = tasks.filter((task) => isPendingStatus(task.status)).length;
-  const dueCount = tasks.filter((task) => isDueStatus(task.status)).length;
-  const inProgressCount = tasks.filter(
+  const pendingCount = visibleTasks.filter((task) => isPendingStatus(task.status)).length;
+  const dueCount = visibleTasks.filter((task) => isDueStatus(task.status)).length;
+  const inProgressCount = visibleTasks.filter(
     (task) => isInProgressStatus(task.status),
   ).length;
-  const overdueCount = tasks.filter((task) => task.status === MaintenanceStatus.OVERDUE).length;
-  const completedCount = tasks.filter(
+  const overdueCount = visibleTasks.filter((task) => task.status === MaintenanceStatus.OVERDUE).length;
+  const completedCount = visibleTasks.filter(
     (task) => task.status === MaintenanceStatus.COMPLETED,
   ).length;
   const complianceCount = pendingCount + completedCount;
   const compliance = complianceCount
     ? Math.round((completedCount / complianceCount) * 100)
     : 0;
-
+  const dueSoonCount = visibleTasks.filter((task) => {
+    const dueDate = new Date(task.startReferenceDate || task.date);
+    if (Number.isNaN(dueDate.getTime())) return false;
+    const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / 86400000);
+    return daysUntilDue >= 0 && daysUntilDue <= 7;
+  }).length;
+  const overdueAlertCount = visibleTasks.filter((task) => task.status === MaintenanceStatus.OVERDUE).length;
+  const dueSoonTasks = visibleTasks.filter((task) => {
+    const dueDate = new Date(task.startReferenceDate || task.date);
+    if (Number.isNaN(dueDate.getTime())) return false;
+    const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / 86400000);
+    return daysUntilDue >= 0 && daysUntilDue <= 7;
+  });
+  const overdueAlertTasks = visibleTasks.filter((task) => task.status === MaintenanceStatus.OVERDUE);
+  const notificationItems = [
+    ...overdueAlertTasks.map((task) => ({
+      id: `overdue-${task.id}`,
+      title: `${getVehiclePlateNumber(task.vehicleId)} overdue`,
+      detail: `${task.title} - ${task.assignedDriver || "Unassigned mechanic"}`,
+      status: "OVERDUE",
+      tone: "#dc2626",
+    })),
+    ...dueSoonTasks.map((task) => ({
+      id: `due-${task.id}`,
+      title: `${getVehiclePlateNumber(task.vehicleId)} due soon`,
+      detail: `${task.title} - ${formatNextDueDate(task)}`,
+      status: "DUE SOON",
+      tone: "#f59e0b",
+    })),
+  ];
   const { daysCount, startDayOfWeek } = getDaysInMonth(currentDate);
   const monthName = currentDate.toLocaleString("default", { month: "long" });
   const yearName = currentDate.getFullYear();
+  const monthOptions = Array.from({ length: 12 }, (_, month) => ({
+    value: month,
+    label: new Date(yearName, month, 1).toLocaleString("default", {
+      month: "long",
+    }),
+  }));
 
   const calendarCells = Array.from(
     { length: startDayOfWeek + daysCount },
@@ -512,13 +541,12 @@ const MaintenanceSchedulingCombined = () => {
   );
 
   const prevMonth = () =>
-    setCurrentDate(
-      new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1),
-    );
+    setCurrentDate((date) => new Date(date.getFullYear(), date.getMonth() - 1, 1));
   const nextMonth = () =>
-    setCurrentDate(
-      new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1),
-    );
+    setCurrentDate((date) => new Date(date.getFullYear(), date.getMonth() + 1, 1));
+  const jumpToCalendarMonth = (year: number, month: number) => {
+    setCurrentDate(new Date(year, month, 1));
+  };
 
   const openScheduleDetails = (schedules: MaintenanceTask[]) => {
     setSelectedSchedules(schedules);
@@ -639,22 +667,49 @@ const MaintenanceSchedulingCombined = () => {
         icon={CalendarIcon}
         title="MAINTENANCE SCHEDULING"
         subtitle="Manage and track fleet maintenance schedules and tasks"
+        action={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsNotificationsOpen(true)}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#d8dee8] bg-[#f6f8fc] text-[#63728a] transition hover:border-[#070b45] hover:text-[#070b45]"
+              aria-label="Open maintenance notifications"
+            >
+              <span className="relative">
+                <Bell className="h-5 w-5" />
+                {dueSoonCount + overdueAlertCount > 0 ? (
+                  <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#070b45] px-1 text-[10px] font-extrabold leading-none text-white">
+                    {dueSoonCount + overdueAlertCount}
+                  </span>
+                ) : null}
+              </span>
+            </button>
+            <LegendHelp
+              title="Schedule Legend"
+              items={[
+                { label: "Due Soon", description: "Scheduled within the next 7 days.", tone: "#f59e0b" },
+                { label: "Overdue", description: "Past due and still active.", tone: "#dc2626" },
+                { label: "Due", description: "Ready to be started.", tone: "#7c3aed" },
+                { label: "In Progress", description: "Work has already started.", tone: "#0f766e" },
+              ]}
+            />
+            {!isMechanic ? (
+              <ActionButton
+                variant="primary"
+                className="flex h-10 items-center gap-2 px-4"
+                onClick={() => {
+                  setEditingTask(null);
+                  setIsOdometerUpdateOpen(false);
+                  setIsModalOpen(true);
+                }}
+              >
+                <Plus className="w-4 h-4" />
+                <span>{"Create Schedule"}</span>
+              </ActionButton>
+            ) : null}
+          </div>
+        }
       />
-
-      <div className="flex justify-end mb-4">
-        <ActionButton
-          variant="primary"
-          className="flex items-center gap-2"
-          onClick={() => {
-            setEditingTask(null);
-            setIsOdometerUpdateOpen(false);
-            setIsModalOpen(true);
-          }}
-        >
-          <Plus className="w-4 h-4" />
-          <span>{"Create Schedule"}</span>
-        </ActionButton>
-      </div>
 
       <div className="space-y-6">
         <div className="grid gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
@@ -708,6 +763,69 @@ const MaintenanceSchedulingCombined = () => {
           />
         </div>
 
+        <Modal
+          isOpen={isNotificationsOpen}
+          onClose={() => setIsNotificationsOpen(false)}
+          title="Maintenance Notifications"
+          size="lg"
+          className="w-[min(92vw,72rem)] p-0"
+          footer={
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsNotificationsOpen(false)}
+                className="h-10 rounded-xl border border-[#070b45] px-6 text-sm font-extrabold text-[#070b45] transition hover:bg-[#070b45] hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-6">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                <p className="text-xs font-extrabold uppercase text-slate-500">Total Alerts</p>
+                <p className="mt-3 text-3xl font-extrabold text-slate-950">{notificationItems.length}</p>
+              </div>
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+                <p className="text-xs font-extrabold uppercase text-amber-700">Due Soon</p>
+                <p className="mt-3 text-3xl font-extrabold text-amber-900">{dueSoonCount}</p>
+              </div>
+              <div className="rounded-xl border border-red-200 bg-red-50 p-5">
+                <p className="text-xs font-extrabold uppercase text-red-700">Overdue</p>
+                <p className="mt-3 text-3xl font-extrabold text-red-900">{overdueAlertCount}</p>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-xl border border-slate-200">
+              <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
+                <h3 className="text-base font-extrabold text-slate-950">Notification Activity</h3>
+              </div>
+              <div className="max-h-[420px] divide-y divide-slate-200 overflow-y-auto">
+                {notificationItems.map((item) => (
+                  <div key={item.id} className="flex items-center gap-4 px-5 py-4">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full border" style={{ borderColor: `${item.tone}40`, backgroundColor: `${item.tone}14`, color: item.tone }}>
+                      <Bell className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-base font-extrabold text-slate-950">{item.title}</p>
+                      <p className="mt-1 text-sm text-slate-500">{item.detail}</p>
+                    </div>
+                    <span className="rounded-full border px-3 py-1 text-xs font-extrabold" style={{ borderColor: `${item.tone}30`, color: item.tone }}>
+                      {item.status}
+                    </span>
+                  </div>
+                ))}
+                {notificationItems.length === 0 ? (
+                  <div className="px-5 py-10 text-center text-sm text-[var(--color-text-secondary)]">
+                    No maintenance notifications.
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </Modal>
+
         <section className="overflow-visible">
           <div className="mb-5 flex flex-col gap-5 border-b border-[var(--color-border)] pb-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -726,7 +844,7 @@ const MaintenanceSchedulingCombined = () => {
                   aria-pressed={viewMode === "list"}
                   className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-warning)] ${
                     viewMode === "list"
-                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white shadow-md"
+                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white"
                       : "border-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"
                   }`}
                 >
@@ -739,7 +857,7 @@ const MaintenanceSchedulingCombined = () => {
                   aria-pressed={viewMode === "calendar"}
                   className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-warning)] ${
                     viewMode === "calendar"
-                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white shadow-md"
+                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white"
                       : "border-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"
                   }`}
                 >
@@ -750,9 +868,10 @@ const MaintenanceSchedulingCombined = () => {
             </div>
           </div>
 
-          <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div className="flex-1">
+          <TableToolbar
+            search={
               <SearchInput
+                className="w-full sm:w-96"
                 placeholder="Search tasks..."
                 value={searchQuery}
                 onChange={(e) => {
@@ -760,8 +879,32 @@ const MaintenanceSchedulingCombined = () => {
                   setCurrentPage(1);
                 }}
               />
-            </div>
-            <div className="flex gap-3">
+            }
+            sort={
+              <SortSelect
+                className="w-full sm:w-60"
+                value={`${scheduleSortField}-${dateSortDirection}`}
+                onChange={(value) => {
+                  const [field, direction] = value.split("-") as [ScheduleSortField, SortDirection];
+                  setScheduleSortField(field);
+                  setDateSortDirection(direction);
+                  setCurrentPage(1);
+                }}
+                options={[
+                  { value: "date-desc", label: "Date - Newest" },
+                  { value: "date-asc", label: "Date - Oldest" },
+                  { value: "vehicle-asc", label: "Vehicle - A to Z" },
+                  { value: "vehicle-desc", label: "Vehicle - Z to A" },
+                  { value: "workOrder-asc", label: "Work Order - A to Z" },
+                  { value: "workOrder-desc", label: "Work Order - Z to A" },
+                  { value: "mechanic-asc", label: "Mechanic - A to Z" },
+                  { value: "mechanic-desc", label: "Mechanic - Z to A" },
+                  { value: "status-asc", label: "Status - A to Z" },
+                  { value: "status-desc", label: "Status - Z to A" },
+                ]}
+              />
+            }
+            filters={
               <FilterDropdown
                 open={showFilters}
                 onToggle={() => setShowFilters((current) => !current)}
@@ -784,63 +927,83 @@ const MaintenanceSchedulingCombined = () => {
                 onApply={() => setShowFilters(false)}
                 onClear={() => {
                   setSelectedStatusFilters([]);
+                  setVehicleFilter("All");
+                  setWorkOrderFilter("All");
+                  setMechanicFilter("All");
                   setDateFromFilter("");
                   setDateToFilter("");
-                  setVehicleFilter("All");
-                  setChecklistTemplateNameFilter("All");
-                  setDateRangeFilter("All");
                   setCurrentPage(1);
                 }}
+                legendTitle="Schedule Table Legend"
+                legendItems={[
+                  { label: "Status", description: "Current schedule state such as pending, due, in progress, overdue, cancelled, or completed.", tone: "#7c3aed" },
+                  { label: "Trigger", description: "Basis used to activate the schedule: odometer, time, or a manual entry.", tone: "#2563eb" },
+                  { label: "Next Due Date", description: "Date-based schedule target, when available for the selected trigger.", tone: "#c2410c" },
+                  { label: "Odometer Range", description: "Activation window built from reference reading, interval, and buffer distance.", tone: "#0f766e" },
+                ]}
               >
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <SelectField
-                    label="Vehicle"
-                    id="vehicleF"
-                    options={vehicleOptions}
-                    value={vehicleFilter}
-                    onChange={(e) => {
-                      setVehicleFilter(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                  />
-                  <SelectField
-                    label="Checklist Template"
-                    id="typeF"
-                    options={checklistTemplateOptions}
-                    value={checklistTemplateFilter}
-                    onChange={(e) => {
-                      setChecklistTemplateNameFilter(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                  />
-                  <SelectField
-                    label="Quick Date"
-                    id="dateRF"
-                    options={[
-                      { value: "All", label: "All Time" },
-                      { value: "Today", label: "Today" },
-                      { value: "This Week", label: "This Week" },
-                      { value: "This Month", label: "This Month" },
-                    ]}
-                    value={dateRangeFilter}
-                    onChange={(e) => {
-                      setDateRangeFilter(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                  />
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <label className="block">
+                    <span className="text-sm font-semibold text-[#141827]">Vehicle</span>
+                    <DropdownSelect
+                      className="mt-2"
+                      value={vehicleFilter}
+                      onChange={(value) => {
+                        setVehicleFilter(value);
+                        setCurrentPage(1);
+                      }}
+                      label="Vehicle"
+                      options={scheduleVehicleOptions.map((option) => ({
+                        value: option,
+                        label: option === "All" ? "All vehicles" : option,
+                      }))}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-semibold text-[#141827]">Work order</span>
+                    <DropdownSelect
+                      className="mt-2"
+                      value={workOrderFilter}
+                      onChange={(value) => {
+                        setWorkOrderFilter(value);
+                        setCurrentPage(1);
+                      }}
+                      label="Work order"
+                      options={scheduleWorkOrderOptions.map((option) => ({
+                        value: option,
+                        label: option === "All" ? "All work orders" : option,
+                      }))}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-semibold text-[#141827]">Mechanic</span>
+                    <DropdownSelect
+                      className="mt-2"
+                      value={mechanicFilter}
+                      onChange={(value) => {
+                        setMechanicFilter(value);
+                        setCurrentPage(1);
+                      }}
+                      label="Mechanic"
+                      options={scheduleMechanicOptions.map((option) => ({
+                        value: option,
+                        label: option === "All" ? "All mechanics" : option,
+                      }))}
+                    />
+                  </label>
                 </div>
               </FilterDropdown>
-            </div>
-          </div>
+            }
+          />
 
           {viewMode === "list" ? (
             <div className="overflow-visible">
               <DataTable
                 data={paginatedTasks}
                 getRowKey={(task) => task.id}
-                minWidth="900px"
+                minWidth="1180px"
                 density="compact"
-                onRowClick={(task) => openScheduleDetails([task])}
+                maxHeight="min(34rem, calc(100vh - 22rem))"
                 emptyMessage={
                   noTasks
                     ? "No maintenance schedules exist."
@@ -883,109 +1046,111 @@ const MaintenanceSchedulingCombined = () => {
                   },
                   {
                     key: "createdDate",
-                    header: (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDateSortDirection((direction) =>
-                            direction === "desc" ? "asc" : "desc",
-                          );
-                          setCurrentPage(1);
-                        }}
-                        className="inline-flex items-center gap-2 uppercase tracking-wide hover:text-white/80"
-                      >
-                        <span>Date Created</span>
-                        {dateSortDirection === "asc" ? (
-                          <ArrowUp className="h-3.5 w-3.5" />
-                        ) : (
-                          <ArrowDown className="h-3.5 w-3.5" />
-                        )}
-                      </button>
-                    ),
+                    header: "Schedule Date",
+                    width: "11%",
+                    render: (task) => formatScheduleDate(task),
+                  },
+                  {
+                    key: "nextDueDate",
+                    header: "Next Due Date",
+                    width: "11%",
+                    render: (task) => formatNextDueDate(task),
+                  },
+                  {
+                    key: "nextDueOdometer",
+                    header: "Next Due Odometer",
                     width: "12%",
-                    render: (task) => task.date,
+                    render: (task) => formatNextDueOdometer(task),
+                  },
+                  {
+                    key: "odometerRange",
+                    header: "Odometer Range",
+                    width: "12%",
+                    render: (task) => formatOdometerRange(task),
                   },
                   {
                     key: "mechanic",
                     header: "Mechanic",
-                    width: "15%",
+                    width: "13%",
                     render: (task) => task.assignedDriver,
                   },
                   {
                     key: "status",
                     header: "Status",
-                    width: "15%",
+                    width: "12%",
                     render: (task) => <StandardStatusBadge status={task.status} />,
                   },
-                  {
-                    key: "actions",
-                    header: "Actions",
-                    width: "8%",
-                    align: "center",
-                    render: (task) => (
-                      <ActionMenu
-                        open={openActionMenuId === task.id}
-                        onToggle={(event) => {
-                          event.stopPropagation();
-                          setOpenActionMenuId((current) =>
-                            current === task.id ? null : task.id,
-                          );
-                        }}
-                        items={[
-                          ...(!isInProgressScheduleLocked(task)
-                            ? [{
-                                label: "Edit",
-                                icon: Edit2,
-                                onClick: () => {
-                                  setOpenActionMenuId(null);
-                                  openFullScheduleEdit(task);
-                                },
-                              }]
-                            : []),
-                          ...(canShowScheduleUpdate(task)
-                            ? [{
-                                label: "Update",
-                                icon: RefreshCw,
-                                onClick: () => {
-                                  setOpenActionMenuId(null);
-                                  openOdometerUpdate(task);
-                                },
-                              }]
-                            : []),
-                          ...(!isInProgressScheduleLocked(task) &&
-                          task.status !== MaintenanceStatus.CANCELLED
-                            ? [{
-                                label: "Cancel",
-                                icon: Ban,
+                  ...(!isMechanic
+                    ? [{
+                        key: "actions",
+                        header: "",
+                        width: "7%",
+                        align: "center" as const,
+                        render: (task: MaintenanceTask) => (
+                          <ActionMenu
+                            open={openActionMenuId === task.id}
+                            onToggle={(event) => {
+                              event.stopPropagation();
+                              setOpenActionMenuId((current) =>
+                                current === task.id ? null : task.id,
+                              );
+                            }}
+                            items={[
+                              ...(!isInProgressScheduleLocked(task)
+                                ? [{
+                                    label: "Edit",
+                                    icon: Edit2,
+                                    onClick: () => {
+                                      setOpenActionMenuId(null);
+                                      openFullScheduleEdit(task);
+                                    },
+                                  }]
+                                : []),
+                              ...(canShowScheduleUpdate(task)
+                                ? [{
+                                    label: "Update",
+                                    icon: RefreshCw,
+                                    onClick: () => {
+                                      setOpenActionMenuId(null);
+                                      openOdometerUpdate(task);
+                                    },
+                                  }]
+                                : []),
+                              ...(!isInProgressScheduleLocked(task) &&
+                              task.status !== MaintenanceStatus.CANCELLED
+                                ? [{
+                                    label: "Cancel",
+                                    icon: Ban,
+                                    danger: true,
+                                    onClick: () => {
+                                      setOpenActionMenuId(null);
+                                      setPendingAction({ action: "cancel", task });
+                                    },
+                                  }]
+                                : task.status === MaintenanceStatus.CANCELLED
+                                ? [{
+                                    label: "Activate",
+                                    icon: Power,
+                                    onClick: () => {
+                                      setOpenActionMenuId(null);
+                                      setPendingAction({ action: "activate", task });
+                                    },
+                                  }]
+                                : []),
+                              {
+                                label: "Deactivate",
+                                icon: PowerOff,
                                 danger: true,
                                 onClick: () => {
                                   setOpenActionMenuId(null);
-                                  setPendingAction({ action: "cancel", task });
+                                  setPendingAction({ action: "deactivate", task });
                                 },
-                              }]
-                            : task.status === MaintenanceStatus.CANCELLED
-                            ? [{
-                                label: "Activate",
-                                icon: Power,
-                                onClick: () => {
-                                  setOpenActionMenuId(null);
-                                  setPendingAction({ action: "activate", task });
-                                },
-                              }]
-                            : []),
-                          {
-                            label: "Deactivate",
-                            icon: PowerOff,
-                            danger: true,
-                            onClick: () => {
-                              setOpenActionMenuId(null);
-                              setPendingAction({ action: "deactivate", task });
-                            },
-                          },
-                        ]}
-                      />
-                    ),
-                  },
+                              },
+                            ]}
+                          />
+                        ),
+                      }]
+                    : []),
                 ]}
               />
               {filteredTasks.length > 0 ? (
@@ -1016,13 +1181,55 @@ const MaintenanceSchedulingCombined = () => {
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
-                <div className="text-center">
-                  <h2 className="text-base font-bold text-[var(--color-text-primary)] sm:text-lg">
+                <div className="relative text-center">
+                  <button
+                    type="button"
+                    onClick={() => setIsMonthPickerOpen((open) => !open)}
+                    className="rounded-lg px-3 py-1 text-base font-bold text-[var(--color-text-primary)] transition hover:bg-[var(--color-card-bg-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-warning)] sm:text-lg"
+                    aria-expanded={isMonthPickerOpen}
+                    aria-label="Choose calendar month and year"
+                  >
                     {monthName} {yearName}
-                  </h2>
+                  </button>
                   <p className="text-xs text-[var(--color-text-secondary)]">
                     {filteredTasks.length} visible schedules
                   </p>
+                  {isMonthPickerOpen ? (
+                    <div className="absolute left-1/2 top-full z-20 mt-2 grid w-64 -translate-x-1/2 grid-cols-2 gap-3 rounded-xl border border-[var(--color-border)] bg-white p-3 text-left shadow-xl">
+                      <label className="text-xs font-semibold text-[var(--color-text-secondary)]">
+                        Month
+                        <DropdownSelect
+                          value={String(currentDate.getMonth())}
+                          onChange={(value) => {
+                            jumpToCalendarMonth(yearName, Number(value));
+                          }}
+                          label="Month"
+                          className="mt-1"
+                          buttonClassName="rounded-lg font-semibold"
+                          options={monthOptions.map((month) => ({
+                            value: String(month.value),
+                            label: month.label,
+                          }))}
+                        />
+                      </label>
+                      <label className="text-xs font-semibold text-[var(--color-text-secondary)]">
+                        Year
+                        <input
+                          type="number"
+                          min="1900"
+                          max="2100"
+                          value={yearName}
+                          onChange={(event) => {
+                            const nextYear = Number(event.target.value);
+                            if (Number.isFinite(nextYear)) {
+                              jumpToCalendarMonth(nextYear, currentDate.getMonth());
+                            }
+                          }}
+                          className="mt-1 h-10 w-full rounded-lg border border-[var(--color-border)] bg-white px-3 text-sm font-semibold text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)]"
+                        />
+                      </label>
+                    </div>
+                  ) : null}
                 </div>
                 <button
                   type="button"
@@ -1045,7 +1252,7 @@ const MaintenanceSchedulingCombined = () => {
               <div className="grid grid-cols-7 gap-1 sm:gap-2">
                 {calendarCells.map((cell, idx) => {
                   const schedulesForDay = filteredTasks.filter(
-                    (task) => task.date === cell.dateStr,
+                    (task) => formatScheduleDate(task) === cell.dateStr,
                   );
                   const isToday = Boolean(cell.dateStr) && cell.dateStr === formatLocalDate(today);
                   const visibleSchedules = schedulesForDay.slice(0, 2);
@@ -1084,13 +1291,21 @@ const MaintenanceSchedulingCombined = () => {
                                 {schedulesForDay.length}
                               </span>
                             ) : null}
-                            <button
-                              type="button"
-                              onClick={(event) => event.stopPropagation()}
-                              className="rounded-md p-1 text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] transition opacity-0 group-hover:opacity-100"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                            </button>
+                            {!isMechanic ? (
+                              <button
+                                type="button"
+                                aria-label={`Create schedule for ${cell.dateStr}`}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setEditingTask(null);
+                                  setIsOdometerUpdateOpen(false);
+                                  setIsModalOpen(true);
+                                }}
+                                className="rounded-md p-1 text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] transition opacity-0 group-hover:opacity-100"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                              </button>
+                            ) : null}
                           </div>
                           <div className="space-y-1 text-xs">
                             {visibleSchedules.map((task) => (
@@ -1134,52 +1349,69 @@ const MaintenanceSchedulingCombined = () => {
         className="flex max-h-[90vh] max-w-xl flex-col overflow-hidden"
         onClose={closeScheduleDetails}
         footer={
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          isMechanic && selectedSchedules.length <= 1 ? undefined :
+          <div className="grid w-full grid-cols-1 items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
             {selectedSchedules.length > 1 ? (
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={selectedSchedulePage === 0}
-                  onClick={() =>
-                    setSelectedSchedulePage((page) => Math.max(0, page - 1))
-                  }
-                >
-                  Previous
-                </Button>
-                <span className="text-sm text-[var(--color-text-secondary)]">
-                  {selectedSchedulePage + 1} of {selectedSchedules.length}
+              <>
+                <span className="text-left text-base font-medium text-[#64748b]">
+                  {selectedSchedules.length} schedules
                 </span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={
-                    selectedSchedulePage >= selectedSchedules.length - 1
-                  }
-                  onClick={() =>
-                    setSelectedSchedulePage((page) =>
-                      Math.min(selectedSchedules.length - 1, page + 1),
-                    )
-                  }
-                >
-                  Next
-                </Button>
-              </div>
+                <div className="flex items-center justify-center gap-2">
+                  {selectedSchedules.map((schedule, index) => (
+                    <button
+                      key={schedule.id}
+                      type="button"
+                      onClick={() => setSelectedSchedulePage(index)}
+                      aria-label={`Go to schedule ${index + 1}`}
+                      aria-current={selectedSchedulePage === index ? "page" : undefined}
+                      className={`flex h-10 min-w-10 items-center justify-center rounded-full px-3 text-sm font-bold transition ${
+                        selectedSchedulePage === index
+                          ? "bg-[#070b45] text-white shadow-[0_8px_18px_rgba(7,11,69,0.18)]"
+                          : "text-[#070b45] hover:bg-[#eef2ff]"
+                      }`}
+                    >
+                      {index + 1}
+                    </button>
+                  ))}
+                </div>
+              </>
             ) : (
-              <span />
+              <>
+                <span />
+                <span />
+              </>
             )}
-            <Button
-              variant="secondary"
-              onClick={closeScheduleDetails}
-            >
-              Close
-            </Button>
+            <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
+              {!isMechanic && selectedSchedule && !isInProgressScheduleLocked(selectedSchedule) ? (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    closeScheduleDetails();
+                    openFullScheduleEdit(selectedSchedule);
+                  }}
+                >
+                  Edit
+                </Button>
+              ) : null}
+              {!isMechanic && selectedSchedule && canShowScheduleUpdate(selectedSchedule) ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    closeScheduleDetails();
+                    openOdometerUpdate(selectedSchedule);
+                  }}
+                >
+                  Update
+                </Button>
+              ) : null}
+            </div>
           </div>
         }
       >
         {selectedSchedule && (
             <section
-              className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card"
+              className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)]"
             >
               <div className="flex items-center justify-between gap-4 border-b border-[var(--color-divider)] px-4 py-3">
                 <div>
@@ -1189,31 +1421,6 @@ const MaintenanceSchedulingCombined = () => {
                   <p className="text-sm text-[var(--color-text-secondary)]">
                     {getVehiclePlateNumber(selectedSchedule.vehicleId)} - {selectedSchedule.date}
                   </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {!isInProgressScheduleLocked(selectedSchedule) ? (
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        closeScheduleDetails();
-                        openFullScheduleEdit(selectedSchedule);
-                      }}
-                    >
-                      Edit
-                    </Button>
-                  ) : null}
-                  {canShowScheduleUpdate(selectedSchedule) ? (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => {
-                        closeScheduleDetails();
-                        openOdometerUpdate(selectedSchedule);
-                      }}
-                    >
-                      Update
-                    </Button>
-                  ) : null}
                 </div>
               </div>
 
@@ -1299,29 +1506,29 @@ const MaintenanceSchedulingCombined = () => {
               .map((detail) => (
                 <div
                   key={detail.label}
-                  className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4"
+                  className="flex flex-col gap-2"
                 >
-                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                  <p className="text-sm font-semibold text-[var(--color-text-primary)]">
                     {detail.label}
                   </p>
-                  <p className="mt-1 text-sm font-medium text-[var(--color-text-primary)]">
+                  <div className="min-h-11 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2.5 text-sm text-[var(--color-text-primary)]">
                     {detail.label === "Status" ? (
                       <StatusBadge status={selectedSchedule.status} />
                     ) : (
                       detail.value
                     )}
-                  </p>
+                  </div>
                 </div>
               ))}
 
             {selectedSchedule.notes && (
-              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4 sm:col-span-2">
-                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+              <div className="flex flex-col gap-2 sm:col-span-2">
+                <p className="text-sm font-semibold text-[var(--color-text-primary)]">
                   Notes
                 </p>
-                <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--color-text-primary)]">
+                <div className="min-h-24 whitespace-pre-wrap rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2.5 text-sm text-[var(--color-text-primary)]">
                   {selectedSchedule.notes}
-                </p>
+                </div>
               </div>
             )}
               </div>

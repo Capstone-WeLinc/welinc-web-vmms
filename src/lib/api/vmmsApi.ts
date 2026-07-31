@@ -97,10 +97,49 @@ function readLocalMaintenanceSchedules() {
       return initialSchedules;
     }
 
-    return parseStoredMaintenanceSchedules(saved) ?? [];
+    const storedSchedules = parseStoredMaintenanceSchedules(saved) ?? [];
+    const reconciledSchedules = reconcileMockMaintenanceSchedules(storedSchedules);
+    if (reconciledSchedules.changed) {
+      writeLocalMaintenanceSchedules(reconciledSchedules.schedules);
+    }
+    return reconciledSchedules.schedules;
   } catch {
     return [];
   }
+}
+
+function reconcileMockMaintenanceSchedules(schedules: MaintenanceTask[]) {
+  const mockById = new Map(mockWorkOrders.map((workOrder) => [workOrder.id, workOrder]));
+  let changed = false;
+  const nextSchedules = schedules.map((schedule) => {
+    const mockSchedule = mockById.get(schedule.id);
+    if (!mockSchedule) return schedule;
+
+    mockById.delete(schedule.id);
+
+    const shouldRefreshDemoAssignment =
+      !schedule.assignedMechanicId ||
+      !schedule.assignedMechanicEmail ||
+      schedule.assignedDriver === "J. Dela Cruz" ||
+      schedule.assignedDriver === "David Miller" ||
+      schedule.assignedDriver === "James Carter";
+
+    if (!shouldRefreshDemoAssignment) return schedule;
+
+    changed = true;
+    return {
+      ...mockSchedule,
+      workOrderProgress: schedule.workOrderProgress,
+      deletedAt: schedule.deletedAt,
+    };
+  });
+
+  if (mockById.size > 0) {
+    changed = true;
+    nextSchedules.push(...mockById.values());
+  }
+
+  return { schedules: nextSchedules, changed };
 }
 
 function writeLocalMaintenanceSchedules(schedules: MaintenanceTask[]) {
@@ -216,6 +255,12 @@ function normalizeUserRecord(user: unknown): UserRecord {
   return {
     ...userObj,
     role: normalizeRole(fallbackRole) as UserRole,
+    createdAt:
+      typeof userObj.createdAt === "string"
+        ? userObj.createdAt
+        : typeof userObj.created_at === "string"
+          ? userObj.created_at
+          : undefined,
     updatedAt:
       typeof userObj.updatedAt === "string"
         ? userObj.updatedAt
@@ -259,14 +304,65 @@ function loadMockVehicleStatuses() {
   }
 }
 
+type TestLoginRoleLabel =
+  | "Admin"
+  | "Chief Mechanic"
+  | "Operations"
+  | "Mechanic";
+
+export type TestLoginAccount = {
+  userId: string;
+  email: string;
+  password: string;
+  label: TestLoginRoleLabel;
+};
+
+export const testLoginAccounts: TestLoginAccount[] = [
+  {
+    userId: "u-admin-test",
+    email: "admin@welinc.test",
+    password: "admin123",
+    label: "Admin",
+  },
+  {
+    userId: "u-chief-mechanic-test",
+    email: "chief.mechanic@welinc.test",
+    password: "chief123",
+    label: "Chief Mechanic",
+  },
+  {
+    userId: "u-operations-test",
+    email: "operations@welinc.test",
+    password: "operations123",
+    label: "Operations",
+  },
+  {
+    userId: "u-mechanic-test",
+    email: "mechanic@welinc.test",
+    password: "mechanic123",
+    label: "Mechanic",
+  },
+];
+
 export async function login(
   email: string,
   password: string,
 ): Promise<{ accessToken: string }> {
-  if (!useBackend) {
-    const matchingUser = mockUsers.find((user) => user.email === email);
-    if (!matchingUser) {
+  const normalizedEmail = email.trim().toLowerCase();
+  const selectedAccount = testLoginAccounts.find(
+    (account) => account.email.toLowerCase() === normalizedEmail,
+  );
+
+  if (selectedAccount) {
+    if (password !== selectedAccount.password) {
       throw new Error("Invalid email or password.");
+    }
+
+    const matchingUser = mockUsers.find(
+      (user) => user.id === selectedAccount.userId,
+    );
+    if (!matchingUser) {
+      throw new Error("Configured test user was not found.");
     }
 
     const now = new Date().toISOString();
@@ -274,6 +370,10 @@ export async function login(
     window.localStorage.setItem("mockCurrentUserId", matchingUser.id);
 
     return { accessToken: `mock-${matchingUser.id}` };
+  }
+
+  if (!useBackend) {
+    throw new Error("Invalid email or password.");
   }
 
   return fetchJSON<{ accessToken: string }>("/auth/login", {
@@ -284,9 +384,7 @@ export async function login(
 
 export function logout() {
   window.localStorage.removeItem("accessToken");
-  if (!useBackend) {
-    window.localStorage.removeItem("mockCurrentUserId");
-  }
+  window.localStorage.removeItem("mockCurrentUserId");
 }
 
 export async function updateUserLastActive(
@@ -449,6 +547,7 @@ export async function createUser(user: UserCreateInput) {
       role: user.role ?? "OPERATIONS",
       status: user.isActive === false ? "Inactive" : "Active",
       lastActive: now,
+      createdAt: now,
       updatedAt: now,
     };
     mockUsers.unshift(createdUser);
@@ -556,8 +655,6 @@ export async function unlockUser(userId: string) {
 }
 
 export async function resetUserPassword(userId: string) {
-  const password = "Password123!";
-
   if (!useBackend) {
     const index = mockUsers.findIndex((user) => user.id === userId);
     if (index < 0) throw new Error("User not found");
@@ -569,7 +666,7 @@ export async function resetUserPassword(userId: string) {
     `/auth/users/${encodeURIComponent(userId)}/password`,
     {
       method: "PATCH",
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ requirePasswordReset: true }),
     },
   ).then((user) => normalizeUserRecord(user));
 }
@@ -595,15 +692,15 @@ export async function deleteUser(userId: string) {
 }
 
 export async function getCurrentUser() {
-  if (!useBackend) {
-    const currentUserId = window.localStorage.getItem("mockCurrentUserId");
-    if (currentUserId) {
-      const currentUser = mockUsers.find((user) => user.id === currentUserId);
-      if (currentUser) {
-        return { ...currentUser };
-      }
+  const currentUserId = window.localStorage.getItem("mockCurrentUserId");
+  if (currentUserId) {
+    const currentUser = mockUsers.find((user) => user.id === currentUserId);
+    if (currentUser) {
+      return { ...currentUser };
     }
+  }
 
+  if (!useBackend) {
     return { ...mockUsers[0] };
   }
 

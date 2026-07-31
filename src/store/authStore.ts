@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import type { UserRecord } from "../lib/api/authService";
-import { useBackend } from "../lib/api/httpClient";
 
 interface AuthState {
   authenticated: boolean;
@@ -11,8 +10,7 @@ interface AuthState {
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
-  authenticated:
-    !useBackend || Boolean(window.localStorage.getItem("accessToken")),
+  authenticated: Boolean(window.localStorage.getItem("accessToken")),
   currentUser: null,
   setAuthenticated: (authenticated) => set({ authenticated }),
   setCurrentUser: (currentUser) => set({ currentUser }),

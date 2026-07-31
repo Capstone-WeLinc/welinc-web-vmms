@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { VehicleEfficiency } from '../types';
 import { Search, Filter } from 'lucide-react';
+import { DropdownSelect, LegendHelp, Pagination } from '../../../components/ui';
 
 interface InputFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
@@ -18,7 +19,7 @@ function InputField({ label, id, className, ...props }: InputFieldProps) {
       )}
       <input
         id={id}
-        className={`${className ?? ''} w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]`}
+        className={`${className ?? ''} h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 text-sm text-[var(--color-text-primary)]`}
         {...props}
       />
     </div>
@@ -45,17 +46,15 @@ function SelectField({ label, id, options, className, ...props }: SelectFieldPro
           {label}
         </label>
       )}
-      <select
-        id={id}
-        className={`${className ?? ''} w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] appearance-none cursor-pointer`}
-        {...props}
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value} className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]">
-            {opt.label}
-          </option>
-        ))}
-      </select>
+      <DropdownSelect
+        value={String(props.value ?? "")}
+        options={options}
+        onChange={(value) =>
+          props.onChange?.({ target: { value } } as React.ChangeEvent<HTMLSelectElement>)
+        }
+        label={label || id}
+        className={className}
+      />
     </div>
   );
 }
@@ -139,9 +138,10 @@ export default function EfficiencyTrendsWithFilters({
           />
         </div>
         <div className="flex flex-col gap-1 justify-end">
+          <div className="flex items-center gap-2">
           <button
             onClick={() => setShowFilters(!showFilters)}
-              className={`flex h-10.5 items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-all duration-200 ${showFilters
+              className={`flex h-10 items-center gap-2 rounded-xl border px-4 text-sm font-medium transition-all duration-200 ${showFilters
                 ? 'active-filter'
                 : 'border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)]'
                 }`}
@@ -149,6 +149,15 @@ export default function EfficiencyTrendsWithFilters({
             <Filter size={16} strokeWidth={1.8} />
             Filter
           </button>
+          <LegendHelp
+            title="Efficiency Legend"
+            items={[
+              { label: "Above Average", description: "Vehicle efficiency is at or above the fleet average.", tone: "#059669" },
+              { label: "Below Average", description: "Vehicle efficiency is below the fleet average.", tone: "#dc2626" },
+              { label: "Fleet Avg", description: "Reference line used to compare each vehicle.", tone: "#f59e0b" },
+            ]}
+          />
+          </div>
         </div>
       </div>
 
@@ -162,7 +171,7 @@ export default function EfficiencyTrendsWithFilters({
         />
       )}
 
-      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card">
+      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
         <p className="text-xs text-[var(--color-text-secondary)] max-w-2xl leading-relaxed">
           The chart shows vehicle fuel efficiency compared to fleet average. Bars extending beyond the vertical amber line indicate above-average performance.
         </p>
@@ -203,45 +212,20 @@ export default function EfficiencyTrendsWithFilters({
             );
           })
         ) : (
-          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-8 text-center shadow-card">
+          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-8 text-center">
             <Search size={32} className="mx-auto mb-3 text-[var(--color-text-secondary)]" strokeWidth={1.8} />
             <p className="text-[var(--color-text-secondary)]">No vehicles match your search criteria</p>
           </div>
         )}
       </div>
 
-      {/* Pagination control overlay & standard footer */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card">
-
-        {/* Results Count Summary */}
-        <div className="text-sm text-[var(--color-text-secondary)]">
-          Showing <span className="font-bold text-[var(--color-text-primary)]">{visibleVehicles.length}</span> of{' '}
-          <span className="font-bold text-[var(--color-text-primary)]">{filtered.length}</span> matching vehicles
-          {filtered.length !== vehicles.length && ` (filtered from ${vehicles.length} total)`}
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-            disabled={currentPage === 1}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-card-bg-hover)] disabled:opacity-40 disabled:hover:bg-[var(--color-input-bg)]"
-            aria-label="Previous page"
-          >
-            &lt;
-          </button>
-          <span className="text-xs text-[var(--color-text-secondary)] font-medium">
-            {currentPage} / {totalPages || 1}
-          </span>
-          <button
-            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-            disabled={currentPage === totalPages}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-card-bg-hover)] disabled:opacity-40 disabled:hover:bg-[var(--color-input-bg)]"
-            aria-label="Next page"
-          >
-            &gt;
-          </button>
-        </div>
-      </div>
+      <Pagination
+        page={Math.min(currentPage, Math.max(1, totalPages))}
+        totalPages={Math.max(1, totalPages)}
+        totalItems={filtered.length}
+        pageSize={itemsPerPage}
+        onPageChange={setCurrentPage}
+      />
     </div>
   );
 }

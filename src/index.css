@@ -38,7 +38,7 @@
   --color-light-muted: #94a3b8;
 
   /* Theme Defaults */
-  --color-page-bg: #f1f5f9;
+  --color-page-bg: #ffffff;
   --color-card-bg: #ffffff;
   --color-text-primary: #0d0d0d;
   --color-text-secondary: #64748b;
@@ -48,6 +48,8 @@
   --color-divider: #e2e8f0;
   --color-card-bg-hover: #f1f5f9;
   --color-input-bg-hover: #f1f5f9;
+  --radius-app-card: 0.75rem;
+  --shadow-app-surface: 0 18px 45px rgb(15 23 42 / 0.12);
 }
 
 /* Base Styles */
@@ -113,7 +115,7 @@
 
   /* Tables */
   :where(div, section):has(> table) {
-    @apply border border-[var(--color-border)] shadow-card;
+    @apply overflow-hidden rounded-xl border border-[var(--color-border)];
   }
 
   thead {
@@ -233,16 +235,112 @@
 
   /* Card Component */
   .card-base {
-    @apply rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card transition-theme;
+    border-radius: var(--radius-app-card);
+    @apply border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 transition-theme;
+  }
+
+  .enterprise-card {
+    border-radius: var(--radius-app-card);
+    @apply border border-[var(--color-border)] bg-[var(--color-card-bg)] transition duration-200;
+  }
+
+  .enterprise-card:hover {
+    @apply border-[#1a1f6e]/30 bg-[var(--color-card-bg-hover)];
+  }
+
+  .enterprise-panel {
+    border-radius: var(--radius-app-card);
+    @apply overflow-hidden border border-[var(--color-border)] bg-[var(--color-card-bg)];
+  }
+
+  .enterprise-panel-header {
+    @apply border-b border-[var(--color-border)] bg-[var(--color-input-bg)] px-6 py-6;
+  }
+
+  .enterprise-kpi-card {
+    border-radius: var(--radius-app-card);
+    @apply relative min-h-32 overflow-hidden border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 text-left transition duration-200;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+  }
+
+  .enterprise-kpi-card:hover {
+    @apply border-[#1a1f6e]/30 bg-[var(--color-card-bg-hover)];
+    box-shadow: 0 8px 22px rgb(15 23 42 / 0.08);
+  }
+
+  .enterprise-kpi-label {
+    @apply text-xs font-bold uppercase text-[var(--color-text-secondary)];
+  }
+
+  .enterprise-kpi-value {
+    @apply mt-3 text-2xl font-extrabold text-[var(--color-text-primary)];
+  }
+
+  .enterprise-icon-box {
+    @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)];
   }
 
   /* Modal Component */
   .modal-overlay {
-    @apply fixed inset-0 bg-[rgba(0,0,0,0.5)] flex items-center justify-center z-50;
+    position: fixed;
+    inset: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 90;
+    display: flex;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 100vh;
+    min-height: 100dvh;
+    width: 100vw;
+    width: 100dvw;
+    max-width: none;
+    margin: 0;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+    overscroll-behavior: contain;
+    background: rgba(2, 6, 23, 0.52);
+    padding: 1rem;
+    isolation: isolate;
+    backdrop-filter: blur(14px) saturate(115%);
+    -webkit-backdrop-filter: blur(14px) saturate(115%);
+    animation: modalOverlayIn 160ms ease-out;
   }
 
   .modal-content {
-    @apply rounded-xl bg-[var(--color-card-bg)] border border-[var(--color-border)] p-6 max-w-md w-full shadow-xl;
+    border-radius: var(--radius-app-card);
+    box-shadow: var(--shadow-app-surface);
+    max-height: min(92dvh, calc(100dvh - 2rem));
+    @apply flex w-full max-w-md flex-col overflow-hidden border border-[var(--color-border)] bg-[var(--color-card-bg)] p-0;
+    animation: modalContentIn 180ms ease-out;
+    transform-origin: center;
+  }
+
+  @keyframes modalOverlayIn {
+    from {
+      opacity: 0;
+      backdrop-filter: blur(0) saturate(100%);
+      -webkit-backdrop-filter: blur(0) saturate(100%);
+    }
+    to {
+      opacity: 1;
+      backdrop-filter: blur(14px) saturate(115%);
+      -webkit-backdrop-filter: blur(14px) saturate(115%);
+    }
+  }
+
+  @keyframes modalContentIn {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
   }
 
   /* Focus Ring Utility */

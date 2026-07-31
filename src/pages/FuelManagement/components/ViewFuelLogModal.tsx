@@ -1,6 +1,14 @@
-import type { FuelFillUp } from '../types';
-import { X, Droplet, Calendar, Gauge, Navigation, User, DollarSign } from 'lucide-react';
-import { useBodyScrollLock } from '../../../lib/hooks/useBodyScrollLock';
+import type { FuelFillUp } from "../types";
+import {
+  Calendar,
+  Droplet,
+  Gauge,
+  Navigation,
+  Paperclip,
+  PhilippinePeso,
+  User,
+} from "lucide-react";
+import { Modal } from "../../../components/ui";
 
 interface ViewFuelLogModalProps {
   isOpen: boolean;
@@ -8,157 +16,160 @@ interface ViewFuelLogModalProps {
   fillUp: FuelFillUp;
 }
 
-export default function ViewFuelLogModal({ isOpen, onClose, fillUp }: ViewFuelLogModalProps) {
-  useBodyScrollLock(isOpen && Boolean(fillUp));
+const labelClasses = "text-xs font-bold text-[var(--color-text-secondary)]";
+const valueClasses = "mt-1 text-sm font-bold text-[var(--color-text-primary)]";
+const cardClasses = "rounded-xl border border-[var(--color-border)] bg-white p-4";
 
+export default function ViewFuelLogModal({
+  isOpen,
+  onClose,
+  fillUp,
+}: ViewFuelLogModalProps) {
   if (!isOpen || !fillUp) return null;
-  // Layout constants and inline visual styles
-    const overlayClasses = 'modal-overlay backdrop-blur-sm p-4';
-    const containerClasses = 'w-full max-w-2xl overflow-hidden rounded-2xl shadow-2xl modal-content';
-    const headerClasses = 'flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)]';
-    const iconBgClasses = 'p-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-brand-primary)]';
-    const infoBannerClasses = 'flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card';
-    const cardClasses = 'p-4 rounded-xl space-y-3 border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card';
-    const statusBadgeClasses = fillUp.trend === 'above'
-      ? 'mt-2 inline-flex items-center px-3 py-1.5 rounded-md font-mono text-lg font-bold bg-[var(--color-brand-success)]/15 text-[var(--color-brand-success)] border border-[var(--color-brand-success)]/20'
-      : 'mt-2 inline-flex items-center px-3 py-1.5 rounded-md font-mono text-lg font-bold bg-[var(--color-brand-danger)]/15 text-[var(--color-brand-danger)] border border-[var(--color-brand-danger)]/20';
+
+  const isAboveBenchmark = fillUp.trend === "above";
 
   return (
-    <div className={overlayClasses}>
-      {/* Modal Container */}
-        <div className={containerClasses}>
-
-        {/* Header section */}
-          <div className={headerClasses}>
-          <div className="flex items-center gap-3">
-              <div className={iconBgClasses}>
-              <Droplet size={18} strokeWidth={2} />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-[var(--color-text-primary)]">Fuel Fill-up Details</h2>
-              <p className="text-xs text-[var(--color-text-secondary)] font-mono mt-0.5">{fillUp.id}</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-md text-[var(--color-text-secondary)] bg-transparent border-0">
-            <X size={18} />
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      size="md"
+      title={
+        <span className="inline-flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--color-border)] bg-white text-[var(--color-brand-primary)]">
+            <Droplet className="h-5 w-5" />
+          </span>
+          <span>
+            <span className="block text-xl font-extrabold">Fuel Fill-up Details</span>
+            <span className="mt-1 block text-xs font-semibold text-[var(--color-text-secondary)]">
+              {fillUp.id}
+            </span>
+          </span>
+        </span>
+      }
+      footer={
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-10 rounded-xl border border-[var(--color-border)] bg-white px-5 text-sm font-bold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-input-bg)] hover:text-[var(--color-text-primary)]"
+          >
+            Close
           </button>
         </div>
+      }
+    >
+      <div className="space-y-5">
+        <section className="flex flex-col gap-4 rounded-xl border border-[var(--color-border)] bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className={labelClasses}>Vehicle profile</p>
+            <p className="mt-2 text-2xl font-extrabold text-[var(--color-text-primary)]">
+              {fillUp.vehicleName ?? "N/A"}
+            </p>
+            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+              {fillUp.vehicleId} - {fillUp.vehicleModel}
+            </p>
+          </div>
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-5 py-3 text-center">
+            <p className={labelClasses}>Efficiency metric</p>
+            <p
+              className={`mt-2 text-xl font-extrabold ${
+                isAboveBenchmark ? "text-emerald-600" : "text-red-600"
+              }`}
+            >
+              {fillUp.efficiency} km/L
+            </p>
+          </div>
+        </section>
 
-        {/* Content Section */}
-        <div className="p-6 space-y-6">
+        <div className="grid gap-4 md:grid-cols-2">
+          <section className={cardClasses}>
+            <div className="mb-4 flex items-center gap-2 border-b border-[var(--color-border)] pb-3 text-sm font-bold text-[var(--color-text-secondary)]">
+              <PhilippinePeso className="h-4 w-4 text-[var(--color-brand-primary)]" />
+              Cost breakdown
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <p className={labelClasses}>Volume filled</p>
+                <p className={valueClasses}>{fillUp.liters}L</p>
+              </div>
+              <div>
+                <p className={labelClasses}>Price per liter</p>
+                <p className={valueClasses}>₱{fillUp.pricePerLiter?.toFixed(2)}</p>
+              </div>
+            </div>
+            <div className="mt-4 border-t border-[var(--color-border)] pt-4">
+              <p className={labelClasses}>Total transaction cost</p>
+              <p className="mt-1 text-2xl font-extrabold text-[var(--color-brand-primary)]">
+                ₱{fillUp.totalCost?.toLocaleString()}
+              </p>
+            </div>
+          </section>
 
-          {/* Top Info Banner - Vehicle Primary Stats */}
-          <div className={infoBannerClasses}>
+          <section className={cardClasses}>
+            <div className="mb-4 flex items-center gap-2 border-b border-[var(--color-border)] pb-3 text-sm font-bold text-[var(--color-text-secondary)]">
+              <Gauge className="h-4 w-4 text-[var(--color-brand-primary)]" />
+              Telemetry logs
+            </div>
             <div>
-              <div className="text-xs text-[var(--color-text-secondary)] font-medium uppercase tracking-wider">Vehicle Profile</div>
-              <div className="text-lg font-bold text-[var(--color-text-primary)] mt-0.5">{fillUp.vehicleName ?? 'N/A'}</div>
-              <div className="text-xs text-[var(--color-text-secondary)] font-mono mt-0.5">
-                {fillUp.vehicleId} &middot; {fillUp.vehicleModel}
-              </div>
+              <p className={labelClasses}>Odometer reading</p>
+              <p className={valueClasses}>{fillUp.odometer?.toLocaleString()} km</p>
             </div>
-
-              <div className="flex flex-col items-start sm:items-end">
-              <span className="text-xs text-[var(--color-text-secondary)] font-medium uppercase tracking-wider">Efficiency Metric</span>
-              <div className={statusBadgeClasses}>
-                {fillUp.efficiency} km/L
-              </div>
+            <div className="mt-5">
+              <p className={labelClasses}>Performance status</p>
+              <span
+                className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-bold ${
+                  isAboveBenchmark
+                    ? "bg-emerald-50 text-emerald-700"
+                    : "bg-red-50 text-red-700"
+                }`}
+              >
+                {isAboveBenchmark ? "Optimal / Above Benchmark" : "Increased Fuel Consumption"}
+              </span>
             </div>
-          </div>
-
-          {/* Grid Layout Metrics */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-            {/* Transaction Metrics Card */}
-            <div className={cardClasses}>
-              <div className="flex items-center gap-2 text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider pb-1 border-b border-[var(--color-border)]">
-                <DollarSign size={14} className="text-[var(--color-brand-primary)]" />
-                Cost Breakdown
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <span className="text-xs text-[var(--color-text-secondary)]">Volume Filled</span>
-                  <div className="text-sm font-bold text-[var(--color-text-primary)] font-mono mt-0.5">{fillUp.liters}L</div>
-                </div>
-                <div>
-                  <span className="text-xs text-[var(--color-text-secondary)]">Price Per Liter</span>
-                  <div className="text-sm font-bold text-[var(--color-text-primary)] font-mono mt-0.5">₱{fillUp.pricePerLiter?.toFixed(2)}</div>
-                </div>
-              </div>
-              <div className="pt-2 border-t border-[var(--color-border)]">
-                <span className="text-xs text-[var(--color-text-secondary)]">Total Transaction Cost</span>
-                  <div className="text-xl font-bold text-[var(--color-brand-primary)] font-mono mt-0.5">
-                  ₱{fillUp.totalCost?.toLocaleString()}
-                </div>
-              </div>
-            </div>
-
-            <div className={cardClasses}>
-              <div className="flex items-center gap-2 text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider pb-1 border-b border-[var(--color-border)]">
-                <Gauge size={14} className="text-[var(--color-brand-primary)]" />
-                Telemetry Logs
-              </div>
-                <div>
-                <span className="text-xs text-[var(--color-text-secondary)]">Odometer Reading</span>
-                <div className="text-sm font-bold text-[var(--color-text-primary)] font-mono mt-0.5">
-                  {fillUp.odometer?.toLocaleString()} km
-                </div>
-              </div>
-              <div>
-                <span className="text-xs text-[var(--color-text-secondary)]">Performance Status</span>
-                <div className="text-xs font-medium mt-1">
-                  {fillUp.trend === 'above' ? (
-                    <span className="inline-flex items-center px-2 py-1 rounded-md bg-[var(--color-brand-success)]/10 text-[var(--color-brand-success)] font-medium">Optimal / Above Benchmark</span>
-                  ) : (
-                    <span className="inline-flex items-center px-2 py-1 rounded-md bg-[var(--color-brand-danger)]/10 text-[var(--color-brand-danger)] font-medium">Increased Fuel Consumption</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
-
-            {/* Date Field */}
-            <div className="flex gap-3 items-start">
-              <div className="mt-0.5 p-1.5 rounded-lg bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]">
-                <Calendar size={14} />
-              </div>
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Date Logged</div>
-                <div className="mt-0.5 text-sm font-medium text-[var(--color-text-primary)]">{fillUp.date}</div>
-              </div>
-            </div>
-
-            {/* Station Field */}
-            <div className="flex gap-3 items-start">
-              <div className="mt-0.5 p-1.5 rounded-lg bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]">
-                <Navigation size={14} />
-              </div>
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Fuel Station</div>
-                <div className="mt-0.5 text-sm font-medium text-[var(--color-text-primary)]">{fillUp.station ?? 'N/A'}</div>
-              </div>
-            </div>
-
-            {/* Personnel Field */}
-            <div className="flex gap-3 items-start">
-              <div className="mt-0.5 p-1.5 rounded-lg bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]">
-                <User size={14} />
-              </div>
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Filled By</div>
-                <div className="mt-0.5 text-sm font-medium text-[var(--color-text-primary)]">{fillUp.filledBy ?? 'N/A'}</div>
-              </div>
-            </div>
-          </div>
+          </section>
         </div>
 
-          <div className="flex items-center justify-end px-6 py-4 border-t border-[var(--color-border)] bg-[var(--color-card-bg)]">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">Close Profile</button>
-        </div>
+        <section className="grid gap-4 rounded-xl border border-[var(--color-border)] bg-white p-4 md:grid-cols-3">
+          {[
+            { icon: Calendar, label: "Date logged", value: fillUp.date },
+            { icon: Navigation, label: "Fuel station", value: fillUp.station ?? "N/A" },
+            { icon: User, label: "Filled by", value: fillUp.filledBy ?? "N/A" },
+          ].map((item) => (
+            <div key={item.label} className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
+                <item.icon className="h-4 w-4" />
+              </span>
+              <div>
+                <p className={labelClasses}>{item.label}</p>
+                <p className={valueClasses}>{item.value}</p>
+              </div>
+            </div>
+          ))}
+        </section>
 
+        {fillUp.receiptFileName ? (
+          <section className={cardClasses}>
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-input-bg)] text-[var(--color-brand-primary)]">
+                <Paperclip className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <p className={labelClasses}>Receipt / supporting file</p>
+                <p className="mt-1 truncate text-sm font-bold text-[var(--color-text-primary)]">
+                  {fillUp.receiptFileName}
+                </p>
+                <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                  {fillUp.receiptFileSize
+                    ? `${(fillUp.receiptFileSize / 1024).toFixed(1)} KB`
+                    : "File attached"}
+                  {fillUp.receiptFileType ? ` - ${fillUp.receiptFileType}` : ""}
+                </p>
+              </div>
+            </div>
+          </section>
+        ) : null}
       </div>
-    </div>
+    </Modal>
   );
 }
