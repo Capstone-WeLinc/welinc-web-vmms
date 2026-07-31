@@ -266,7 +266,7 @@ export default function Profile() {
 
           <button
             type="button"
-            className="mt-8 h-10 w-full rounded-lg border border-[#ffb4b4] text-sm font-semibold text-[#b50000] transition hover:bg-[#fff1f1]"
+            className="mt-8 h-11 w-full rounded-lg border border-[#ffb4b4] text-sm font-semibold text-[#b50000] transition hover:bg-[#fff1f1]"
             onClick={() =>
               setToast({
                 type: "info",
@@ -291,7 +291,7 @@ export default function Profile() {
                 <input
                   value={form.firstName}
                   onChange={(event) => handleFormChange("firstName", event.target.value)}
-                  className="mt-2 h-10 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm text-[#344158] outline-none focus:border-[#070b45]"
+                  className="mt-2 h-11 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm text-[#344158] outline-none focus:border-[#070b45]"
                 />
               </label>
               <label className="block">
@@ -301,7 +301,7 @@ export default function Profile() {
                 <input
                   value={form.lastName}
                   onChange={(event) => handleFormChange("lastName", event.target.value)}
-                  className="mt-2 h-10 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm text-[#344158] outline-none focus:border-[#070b45]"
+                  className="mt-2 h-11 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm text-[#344158] outline-none focus:border-[#070b45]"
                 />
               </label>
               <label className="block">
@@ -311,7 +311,7 @@ export default function Profile() {
                 <input
                   value={form.email}
                   onChange={(event) => handleFormChange("email", event.target.value)}
-                  className="mt-2 h-10 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm text-[#344158] outline-none focus:border-[#070b45]"
+                  className="mt-2 h-11 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm text-[#344158] outline-none focus:border-[#070b45]"
                 />
               </label>
               <label className="block">
@@ -321,7 +321,7 @@ export default function Profile() {
                 <input
                   value={form.phone}
                   onChange={(event) => handleFormChange("phone", event.target.value)}
-                  className="mt-2 h-10 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm text-[#344158] outline-none focus:border-[#070b45]"
+                  className="mt-2 h-11 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm text-[#344158] outline-none focus:border-[#070b45]"
                 />
               </label>
               <label className="block">
@@ -331,7 +331,7 @@ export default function Profile() {
                 <input
                   value={form.username}
                   onChange={(event) => handleFormChange("username", event.target.value)}
-                  className="mt-2 h-10 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm text-[#344158] outline-none focus:border-[#070b45]"
+                  className="mt-2 h-11 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm text-[#344158] outline-none focus:border-[#070b45]"
                 />
               </label>
               <label className="block">
@@ -341,7 +341,7 @@ export default function Profile() {
                 <input
                   value={profile.roleLabel}
                   readOnly
-                  className="mt-2 h-10 w-full rounded-lg border border-[#dce3ed] bg-[#f7f9fc] px-4 text-sm text-[#344158]"
+                  className="mt-2 h-11 w-full rounded-lg border border-[#dce3ed] bg-[#f7f9fc] px-4 text-sm text-[#344158]"
                 />
               </label>
             </div>
@@ -367,7 +367,7 @@ export default function Profile() {
                   value={passwordForm.current}
                   onChange={(event) => handlePasswordChange("current", event.target.value)}
                   placeholder="Enter current password"
-                  className="mt-2 h-10 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm outline-none focus:border-[#070b45]"
+                  className="mt-2 h-11 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm outline-none focus:border-[#070b45]"
                 />
               </label>
               <div className="grid gap-5 md:grid-cols-2">
@@ -380,7 +380,7 @@ export default function Profile() {
                     value={passwordForm.next}
                     onChange={(event) => handlePasswordChange("next", event.target.value)}
                     placeholder="At least 8 characters"
-                    className="mt-2 h-10 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm outline-none focus:border-[#070b45]"
+                    className="mt-2 h-11 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm outline-none focus:border-[#070b45]"
                   />
                 </label>
                 <label className="block">
@@ -392,7 +392,7 @@ export default function Profile() {
                     value={passwordForm.confirm}
                     onChange={(event) => handlePasswordChange("confirm", event.target.value)}
                     placeholder="Re-enter new password"
-                    className="mt-2 h-10 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm outline-none focus:border-[#070b45]"
+                    className="mt-2 h-11 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm outline-none focus:border-[#070b45]"
                   />
                 </label>
               </div>
@@ -429,7 +429,7 @@ export default function Profile() {
             </div>
             <button
               type="button"
-              className="h-10 rounded-lg border border-[#ffb4b4] px-5 text-sm font-semibold text-[#b50000] transition hover:bg-[#fff1f1]"
+              className="h-11 rounded-lg border border-[#ffb4b4] px-5 text-sm font-semibold text-[#b50000] transition hover:bg-[#fff1f1]"
               onClick={() => setShowDeleteConfirm(true)}
             >
               Request Account Deletion

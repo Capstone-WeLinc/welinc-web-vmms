@@ -16,7 +16,7 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
       subtitle,
       icon,
       bordered = true,
-      elevation = 'none',
+      elevation = 'sm',
       padding = 'md',
       className = '',
       children,
@@ -30,9 +30,9 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
 
     const elevationStyles = {
       none: '',
-      sm: '',
-      md: '',
-      lg: '',
+      sm: 'shadow-card',
+      md: 'shadow-md',
+      lg: 'shadow-lg',
     };
 
     const paddingStyles = {

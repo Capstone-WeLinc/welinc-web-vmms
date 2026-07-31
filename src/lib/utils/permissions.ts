@@ -1,9 +1,5 @@
 function normalizeRoleValue(value?: string | null) {
-  return (value ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
+  return (value ?? "").trim().toUpperCase();
 }
 
 function extractRoleFromUser(
@@ -33,25 +29,8 @@ function extractRoleFromUser(
         return entry;
       }
 
-      if (entry && typeof entry === "object") {
-        const roleEntry = entry as {
-          role?: string | null;
-          name?: string | null;
-          label?: string | null;
-          value?: string | null;
-        };
-        if (roleEntry.role) {
-          return roleEntry.role;
-        }
-        if (roleEntry.name) {
-          return roleEntry.name;
-        }
-        if (roleEntry.label) {
-          return roleEntry.label;
-        }
-        if (roleEntry.value) {
-          return roleEntry.value;
-        }
+      if (entry && typeof entry === "object" && entry.role) {
+        return entry.role;
       }
     }
   }
@@ -83,30 +62,4 @@ export function isOperationsRole(
 ): boolean {
   const resolvedRole = extractRoleFromUser(roleOrUser);
   return normalizeRoleValue(resolvedRole) === "OPERATIONS";
-}
-
-export function isChiefMechanicRole(
-  roleOrUser?:
-    | string
-    | null
-    | {
-        role?: string | null;
-        roles?: Array<{ role?: string | null } | string | null> | null;
-      },
-): boolean {
-  const resolvedRole = extractRoleFromUser(roleOrUser);
-  return normalizeRoleValue(resolvedRole) === "CHIEF_MECHANIC";
-}
-
-export function isAdminRole(
-  roleOrUser?:
-    | string
-    | null
-    | {
-        role?: string | null;
-        roles?: Array<{ role?: string | null } | string | null> | null;
-      },
-): boolean {
-  const resolvedRole = extractRoleFromUser(roleOrUser);
-  return normalizeRoleValue(resolvedRole) === "ADMIN";
 }

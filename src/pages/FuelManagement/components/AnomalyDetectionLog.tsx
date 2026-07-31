@@ -1,8 +1,7 @@
 import type { AnomalyLog } from '../types';
 import FuelStatusBadge from './FuelStatusBadge';
-import { Filter } from 'lucide-react';
+import { Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState, useMemo } from 'react';
-import { DropdownSelect, LegendHelp, Pagination } from '../../../components/ui';
 
 interface InputFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
@@ -53,15 +52,17 @@ function SelectField({ label, id, options, className, ...props }: SelectFieldPro
           {label}
         </label>
       )}
-      <DropdownSelect
-        value={String(props.value ?? "")}
-        options={options}
-        onChange={(value) =>
-          props.onChange?.({ target: { value } } as React.ChangeEvent<HTMLSelectElement>)
-        }
-        label={label || id}
-        className={className}
-      />
+      <select
+        id={id}
+        className={`w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 appearance-none cursor-pointer ${className || ''}`}
+        {...props}
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
@@ -137,13 +138,18 @@ export default function AnomalyDetectionLog({ logs = [] }: AnomalyDetectionLogPr
   const headerRightClasses = 'flex gap-3 items-center';
   const filterButtonClasses = (active: boolean) => `flex items-center gap-2 px-3 py-2 rounded-lg border transition ${active ? 'active-filter' : 'border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)]'} cursor-pointer`;
   const filtersPanelClasses = 'grid gap-3 grid-cols-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4';
-  const tableWrapClasses = 'overflow-auto overscroll-contain rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] lg:max-h-[min(40rem,calc(100vh-12rem))]';
+  const tableWrapClasses = 'overflow-auto overscroll-contain rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card lg:max-h-[min(40rem,calc(100vh-12rem))]';
   const tableClasses = 'w-full text-left text-sm';
   const tableHeaderRowClasses = 'border-b border-[var(--color-divider)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]';
   const tableHeaderCellClasses = 'px-4 py-3.5 font-medium text-xs uppercase tracking-wider';
   const emptyStateClasses = 'px-4 py-12 text-center text-[var(--color-text-secondary)]';
   const tableRowClasses = 'hover:bg-[var(--color-input-bg-hover)] transition-colors border-b border-[var(--color-divider)]';
   const tableCellClasses = 'px-4 py-3';
+  const pagerClasses = 'pt-2 flex items-center justify-between text-sm text-[var(--color-text-secondary)]';
+  const pagerCountClasses = 'text-[var(--color-text-primary)] font-medium';
+  const pagerButtonsClasses = 'flex items-center gap-4';
+  const pageButtonClasses = (disabled: boolean) => `flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition ${disabled ? 'opacity-20 cursor-not-allowed' : 'cursor-pointer'}`;
+  const pageNumberClasses = 'text-xs text-[var(--color-text-secondary)] select-none font-medium';
 
   return (
     <div className={rootClasses}>
@@ -163,14 +169,6 @@ export default function AnomalyDetectionLog({ logs = [] }: AnomalyDetectionLogPr
               <Filter size={16} strokeWidth={1.8} />
               <span>Filters</span>
             </button>
-            <LegendHelp
-              title="Anomaly Log Legend"
-              items={[
-                { label: "Anomaly", description: "Logged fuel record needs investigation.", tone: "#dc2626" },
-                { label: "Below Avg", description: "Logged fuel record is below fleet average.", tone: "#f59e0b" },
-                { label: "Detected By", description: "Source that identified the alert.", tone: "#2563eb" },
-              ]}
-            />
           </div>
         </div>
       </div>
@@ -222,13 +220,23 @@ export default function AnomalyDetectionLog({ logs = [] }: AnomalyDetectionLogPr
         </table>
       </div>
 
-      <Pagination
-        page={Math.min(currentPage, Math.max(1, totalPages))}
-        totalPages={Math.max(1, totalPages)}
-        totalItems={filteredLogs.length}
-        pageSize={itemsPerPage}
-        onPageChange={setCurrentPage}
-      />
+      <div className={pagerClasses}>
+        <div>
+          Showing <span className={pagerCountClasses}>{paginatedLogs.length}</span> of <span className={pagerCountClasses}>{filteredLogs.length}</span> matching entries
+        </div>
+
+        <div className={pagerButtonsClasses}>
+          <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className={pageButtonClasses(currentPage === 1)} aria-label="Previous Page">
+            <ChevronLeft size={16} />
+          </button>
+
+          <span className={pageNumberClasses}>Page {currentPage} of {totalPages || 1}</span>
+
+          <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || totalPages === 0} className={pageButtonClasses(currentPage === totalPages || totalPages === 0)} aria-label="Next Page">
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

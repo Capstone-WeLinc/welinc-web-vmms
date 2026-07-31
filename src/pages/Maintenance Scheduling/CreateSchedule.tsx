@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   X,
   ClipboardCheck,
@@ -7,7 +6,7 @@ import {
   ShieldCheck,
   Clock3,
 } from "lucide-react";
-import { DatePicker, DropdownSelect, ToastNotification } from "../../components/ui";
+import { DatePicker, ToastNotification } from "../../components/ui";
 import {
   createMaintenanceSchedule,
   updateMaintenanceSchedule,
@@ -49,12 +48,6 @@ const NON_NEGATIVE_NUMBER_PATTERN = /^\d+(?:\.\d+)?$/;
 const ACCOUNT_TYPE_OPTIONS = [
   AccountType.IN_HOUSE,
   AccountType.OUTSOURCED,
-] as const;
-const ACCREDITED_SERVICE_PROVIDERS = [
-  "North Hub Service Partner",
-  "Metro Brake Specialist",
-  "Luzon FleetCare Center",
-  "Welinc Accredited Tire & Alignment",
 ] as const;
 
 const sanitizeNonNegativeNumber = (value: string) => {
@@ -494,12 +487,12 @@ export default function CreateScheduleModal({
   */
   if (!isOpen) return null;
 
-  return createPortal(
-    <div className="modal-overlay z-[90]">
+  return (
+    <div className="modal-overlay p-4 backdrop-blur-sm">
       <div className="fixed right-6 top-6 z-[80] flex w-[340px] max-w-[calc(100vw-2rem)] flex-col gap-3">
         {toast && <ToastNotification type={toast.type} message={toast.message} />}
       </div>
-      <div className="modal-content flex h-[min(900px,calc(100vh-2rem))] w-full max-w-6xl flex-col">
+      <div className="modal-content max-w-6xl w-full rounded-[30px] flex flex-col max-h-[92vh] overflow-hidden shadow-[0_30px_90px_rgba(0,0,0,0.35)]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-card-bg)] px-6 py-5 shrink-0">
           <div>
@@ -525,7 +518,7 @@ export default function CreateScheduleModal({
           {isOdometerOnlyUpdate ? (
             <section className="space-y-4 border-b border-[var(--color-border)] pb-6">
               <div className="mb-4 flex items-center gap-3">
-                <div className="rounded-xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 p-2 text-[#0369a1]">
+                <div className="rounded-2xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 p-2 text-[#0369a1]">
                   <Wrench className="h-4 w-4" />
                 </div>
                 <div>
@@ -590,7 +583,7 @@ export default function CreateScheduleModal({
           {/* Vehicle Information */}
           <section className="space-y-4 border-b border-[var(--color-border)] pb-6">
             <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 p-2 text-[#0369a1]">
+              <div className="rounded-2xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 p-2 text-[#0369a1]">
                 <Wrench className="h-4 w-4" />
               </div>
               <div>
@@ -602,11 +595,11 @@ export default function CreateScheduleModal({
                 <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
                   VEHICLE
                 </label>
-                <DropdownSelect
-                    label="Vehicle"
+                <div className="relative">
+                  <select
                     value={vehicleId}
-                    onChange={(value) => {
-                      const nextVehicleId = value;
+                    onChange={(e) => {
+                      const nextVehicleId = e.target.value;
                       const selectedVehicle = vehicles.find(
                         (vehicle) => vehicle.value === nextVehicleId,
                       );
@@ -617,18 +610,31 @@ export default function CreateScheduleModal({
                           : "",
                       );
                     }}
-                    options={
-                      availableVehicles.length > 0
-                        ? [
-                            { value: "", label: "Select vehicle", disabled: true },
-                            ...availableVehicles.map((vehicle) => ({
-                              value: vehicle.value,
-                              label: vehicle.label,
-                            })),
-                          ]
-                        : [{ value: "", label: "No vehicles available", disabled: true }]
-                    }
-                  />
+                    className="select-control w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
+                  >
+                    {availableVehicles.length > 0 ? (
+                      <>
+                        <option value="" disabled>
+                          Select vehicle
+                        </option>
+                        {availableVehicles.map((vehicle) => (
+                          <option key={vehicle.value} value={vehicle.value}>
+                            {vehicle.label}
+                          </option>
+                        ))}
+                      </>
+                    ) : (
+                      <option value="" disabled>
+                        No vehicles available
+                      </option>
+                    )}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--color-text-secondary)]">
+                    <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
+                      <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                    </svg>
+                  </div>
+                </div>
               </div>
               <div className="flex gap-4">
                 <div className="flex-1">
@@ -654,26 +660,38 @@ export default function CreateScheduleModal({
                 <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
                   GARAGE
                 </label>
-                <DropdownSelect
-                    label="Garage"
+                <div className="relative">
+                  <select
                     value={garageIsOther ? OTHER_GARAGE_VALUE : garageId}
-                    onChange={(value) => {
-                      if (value === OTHER_GARAGE_VALUE) {
+                    onChange={(e) => {
+                      if (e.target.value === OTHER_GARAGE_VALUE) {
                         setGarageId("");
                         setIsOtherGarage(true);
                         return;
                       }
 
-                      setGarageId(value);
+                      setGarageId(e.target.value);
                       setIsOtherGarage(false);
                       setOtherGarage("");
                     }}
-                    options={[
-                      { value: "", label: "Select garage", disabled: true },
-                      ...garages.map((g) => ({ value: g.id, label: g.name })),
-                      { value: OTHER_GARAGE_VALUE, label: "Other" },
-                    ]}
-                  />
+                    className="select-control w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
+                  >
+                    <option value="" disabled>
+                      Select garage
+                    </option>
+                    {garages.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                    <option value={OTHER_GARAGE_VALUE}>Other</option>
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--color-text-secondary)]">
+                    <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
+                      <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                    </svg>
+                  </div>
+                </div>
                 {garageIsOther ? (
                   <input
                     type="text"
@@ -689,45 +707,46 @@ export default function CreateScheduleModal({
                 <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
                   ACCOUNT TYPE
                 </label>
-                <DropdownSelect
-                    label="Account type"
+                <div className="relative">
+                  <select
                     value={accountType}
-                    onChange={(value) => {
-                      setAccountType(value as AccountType);
-                      if (value !== AccountType.OUTSOURCED) {
+                    onChange={(e) => {
+                      setAccountType(e.target.value as AccountType);
+                      if (e.target.value !== AccountType.OUTSOURCED) {
                         setOutsourcedProvider("");
                       }
                     }}
-                    options={[
-                      { value: "", label: "Select account type", disabled: true },
-                      ...ACCOUNT_TYPE_OPTIONS.map((option) => ({
-                        value: option,
-                        label: accountTypeLabels[option],
-                      })),
-                    ]}
-                  />
+                    className="select-control w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
+                  >
+                    <option value="" disabled>
+                      Select account type
+                    </option>
+                    {ACCOUNT_TYPE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {accountTypeLabels[option]}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--color-text-secondary)]">
+                    <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
+                      <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                    </svg>
+                  </div>
+                </div>
               </div>
 
               {accountType === AccountType.OUTSOURCED ? (
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-                    ACCREDITED SERVICE PROVIDER
+                    OUTSOURCED COMPANY / SERVICE PROVIDER
                   </label>
-                  <DropdownSelect
-                    label="Accredited service provider"
+                  <input
+                    type="text"
                     value={outsourcedProvider}
-                    onChange={setOutsourcedProvider}
-                    options={[
-                      { value: "", label: "Select accredited provider", disabled: true },
-                      ...ACCREDITED_SERVICE_PROVIDERS.map((provider) => ({
-                        value: provider,
-                        label: provider,
-                      })),
-                    ]}
+                    onChange={(e) => setOutsourcedProvider(e.target.value)}
+                    placeholder="Enter company or service provider"
+                    className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
                   />
-                  <p className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
-                    Outsourced maintenance is tracked against the selected accredited provider for review and completion documentation.
-                  </p>
                 </div>
               ) : null}
 
@@ -737,7 +756,7 @@ export default function CreateScheduleModal({
           {/* Schedule Trigger */}
           <section className="space-y-4 border-b border-[var(--color-border)] pb-6">
             <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-xl border border-violet-400/30 bg-violet-400/10 p-2 text-violet-700">
+              <div className="rounded-2xl border border-violet-400/30 bg-violet-400/10 p-2 text-violet-700">
                 <Clock3 className="h-4 w-4" />
               </div>
               <div>
@@ -891,26 +910,47 @@ export default function CreateScheduleModal({
                     }
                   }}
                 >
-                  <DropdownSelect
-                    label="Interval type"
+                  <select
                     disabled={triggerType === MaintenanceTriggerType.ODOMETER}
                     value={intervalTypeState}
-                    onChange={(value) =>
-                      setIntervalTypeState(value as MaintenanceIntervalType | "")
+                    onChange={(e) =>
+                      setIntervalTypeState(
+                        e.target.value as MaintenanceIntervalType | "",
+                      )
                     }
-                    buttonClassName={`${
+                    className={`select-control w-full appearance-none rounded-md border px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 ${
                       triggerType === MaintenanceTriggerType.ODOMETER
-                        ? "bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]"
-                        : ""
+                        ? "border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] cursor-not-allowed opacity-80"
+                        : "border-[var(--color-border)] bg-[var(--color-input-bg)]"
                     }`}
-                    options={[
-                      { value: "", label: "Select type", disabled: true },
-                      ...Object.values(MaintenanceIntervalType).map((option) => ({
-                        value: option,
-                        label: maintenanceIntervalTypeLabels[option],
-                      })),
-                    ]}
-                  />
+                  >
+                    <option value="" disabled>
+                      Select type
+                    </option>
+                    <option value={MaintenanceIntervalType.DAILY}>
+                      {maintenanceIntervalTypeLabels[MaintenanceIntervalType.DAILY]}
+                    </option>
+                    <option value={MaintenanceIntervalType.WEEKLY}>
+                      {maintenanceIntervalTypeLabels[MaintenanceIntervalType.WEEKLY]}
+                    </option>
+                    <option value={MaintenanceIntervalType.MONTHLY}>
+                      {maintenanceIntervalTypeLabels[MaintenanceIntervalType.MONTHLY]}
+                    </option>
+                    <option value={MaintenanceIntervalType.QUARTERLY}>
+                      {maintenanceIntervalTypeLabels[MaintenanceIntervalType.QUARTERLY]}
+                    </option>
+                    <option value={MaintenanceIntervalType.SEMI_ANNUALLY}>
+                      {maintenanceIntervalTypeLabels[MaintenanceIntervalType.SEMI_ANNUALLY]}
+                    </option>
+                    <option value={MaintenanceIntervalType.ANNUALLY}>
+                      {maintenanceIntervalTypeLabels[MaintenanceIntervalType.ANNUALLY]}
+                    </option>
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--color-text-secondary)]">
+                    <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
+                      <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                    </svg>
+                  </div>
                 </div>
               </div>
               <div
@@ -936,7 +976,7 @@ export default function CreateScheduleModal({
           {/* Maintenance Details */}
           <section className="space-y-4 border-b border-[var(--color-border)] pb-6">
             <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-2 text-emerald-700">
+              <div className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-2 text-emerald-700">
                 <ShieldCheck className="h-4 w-4" />
               </div>
               <div>
@@ -949,34 +989,67 @@ export default function CreateScheduleModal({
                   CHECKLIST TEMPLATE
                 </label>
                 <div className="relative">
-                  <DropdownSelect
-                    label="Checklist template"
+                  <select
                     value={checklistTemplate}
                     disabled={isTemplatesLoading}
-                    onChange={(value) => setChecklistTemplateName(value as ChecklistTemplateName)}
-                    options={[
-                      {
-                        value: "",
-                        label: isTemplatesLoading
-                          ? "Loading templates..."
-                          : selectableTemplateNames.length === 0
-                            ? "No templates with checklist items available"
-                            : "Select a checklist template",
-                        disabled: true,
-                      },
-                      ...(checklistTemplate && !templateExists
-                        ? [{ value: checklistTemplate, label: checklistTemplate }]
-                        : []),
-                      ...(Object.keys(templates) as ChecklistTemplateName[]).map((type) => {
-                        const hasChecklistItems = selectableTemplateNames.includes(type);
-                        return {
-                          value: type,
-                          label: `${type}${hasChecklistItems ? "" : " (No checklist items)"}`,
-                          disabled: !hasChecklistItems,
-                        };
-                      }),
-                    ]}
-                  />
+                    onChange={(e) =>
+                      setChecklistTemplateName(e.target.value as ChecklistTemplateName)
+                    }
+                    className="select-control w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
+                  >
+                    <option value="" disabled>
+                      {isTemplatesLoading
+                        ? "Loading templates..."
+                        : selectableTemplateNames.length === 0
+                          ? "No templates with checklist items available"
+                          : "Select a checklist template"}
+                    </option>
+                    {isTemplatesLoading ? (
+                      <option
+                        value=""
+                        disabled
+                        style={{ backgroundColor: "var(--color-input-bg)", color: "var(--color-text-primary)" }}
+                      >
+                        Loading templates...
+                      </option>
+                    ) : (
+                      <>
+                        {checklistTemplate && !templateExists ? (
+                          <option value={checklistTemplate}>
+                            {checklistTemplate}
+                          </option>
+                        ) : null}
+                        {(Object.keys(templates) as ChecklistTemplateName[]).map(
+                          (type) => {
+                            const hasChecklistItems =
+                              selectableTemplateNames.includes(type);
+
+                            return (
+                              <option
+                                key={type}
+                                value={type}
+                                disabled={!hasChecklistItems}
+                                style={{
+                                  backgroundColor: "var(--color-input-bg)",
+                                  color: "var(--color-text-primary)",
+                                }}
+                              >
+                                {type}
+                                {hasChecklistItems
+                                  ? ""
+                                  : " (No checklist items)"}
+                              </option>
+                            );
+                          },
+                        )}
+                      </>
+                    )}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--color-text-secondary)]">
+                    <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
+                      <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                    </svg>
+                  </div>
                 </div>
               </div>
               <div>
@@ -991,26 +1064,34 @@ export default function CreateScheduleModal({
                   }
                 }}
               >
-                <DropdownSelect
-                  label="Assigned mechanic"
+                <select
                   value={assignedMechanic}
                   disabled={mechanics.length === 0 && !assignedMechanic}
-                  onChange={setAssignedMechanic}
-                  options={
-                    mechanics.length > 0 || assignedMechanic
-                      ? [
-                          { value: "", label: "Select mechanic", disabled: true },
-                          ...(assignedMechanic && !mechanicExists
-                            ? [{ value: assignedMechanic, label: assignedMechanic }]
-                            : []),
-                          ...mechanics.map((mechanic) => ({
-                            value: mechanic.name,
-                            label: mechanic.name,
-                          })),
-                        ]
-                      : [{ value: "", label: "No mechanics available", disabled: true }]
-                  }
-                />
+                  onChange={(e) => setAssignedMechanic(e.target.value)}
+                  className="select-control w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
+                >
+                  {mechanics.length > 0 || assignedMechanic ? (
+                    <>
+                      <option value="" disabled>
+                        Select mechanic
+                      </option>
+                      {assignedMechanic && !mechanicExists ? (
+                        <option value={assignedMechanic}>
+                          {assignedMechanic}
+                        </option>
+                      ) : null}
+                      {mechanics.map((mechanic) => (
+                        <option key={mechanic.id} value={mechanic.name}>
+                          {mechanic.name}
+                        </option>
+                      ))}
+                    </>
+                  ) : (
+                    <option value="" disabled>
+                      No mechanics available
+                    </option>
+                  )}
+                </select>
                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--color-text-secondary)]">
                   <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
                     <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
@@ -1024,7 +1105,7 @@ export default function CreateScheduleModal({
           {/* Work Order Checklist Preview */}
           <section className="space-y-4">
             <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 p-2 text-[#0369a1]">
+              <div className="rounded-2xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 p-2 text-[#0369a1]">
                 <ClipboardCheck className="h-4 w-4" />
               </div>
               <div>
@@ -1085,8 +1166,8 @@ export default function CreateScheduleModal({
       </div>
 
       {duplicateSchedule ? (
-        <div className="modal-overlay z-[60]">
-          <div className="modal-content w-full max-w-lg p-6">
+        <div className="modal-overlay z-[60] px-4 backdrop-blur-sm">
+          <div className="modal-content w-full max-w-lg rounded-xl p-6">
             <h3 className="mb-3 text-lg font-bold text-[var(--color-text-primary)]">
               Existing Maintenance Schedule
             </h3>
@@ -1137,7 +1218,6 @@ export default function CreateScheduleModal({
           </div>
         </div>
       ) : null}
-    </div>,
-    document.body,
+    </div>
   );
 }

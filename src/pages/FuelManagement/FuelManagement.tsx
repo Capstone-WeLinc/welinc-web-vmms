@@ -1,372 +1,416 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useState, type ReactNode } from 'react';
+import { Droplet, TrendingUp, AlertTriangle, BarChart3, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import PageHeader from '../../components/PageHeader/PageHeader';
+import FuelLog from './components/FuelLog';
+import EfficiencyTrendsWithFilters from './components/EfficiencyTrendsWithFilters';
+import AnomalyDetection from './components/AnomalyDetection';
+import LogFuelFillUp from './components/LogFuelFillUp';
+import FuelCostSummary from './components/FuelCostSummary';
+import AnomalyDetectionLog from './components/AnomalyDetectionLog';
+import FleetWideFuelReport from './components/FleetWideFuelReport';
+import EditFuelFillUpModal from './components/EditFuelFillUpModal';
 import {
-  Camera,
-  Droplet,
-  Fuel,
-  Gauge,
-  PhilippinePeso,
-  Plus,
-  Upload,
-} from "lucide-react";
-import PageHeader from "../../components/PageHeader/PageHeader";
-import { ActionButton, Modal } from "../../components/ui";
-import { luzonFuelStations } from "../../data/luzonFuelStations";
-import { mockFuelFillUps, mockVehicleEfficiency } from "../../lib/mocks/fuelMocks";
-import FuelLog from "./components/FuelLog";
-import StationCombobox from "./components/StationCombobox";
-import type { FuelFillUp } from "./types";
+  mockFuelFillUps,
+  mockVehicleEfficiency,
+  mockAnomalies,
+  mockAnomalyLogs,
+} from "../../lib/mocks/fuelMocks";
+import type { FuelFillUp } from './types';
 
-type FuelForm = {
-  vehicleId: string;
-  vehicleModel: string;
-  date: string;
-  liters: string;
-  pricePerLiter: string;
-  odometer: string;
-  station: string;
-  filledBy: string;
-  receiptFileName: string;
-  receiptFileSize: number;
-  receiptFileType: string;
-};
-
-const EMPTY_FORM: FuelForm = {
-  vehicleId: "",
-  vehicleModel: "",
-  date: new Date().toISOString().slice(0, 10),
-  liters: "",
-  pricePerLiter: "",
-  odometer: "",
-  station: "",
-  filledBy: "",
-  receiptFileName: "",
-  receiptFileSize: 0,
-  receiptFileType: "",
-};
-
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    maximumFractionDigits: 0,
-  }).format(value);
-
-const formatNumber = (value: number, digits = 0) =>
-  new Intl.NumberFormat("en-PH", {
-    maximumFractionDigits: digits,
-  }).format(value);
-
-function SummaryCard({
-  label,
-  value,
-  icon: Icon,
-  color,
-}: {
-  label: string;
+type KPIStatCardProps = {
+  icon: ReactNode;
   value: string | number;
-  icon: typeof Fuel;
-  color: string;
-}) {
+  label: string;
+  subtitle?: string;
+  iconBgColor: string;
+  iconColor: string;
+};
+
+function KPIStatCard({ icon, value, label, subtitle, iconBgColor, iconColor }: KPIStatCardProps) {
   return (
-    <div className="enterprise-kpi-card">
-      <div className="relative ml-2 flex items-start justify-between gap-4">
-        <div>
-          <p className="enterprise-kpi-label">{label}</p>
-          <p className="enterprise-kpi-value">{value}</p>
-        </div>
-        <div className="enterprise-icon-box" style={{ backgroundColor: `${color}14`, color }}>
-          <Icon size={22} strokeWidth={2.2} />
+    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card transition-theme">
+      <div className="mb-4 flex items-center justify-between">
+        <div
+          style={{
+            display: 'flex',
+            height: '2.5rem',
+            width: '2.5rem',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '1rem',
+            background: iconBgColor,
+            color: iconColor,
+          }}
+        >
+          {icon}
         </div>
       </div>
+      <div className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">{value}</div>
+      <div className="mt-2 text-xs font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">{label}</div>
+      {subtitle && (
+        <div className="mt-2 text-sm font-medium" style={{ color: iconColor }}>{subtitle}</div>
+      )}
     </div>
   );
 }
 
+type Tab = 'fuel-log' | 'efficiency-trends' | 'anomaly-detection';
+type ReportTab = 'fleet-wide' | 'per-vehicle' | 'anomaly-log';
+
 export default function FuelManagement() {
+  const [activeTab, setActiveTab] = useState<Tab>('fuel-log');
+  const [activeReport, setActiveReport] = useState<ReportTab>('fleet-wide');
+  const [showLogForm, setShowLogForm] = useState(false);
   const [fillUps, setFillUps] = useState<FuelFillUp[]>(mockFuelFillUps);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingFillUpId, setEditingFillUpId] = useState<string | null>(null);
-  const [form, setForm] = useState<FuelForm>(EMPTY_FORM);
+  const [editingFillUp, setEditingFillUp] = useState<FuelFillUp | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  const computedCost = useMemo(() => {
-    const liters = Number(form.liters);
-    const price = Number(form.pricePerLiter);
-    return Number.isFinite(liters) && Number.isFinite(price) ? liters * price : 0;
-  }, [form.liters, form.pricePerLiter]);
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
 
-  const totals = useMemo(() => {
-    const totalLiters = fillUps.reduce((sum, item) => sum + item.liters, 0);
-    const totalCost = fillUps.reduce((sum, item) => sum + item.totalCost, 0);
-    const avgEfficiency = fillUps.length
-      ? fillUps.reduce((sum, item) => sum + item.efficiency, 0) / fillUps.length
-      : 0;
+  // Confirmed filter ranges used by KPIs
+  const [appliedFrom, setAppliedFrom] = useState<string>('2026-05-26');
+  const [appliedTo, setAppliedTo] = useState<string>('2026-05-30');
 
-    return {
-      totalLiters,
-      totalCost,
-      avgEfficiency,
-    };
-  }, [fillUps]);
+  // Hardcoded matrix values 
+  const mayDays = Array.from({ length: 31 }, (_, i) => i + 1);
+  const mayStartOffset = 5;
 
-  const stationOptions = useMemo(
-    () =>
-      Array.from(
-        new Set([
-          ...luzonFuelStations,
-          ...fillUps.map((fillUp) => fillUp.station).filter(Boolean),
-        ]),
-      ).sort(),
-    [fillUps],
-  );
-  const vehicleOptions = useMemo(
-    () =>
-      Array.from(
-        new Set([
-          ...mockVehicleEfficiency.map((vehicle) => vehicle.vehicleId),
-          ...fillUps.map((fillUp) => fillUp.vehicleId).filter(Boolean),
-        ]),
-      ).sort(),
-    [fillUps],
-  );
-  const vehicleModelById = useMemo(
-    () =>
-      new Map(
-        [
-          ...mockVehicleEfficiency.map((vehicle) => [vehicle.vehicleId, vehicle.model] as const),
-          ...fillUps.map((fillUp) => [fillUp.vehicleId, fillUp.vehicleModel] as const),
-        ].filter(([vehicleId]) => Boolean(vehicleId)),
-      ),
-    [fillUps],
-  );
+  const juneDays = Array.from({ length: 30 }, (_, i) => i + 1);
+  const juneStartOffset = 1;
 
-  const updateForm = (field: keyof FuelForm, value: string) => {
-    setForm((current) => ({ ...current, [field]: value }));
-  };
-  const updateVehicle = (vehicleId: string) => {
-    setForm((current) => ({
-      ...current,
-      vehicleId,
-      vehicleModel: vehicleModelById.get(vehicleId) ?? current.vehicleModel,
-    }));
-  };
-  const updateReceiptFile = (file?: File) => {
-    setForm((current) => ({
-      ...current,
-      receiptFileName: file?.name ?? "",
-      receiptFileSize: file?.size ?? 0,
-      receiptFileType: file?.type ?? "",
-    }));
-  };
+  const tabs = [
+    { id: 'fuel-log' as const, label: 'Fuel Log', icon: Droplet },
+    { id: 'efficiency-trends' as const, label: 'Efficiency Trends', icon: TrendingUp },
+    { id: 'anomaly-detection' as const, label: 'Anomaly Detection', icon: AlertTriangle }
+  ];
 
-  const openCreateForm = () => {
-    setEditingFillUpId(null);
-    setForm(EMPTY_FORM);
-    setIsFormOpen(true);
-  };
+  // Layout className constants (interaction/layout only)
+  const containerClasses = 'space-y-6 relative';
+  const bannerLayoutClasses = 'flex justify-between items-center';
+  const pickerButtonClasses = 'flex items-center gap-4 rounded-xl border px-3 py-2 text-xs font-medium transition cursor-pointer';
+  const calendarGridClasses = 'grid grid-cols-2 gap-8 relative';
+  const monthHeaderClasses = 'flex items-center justify-between mb-4 px-1';
+  const monthDaysGridClasses = 'grid grid-cols-7 text-center text-[11px] font-medium gap-y-2';
+  const pickerPanelLayoutClasses = 'absolute top-full right-0 mt-3 z-50';
+  const kpiGridClasses = 'grid gap-4 xl:grid-cols-4 lg:grid-cols-2';
+  const tabsLayoutClasses = 'border-b border-[var(--color-border)]';
+  const tabButtonBaseClasses = 'flex items-center gap-2 border-b-2 px-4 py-3 font-medium transition-colors cursor-pointer text-sm';
+  const reportsHeaderClasses = 'flex flex-col sm:flex-row sm:items-center justify-between gap-4';
+  const reportSwitcherClasses = 'flex flex-wrap gap-1 rounded-xl p-1 border';
+  const reportPanelClasses = 'bg-[var(--color-card-bg)] border border-[var(--color-border)] rounded-2xl p-4 shadow-card transition-all duration-200 min-h-62.5';
 
-  const openEditForm = (fillUp: FuelFillUp) => {
-    setEditingFillUpId(fillUp.id);
-    setForm({
-      vehicleId: fillUp.vehicleId ?? "",
-      vehicleModel: fillUp.vehicleModel ?? "",
-      date: fillUp.date ?? EMPTY_FORM.date,
-      liters: String(fillUp.liters ?? ""),
-      pricePerLiter: String(fillUp.pricePerLiter ?? ""),
-      odometer: String(fillUp.odometer ?? ""),
-      station: fillUp.station ?? "",
-      filledBy: fillUp.filledBy ?? "",
-      receiptFileName: fillUp.receiptFileName ?? "",
-      receiptFileSize: fillUp.receiptFileSize ?? 0,
-      receiptFileType: fillUp.receiptFileType ?? "",
-    });
-    setIsFormOpen(true);
-  };
+  // Layout class constants for calendar buttons
+  const dayButtonBaseClasses = 'h-8 w-8 text-xs font-medium relative mx-auto flex items-center justify-center transition-all';
 
-  const closeForm = () => {
-    setIsFormOpen(false);
-    setEditingFillUpId(null);
-    setForm(EMPTY_FORM);
-  };
+  const handleDayClick = (year: number, month: number, day: number) => {
+    const formattedDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
-  const handleSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    const liters = Number(form.liters);
-    const pricePerLiter = Number(form.pricePerLiter);
-    const odometer = Number(form.odometer);
-
-    if (!form.vehicleId.trim() || !form.date || !Number.isFinite(liters) || !Number.isFinite(pricePerLiter)) {
-      return;
-    }
-
-    const nextValues = {
-      vehicleId: form.vehicleId.trim(),
-      vehicleName: form.vehicleId.trim(),
-      vehicleModel: form.vehicleModel.trim() || "Fleet Vehicle",
-      date: form.date,
-      liters,
-      pricePerLiter,
-      totalCost: liters * pricePerLiter,
-      odometer: Number.isFinite(odometer) ? odometer : 0,
-      station: form.station.trim() || "Not specified",
-      filledBy: form.filledBy.trim() || "Not specified",
-      receiptFileName: form.receiptFileName || undefined,
-      receiptFileSize: form.receiptFileSize || undefined,
-      receiptFileType: form.receiptFileType || undefined,
-    };
-
-    if (editingFillUpId) {
-      setFillUps((current) =>
-        current.map((fillUp) =>
-          fillUp.id === editingFillUpId
-            ? { ...fillUp, ...nextValues }
-            : fillUp,
-        ),
-      );
+    if (!appliedFrom || (appliedFrom && appliedTo)) {
+      setAppliedFrom(formattedDate);
+      setAppliedTo('');
     } else {
-      const nextFillUp: FuelFillUp = {
-        id: `fuel-${Date.now()}`,
-        ...nextValues,
-        efficiency: 0,
-        trend: "normal",
-      };
-      setFillUps((current) => [nextFillUp, ...current]);
+      if (new Date(formattedDate) < new Date(appliedFrom)) {
+        setAppliedFrom(formattedDate);
+      } else {
+        setAppliedTo(formattedDate);
+      }
     }
+  };
 
-    closeForm();
+  const getDateState = (year: number, month: number, day: number) => {
+    const currentStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    if (currentStr === appliedFrom || currentStr === appliedTo) return 'endpoint';
+    if (appliedFrom && appliedTo && currentStr > appliedFrom && currentStr < appliedTo) return 'range';
+    return 'idle';
+  };
+
+  const kpiFilteredFillUps = fillUps.filter(item => {
+    if (appliedFrom && item.date < appliedFrom) return false;
+    if (appliedTo && item.date > appliedTo) return false;
+    return true;
+  });
+
+  const totalFillUps = kpiFilteredFillUps.length;
+  const totalLiters = kpiFilteredFillUps.reduce((sum, item) => sum + item.liters, 0);
+  const totalCost = kpiFilteredFillUps.reduce((sum, item) => sum + item.totalCost, 0);
+  const avgEfficiency = parseFloat(
+    (kpiFilteredFillUps.reduce((sum, item) => sum + item.efficiency, 0) / kpiFilteredFillUps.length || 0).toFixed(1)
+  );
+
+  // Standard modal functions
+  const handleEditTrigger = (fillUp: FuelFillUp) => {
+    setEditingFillUp(fillUp);
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditSave = (updated: FuelFillUp) => {
+    setFillUps(prev => prev.map(f => f.id === updated.id ? updated : f));
+    setIsEditModalOpen(false);
+    setEditingFillUp(null);
+  };
+
+  const handleDelete = (id: string) => {
+    if (confirm('Are you sure you want to delete this fuel record?')) {
+      setFillUps(prev => prev.filter(f => f.id !== id));
+    }
+  };
+
+  const handleAdd = (newEntry: FuelFillUp) => {
+    setFillUps(prev => [newEntry, ...prev]);
   };
 
   return (
-    <div className="space-y-6 pt-6">
+    <div className={containerClasses}>
       <PageHeader
-        icon={Fuel}
-        title="FUEL EXPENSES"
-        subtitle="Record fuel fill-ups, calculate fuel costs, and monitor vehicle fuel expenses"
-        action={
-          <ActionButton onClick={openCreateForm}>
-            <Plus className="h-4 w-4" />
-            Log Fill-Up
-          </ActionButton>
-        }
+        icon={Droplet}
+        title="Fuel Management"
+        subtitle="Consumption tracking, efficiency analysis, and anomaly detection"
       />
+      <div className={`${bannerLayoutClasses} rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-3 shadow-card` }>
+          <span className="text-xs text-[var(--color-text-secondary)] font-medium">
+          Dashboard Stats Timeframe:
+        </span>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard label="Total Fuel Cost" value={formatCurrency(totals.totalCost)} icon={PhilippinePeso} color="#0f766e" />
-        <SummaryCard label="Fuel Consumed" value={`${formatNumber(totals.totalLiters, 1)} L`} icon={Droplet} color="#2563eb" />
-        <SummaryCard label="Fill-Up Records" value={fillUps.length} icon={Fuel} color="#7c3aed" />
-        <SummaryCard label="Avg Consumption" value={`${formatNumber(totals.avgEfficiency, 1)} km/L`} icon={Gauge} color="#d97706" />
-      </div>
-      <FuelLog
-        fillUps={fillUps}
-        onEdit={openEditForm}
-        onDelete={(id) =>
-          setFillUps((current) => current.filter((item) => item.id !== id))
-        }
-      />
+        <div className="relative">
+          <button
+            onClick={() => setIsPickerOpen(!isPickerOpen)}
+            className={`${pickerButtonClasses} ${isPickerOpen ? 'active-filter' : 'bg-[var(--color-input-bg)] border-[var(--color-border)] text-[var(--color-text-secondary)]'}`}
+          >
+            <Calendar size={14} className="text-[var(--color-brand-primary)]" />
+            <span className="font-mono text-xs">
+              {appliedFrom ? `${appliedFrom}${appliedTo ? ` — ${appliedTo}` : ''}` : 'Select Timeline'}
+            </span>
+          </button>
 
-      <Modal
-        isOpen={isFormOpen}
-        title={editingFillUpId ? "Edit Fuel Fill-Up" : "Log Fuel Fill-Up"}
-        size="lg"
-        onClose={closeForm}
-        footer={
-          <div className="flex justify-end gap-3">
-            <ActionButton variant="secondary" onClick={closeForm}>Cancel</ActionButton>
-            <ActionButton type="submit" form="fuel-fill-up-form">
-              {editingFillUpId ? "Save Changes" : "Save Fill-Up"}
-            </ActionButton>
-          </div>
-        }
-      >
-        <form id="fuel-fill-up-form" className="grid gap-4 md:grid-cols-2" onSubmit={handleSubmit}>
-          <StationCombobox
-            id="fuel-management-vehicle"
-            label="Vehicle"
-            value={form.vehicleId}
-            options={vehicleOptions}
-            onChange={updateVehicle}
-            placeholder="Search or select vehicle..."
-            required
-          />
-          <label className="grid gap-1.5 text-sm font-medium text-[var(--color-text-secondary)]">
-            Vehicle Model
-            <input value={form.vehicleModel} onChange={(event) => updateForm("vehicleModel", event.target.value)} placeholder="e.g., Isuzu NPR75" className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)]" />
-          </label>
-          <label className="grid gap-1.5 text-sm font-medium text-[var(--color-text-secondary)]">
-            Date
-            <input type="date" value={form.date} onChange={(event) => updateForm("date", event.target.value)} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)]" />
-          </label>
-          <label className="grid gap-1.5 text-sm font-medium text-[var(--color-text-secondary)]">
-            Odometer
-            <input type="number" min="0" value={form.odometer} onChange={(event) => updateForm("odometer", event.target.value)} placeholder="e.g., 85420" className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)]" />
-          </label>
-          <label className="grid gap-1.5 text-sm font-medium text-[var(--color-text-secondary)]">
-            Liters
-            <input type="number" min="0" step="0.01" value={form.liters} onChange={(event) => updateForm("liters", event.target.value)} placeholder="e.g., 65" className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)]" />
-          </label>
-          <label className="grid gap-1.5 text-sm font-medium text-[var(--color-text-secondary)]">
-            Price Per Liter
-            <input type="number" min="0" step="0.01" value={form.pricePerLiter} onChange={(event) => updateForm("pricePerLiter", event.target.value)} placeholder="e.g., 65.50" className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)]" />
-          </label>
-          <StationCombobox
-            id="fuel-management-station"
-            label="Station"
-            value={form.station}
-            options={stationOptions}
-            onChange={(station) => updateForm("station", station)}
-          />
-          <label className="grid gap-1.5 text-sm font-medium text-[var(--color-text-secondary)]">
-            Filled By
-            <input value={form.filledBy} onChange={(event) => updateForm("filledBy", event.target.value)} placeholder="Driver or staff name" className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)]" />
-          </label>
-          <div className="grid gap-1.5 text-sm font-medium text-[var(--color-text-secondary)] md:col-span-2">
-            <span>Receipt / Supporting File</span>
-            <div className="flex min-h-24 flex-col gap-4 rounded-xl border border-dashed border-[#c7d2e2] bg-white px-4 py-4 text-sm transition hover:border-[#070b45] sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 items-center gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#070b45]/10 text-[#070b45]">
-                  <Upload className="h-5 w-5" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate font-bold text-[#141827]">
-                    {form.receiptFileName || "Upload receipt, invoice, or supporting file"}
-                  </span>
-                  <span className="mt-1 block text-xs font-medium text-[#64748b]">
-                    {form.receiptFileName
-                      ? `${(form.receiptFileSize / 1024).toFixed(1)} KB`
-                      : "Accepted: image or PDF file"}
-                  </span>
-                </span>
+          {isPickerOpen && (
+            <div className={`${pickerPanelLayoutClasses} w-[40rem] rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-lg`}>
+
+              <div className="flex justify-end mb-4">
+                <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-1 text-xs text-[var(--color-text-secondary)] font-mono">
+                  <Calendar size={13} className="text-[var(--color-brand-primary)]" />
+                  <span>{appliedFrom || 'YYYY-MM-DD'} — {appliedTo || 'YYYY-MM-DD'}</span>
+                </div>
               </div>
-              <div className="flex shrink-0 flex-wrap gap-2">
-                <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg border border-[#070b45] px-4 text-xs font-extrabold uppercase text-[#070b45] transition hover:bg-[#f6f8fc]">
-                  <Upload className="h-4 w-4" />
-                  Choose File
-                  <input
-                    type="file"
-                    accept="image/*,.pdf"
-                    className="sr-only"
-                    onChange={(event) => updateReceiptFile(event.target.files?.[0])}
-                  />
-                </label>
-                <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg bg-[#070b45] px-4 text-xs font-extrabold uppercase text-white transition hover:bg-[#11175f]">
-                  <Camera className="h-4 w-4" />
-                  Take Photo
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="sr-only"
-                    onChange={(event) => updateReceiptFile(event.target.files?.[0])}
-                  />
-                </label>
+
+              <div className={calendarGridClasses}>
+                <div className="absolute top-0 bottom-0 left-1/2 w-px bg-[var(--color-divider)] -translate-x-1/2" />
+
+                <div>
+                  <div className={monthHeaderClasses}>
+                    <button className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition"><ChevronLeft size={16} /></button>
+                    <h4 className="text-xs font-bold text-[var(--color-text-primary)] tracking-tight">May 2026</h4>
+                    <div style={{ width: 16 }} />
+                  </div>
+                  <div className={monthDaysGridClasses + ' text-[var(--color-text-secondary)]'}>
+                    <span className="text-[var(--color-brand-danger)] font-bold">Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+                    {Array.from({ length: mayStartOffset }).map((_, i) => <div key={`empty-may-${i}`} />)}
+                    {mayDays.map((day) => {
+                      const state = getDateState(2026, 5, day);
+                      const isSunday = (day + mayStartOffset - 1) % 7 === 0;
+                      const stateClass = state === 'endpoint' ? 'bg-[var(--color-brand-warning)] text-[var(--color-brand-black)] font-extrabold rounded-full scale-105 shadow-lg' : state === 'range' ? 'bg-[var(--color-card-bg)] text-[var(--color-brand-primary)] font-semibold w-full' : isSunday ? 'text-[var(--color-brand-danger)]' : 'text-[var(--color-text-secondary)]';
+                      return (
+                        <button
+                          key={`may-${day}`}
+                          onClick={() => handleDayClick(2026, 5, day)}
+                          className={`${dayButtonBaseClasses} ${stateClass}`}
+                        >
+                          {day}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <div className={monthHeaderClasses}>
+                    <div style={{ width: 16 }} />
+                    <h4 className="text-xs font-bold text-[var(--color-text-primary)] tracking-tight">June 2026</h4>
+                    <button className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition"><ChevronRight size={16} /></button>
+                  </div>
+                  <div className={monthDaysGridClasses + ' text-[var(--color-text-secondary)]'}>
+                    <span className="text-[var(--color-brand-danger)] font-bold">Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+                    {Array.from({ length: juneStartOffset }).map((_, i) => <div key={`empty-june-${i}`} />)}
+                    {juneDays.map((day) => {
+                      const state = getDateState(2026, 6, day);
+                      const isSunday = (day + juneStartOffset - 1) % 7 === 0;
+                      const stateClass = state === 'endpoint' ? 'bg-[var(--color-brand-warning)] text-[var(--color-brand-black)] font-extrabold rounded-full scale-105 shadow-lg' : state === 'range' ? 'bg-[var(--color-card-bg)] text-[var(--color-brand-primary)] font-semibold w-full' : isSunday ? 'text-[var(--color-brand-danger)]' : 'text-[var(--color-text-secondary)]';
+                      return (
+                        <button
+                          key={`june-${day}`}
+                          onClick={() => handleDayClick(2026, 6, day)}
+                          className={`${dayButtonBaseClasses} ${stateClass}`}
+                        >
+                          {day}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 border-t border-[var(--color-border)] mt-5 pt-4">
+                <button
+                  onClick={() => { setAppliedFrom(''); setAppliedTo(''); }}
+                  className="h-9 px-4 rounded-xl text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition"
+                >
+                  Reset
+                </button>
+                <button
+                  onClick={() => setIsPickerOpen(false)}
+                  className="h-9 px-5 rounded-xl bg-[var(--color-brand-primary)] text-xs font-semibold text-white hover:bg-[var(--color-brand-primary)]/90 transition shadow-lg"
+                >
+                  Select dates
+                </button>
               </div>
             </div>
+          )}
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div className={kpiGridClasses}>
+        <KPIStatCard
+          icon={<Droplet size={20} strokeWidth={1.8} />}
+          value={totalFillUps.toString()}
+          label="Total Fill-ups"
+          subtitle={`${appliedFrom} to ${appliedTo || '...'}`}
+          iconBgColor="rgba(59, 130, 246, 0.12)"
+          iconColor="#3b82f6"
+        />
+        <KPIStatCard
+          icon={<BarChart3 size={20} strokeWidth={1.8} />}
+          value={`${totalLiters.toLocaleString()}L`}
+          label="Total Liters"
+          subtitle="Filtered range metrics"
+          iconBgColor="rgba(16, 185, 129, 0.12)"
+          iconColor="#10b981"
+        />
+        <KPIStatCard
+          icon={<AlertTriangle size={20} strokeWidth={1.8} />}
+          value={`₱${totalCost.toLocaleString()}`}
+          label="Total Fuel Cost"
+          subtitle="Filtered range spent"
+          iconBgColor="rgba(239, 68, 68, 0.12)"
+          iconColor="#ef4444"
+        />
+        <KPIStatCard
+          icon={<TrendingUp size={20} strokeWidth={1.8} />}
+          value={`${avgEfficiency} km/L`}
+          label="Avg Efficiency"
+          subtitle="Filtered range avg"
+          iconBgColor="rgba(16, 185, 129, 0.12)"
+          iconColor="#10b981"
+        />
+      </div>
+
+      {/* Tabs Layout */}
+      <div className={tabsLayoutClasses}>
+        <div className="flex gap-1">
+          {tabs.map(tab => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`${tabButtonBaseClasses} ${activeTab === tab.id ? 'border-b-2 border-[var(--color-brand-primary)] text-[var(--color-brand-primary)]' : 'text-[var(--color-text-secondary)]'}`}
+              >
+                <Icon size={16} strokeWidth={1.8} />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Tab Content Panels */}
+      <div className="space-y-6">
+        {activeTab === 'fuel-log' && (
+          <FuelLog
+            fillUps={fillUps}
+            onEdit={handleEditTrigger}
+            onDelete={handleDelete}
+            onLogFillUp={() => setShowLogForm(true)}
+          />
+        )}
+        {activeTab === 'efficiency-trends' && (
+          <EfficiencyTrendsWithFilters vehicles={mockVehicleEfficiency} fleetAvg={avgEfficiency} />
+        )}
+        {activeTab === 'anomaly-detection' && <AnomalyDetection anomalies={mockAnomalies} />}
+      </div>
+
+      {/* Switcher Reports Section */}
+      <div className="space-y-6 border-t border-[var(--color-border)] pt-8">
+        <div className={reportsHeaderClasses}>
+          <h2 className="text-2xl font-bold text-[var(--color-text-primary)]">Reports</h2>
+
+          <div className={`${reportSwitcherClasses} bg-[var(--color-input-bg)] border-[var(--color-border)]`}>
+            <button
+              onClick={() => setActiveReport('fleet-wide')}
+              className={`${activeReport === 'fleet-wide' ? 'bg-[var(--color-brand-primary)] text-white shadow-[0_8px_24px_rgba(26,31,110,0.12)]' : 'text-[var(--color-text-secondary)]'} px-3 py-2 rounded-md`}
+            >
+              Fleet-Wide Cost
+            </button>
+            <button
+              onClick={() => setActiveReport('per-vehicle')}
+              className={`${activeReport === 'per-vehicle' ? 'bg-[var(--color-brand-primary)] text-white shadow-[0_8px_24px_rgba(26,31,110,0.12)]' : 'text-[var(--color-text-secondary)]'} px-3 py-2 rounded-md`}
+            >
+              Per-Vehicle Summary
+            </button>
+            <button
+              onClick={() => setActiveReport('anomaly-log')}
+              className={`${activeReport === 'anomaly-log' ? 'bg-[var(--color-brand-primary)] text-white shadow-[0_8px_24px_rgba(26,31,110,0.12)]' : 'text-[var(--color-text-secondary)]'} px-3 py-2 rounded-md`}
+            >
+              Anomaly Logs
+            </button>
           </div>
-          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4 md:col-span-2">
-            <p className="text-xs font-bold uppercase tracking-wide text-[var(--color-text-secondary)]">Calculated Total Cost</p>
-            <p className="mt-2 text-2xl font-bold text-[var(--color-text-primary)]">{formatCurrency(computedCost)}</p>
-          </div>
-        </form>
-      </Modal>
+        </div>
+
+        <div className={reportPanelClasses}>
+          {activeReport === 'fleet-wide' && (
+            <div className="space-y-3">
+              <div className="text-xs text-[var(--color-text-secondary)] font-mono tracking-wider uppercase">Active View · Fleet-Wide Fuel Cost Report</div>
+              <FleetWideFuelReport />
+            </div>
+          )}
+
+          {activeReport === 'per-vehicle' && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-[var(--color-text-secondary)] font-mono tracking-wider uppercase">Active View · Fuel Cost Summary — Per Vehicle</div>
+                <div className="text-xs text-[var(--color-text-secondary)] font-mono bg-[var(--color-card-bg-hover)] px-2 py-0.5 rounded">
+                  {appliedFrom} — {appliedTo || '...'}
+                </div>
+              </div>
+              <FuelCostSummary fillUps={fillUps} />
+            </div>
+          )}
+
+          {activeReport === 'anomaly-log' && (
+              <div className="space-y-3">
+              <div className="text-xs text-[var(--color-text-secondary)] font-mono tracking-wider uppercase">Active View · Anomaly Detection Log</div>
+              <AnomalyDetectionLog logs={mockAnomalyLogs} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Action Modals */}
+      {showLogForm && (
+        <LogFuelFillUp
+          onClose={() => setShowLogForm(false)}
+          onAdd={handleAdd}
+        />
+      )}
+
+      <EditFuelFillUpModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditingFillUp(null);
+        }}
+        fillUp={editingFillUp}
+        onSave={handleEditSave}
+      />
     </div>
   );
 }

@@ -9,26 +9,24 @@ import type { MaintenanceTask } from "../../lib/api/maintenanceService";
 import { getVehicles, type VehicleOption } from "../../lib/api/vehicleService";
 import { getGarages } from "../../lib/api/locationService";
 import { isMechanicRole } from "../../lib/utils/permissions";
-import { exportRowsToCsv, exportRowsToExcel } from "../../lib/utils/frontendExport";
 import { formatLogNumber } from "../../lib/utils/workOrders";
-import { MaintenanceStatus as MaintenanceStatusEnum } from "../../types/maintenance";
 import {
-  ActionMenu,
+  MaintenanceStatus as MaintenanceStatusEnum,
+  maintenanceStatusLabels,
+} from "../../types/maintenance";
+import {
+  ActionButton,
   DataTable,
-  DropdownSelect,
   ExportButton,
   FilterDropdown,
   Pagination,
   SearchInput,
-  SortSelect,
-  TableToolbar,
+  StatusBadge,
   ToastNotification,
 } from "../../components/ui";
 
 type MaintenanceClass = "Maintenance" | "Repair";
 type MaintenanceStatus = "Completed" | "Flagged";
-type MaintenanceLogSortField = "date" | "logNumber" | "plateNo" | "class" | "status" | "mechanic";
-type SortDirection = "asc" | "desc";
 
 interface MaintenanceLog {
   id: string;
@@ -220,15 +218,9 @@ export default function MaintenanceLogs() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
-  const [selectedClasses, setSelectedClasses] = useState<MaintenanceClass[]>([]);
-  const [mechanicFilter, setMechanicFilter] = useState("All");
-  const [garageFilter, setGarageFilter] = useState("All");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [sortField, setSortField] = useState<MaintenanceLogSortField>("date");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [viewingLog, setViewingLog] = useState<MaintenanceLog | null>(null);
-  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -236,24 +228,6 @@ export default function MaintenanceLogs() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const isMechanic = isMechanicRole(currentUser);
-
-  const mechanicOptions = useMemo(
-    () => ["All", ...Array.from(new Set(logs.map((log) => log.mechanic).filter(Boolean))).sort()],
-    [logs],
-  );
-  const garageOptions = useMemo(
-    () => ["All", ...Array.from(new Set(logs.map((log) => log.garage).filter(Boolean))).sort()],
-    [logs],
-  );
-
-  const toggleClassFilter = (value: MaintenanceClass) => {
-    setSelectedClasses((current) =>
-      current.includes(value)
-        ? current.filter((item) => item !== value)
-        : [...current, value],
-    );
-    setCurrentPage(1);
-  };
 
   const showToast = (nextToast: ToastState) => setToast(nextToast);
 
@@ -302,7 +276,6 @@ export default function MaintenanceLogs() {
 
   useEffect(() => {
     const closeMenus = () => {
-      setOpenActionMenuId(null);
       setIsExportMenuOpen(false);
       setShowFilters(false);
     };
@@ -350,24 +323,12 @@ export default function MaintenanceLogs() {
         log.accountType.toLowerCase().includes(query);
       const matchesStatus =
         selectedStatuses.length === 0 || selectedStatuses.includes(log.status);
-      const matchesClass =
-        selectedClasses.length === 0 || selectedClasses.includes(log.class);
-      const matchesMechanic = mechanicFilter === "All" || log.mechanic === mechanicFilter;
-      const matchesGarage = garageFilter === "All" || log.garage === garageFilter;
       const matchesDateFrom = !dateFrom || log.date >= dateFrom;
       const matchesDateTo = !dateTo || log.date <= dateTo;
 
-      return matchesSearch && matchesStatus && matchesClass && matchesMechanic && matchesGarage && matchesDateFrom && matchesDateTo;
-    }).sort((left, right) => {
-      const direction = sortDirection === "asc" ? 1 : -1;
-      if (sortField === "date") return left.date.localeCompare(right.date) * direction;
-      if (sortField === "logNumber") return left.logNumber.localeCompare(right.logNumber) * direction;
-      if (sortField === "plateNo") return left.plateNo.localeCompare(right.plateNo) * direction;
-      if (sortField === "class") return left.class.localeCompare(right.class) * direction;
-      if (sortField === "status") return left.status.localeCompare(right.status) * direction;
-      return left.mechanic.localeCompare(right.mechanic) * direction;
+      return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
     });
-  }, [logs, searchQuery, selectedStatuses, selectedClasses, mechanicFilter, garageFilter, dateFrom, dateTo, currentUser, isMechanic, sortDirection, sortField]);
+  }, [logs, searchQuery, selectedStatuses, dateFrom, dateTo, currentUser, isMechanic]);
 
   const totalPages = Math.max(1, Math.ceil(filteredLogs.length / itemsPerPage));
   const activePage = Math.min(currentPage, totalPages);
@@ -378,7 +339,7 @@ export default function MaintenanceLogs() {
     setCurrentPage((page) => Math.min(page, totalPages));
   }, [totalPages]);
 
-  const getExportData = () => {
+  const handleExportExcel = () => {
     const headers = [
       "Log No.",
       "Plate No.",
@@ -420,26 +381,14 @@ export default function MaintenanceLogs() {
       log.technicianSignature,
     ]);
 
-    return { headers, rows };
-  };
-
-  const handleExportCsv = () => {
-    const { headers, rows } = getExportData();
-    exportRowsToCsv(
-      `maintenance-logs-${new Date().toISOString().split("T")[0]}.csv`,
-      headers,
-      rows,
-    );
-    showToast({ type: "success", message: "Record exported successfully." });
-  };
-
-  const handleExportExcel = () => {
-    const { headers, rows } = getExportData();
-    exportRowsToExcel(
-      `maintenance-logs-${new Date().toISOString().split("T")[0]}.xls`,
-      headers,
-      rows,
-    );
+    const csv = [headers, ...rows].map((row) => row.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `maintenance-logs-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
     showToast({ type: "success", message: "Record exported successfully." });
   };
 
@@ -521,45 +470,18 @@ export default function MaintenanceLogs() {
       />
 
       <section className="overflow-visible">
-        <TableToolbar
-          search={
-            <SearchInput
-              className="w-full sm:w-96"
-              placeholder="Search by log #, plate, work order, or class..."
-              value={searchQuery}
-              onChange={(event) => {
-                setSearchQuery(event.target.value);
-                setCurrentPage(1);
-              }}
-            />
-          }
-          sort={
-            <SortSelect
-              className="w-full sm:w-60"
-              value={`${sortField}-${sortDirection}`}
-              onChange={(value) => {
-                const [field, direction] = value.split("-") as [MaintenanceLogSortField, SortDirection];
-                setSortField(field);
-                setSortDirection(direction);
-                setCurrentPage(1);
-              }}
-              options={[
-                { value: "date-desc", label: "Date - Newest" },
-                { value: "date-asc", label: "Date - Oldest" },
-                { value: "logNumber-asc", label: "Log No. - Asc" },
-                { value: "logNumber-desc", label: "Log No. - Desc" },
-                { value: "plateNo-asc", label: "Plate No. - A to Z" },
-                { value: "plateNo-desc", label: "Plate No. - Z to A" },
-                { value: "class-asc", label: "Class - A to Z" },
-                { value: "class-desc", label: "Class - Z to A" },
-                { value: "status-asc", label: "Status - A to Z" },
-                { value: "status-desc", label: "Status - Z to A" },
-                { value: "mechanic-asc", label: "Mechanic - A to Z" },
-                { value: "mechanic-desc", label: "Mechanic - Z to A" },
-              ]}
-            />
-          }
-          filters={
+        <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <SearchInput
+            className="w-full max-w-xl"
+            placeholder="Search by log #, plate, work order, or class..."
+            value={searchQuery}
+            onChange={(event) => {
+              setSearchQuery(event.target.value);
+              setCurrentPage(1);
+            }}
+          />
+
+          <div className="flex items-center gap-4">
             <FilterDropdown
               open={showFilters}
               onToggle={() => setShowFilters((current) => !current)}
@@ -582,76 +504,12 @@ export default function MaintenanceLogs() {
               onApply={() => setShowFilters(false)}
               onClear={() => {
                 setSelectedStatuses([]);
-                setSelectedClasses([]);
-                setMechanicFilter("All");
-                setGarageFilter("All");
                 setDateFrom("");
                 setDateTo("");
                 setCurrentPage(1);
               }}
-              legendTitle="Maintenance Log Legend"
-              legendItems={[
-                { label: "Completed", description: "Maintenance was finished and recorded in the log.", tone: "#059669" },
-                { label: "Flagged", description: "Record needs attention because an issue was found during work.", tone: "#dc2626" },
-                { label: "Maintenance Class", description: "Regular preventive service record.", tone: "#2563eb" },
-                { label: "Repair Class", description: "Corrective service record created from a flagged issue.", tone: "#c2410c" },
-              ]}
-            >
-              <div className="grid gap-4">
-                <div>
-                  <p className="text-sm font-semibold text-black">Class</p>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    {(["Maintenance", "Repair"] as MaintenanceClass[]).map((item) => (
-                      <label key={item} className="flex cursor-pointer items-center gap-2 text-sm text-[#141827]">
-                        <input
-                          type="checkbox"
-                          checked={selectedClasses.includes(item)}
-                          onChange={() => toggleClassFilter(item)}
-                          className="h-4 w-4 rounded border-[#cbd3df] accent-[#070b45]"
-                        />
-                        {item}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="text-sm font-semibold text-[#141827]">Mechanic</span>
-                    <DropdownSelect
-                      className="mt-2"
-                      value={mechanicFilter}
-                      onChange={(value) => {
-                        setMechanicFilter(value);
-                        setCurrentPage(1);
-                      }}
-                      label="Mechanic"
-                      options={mechanicOptions.map((option) => ({
-                        value: option,
-                        label: option === "All" ? "All mechanics" : option,
-                      }))}
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="text-sm font-semibold text-[#141827]">Garage</span>
-                    <DropdownSelect
-                      className="mt-2"
-                      value={garageFilter}
-                      onChange={(value) => {
-                        setGarageFilter(value);
-                        setCurrentPage(1);
-                      }}
-                      label="Garage"
-                      options={garageOptions.map((option) => ({
-                        value: option,
-                        label: option === "All" ? "All garages" : option,
-                      }))}
-                    />
-                  </label>
-                </div>
-              </div>
-            </FilterDropdown>
-          }
-          exportActions={
+            />
+
             <ExportButton
               open={isExportMenuOpen}
               onToggle={(event) => {
@@ -662,23 +520,18 @@ export default function MaintenanceLogs() {
                 setIsExportMenuOpen(false);
                 handleExportPdf();
               }}
-              onCsv={() => {
-                setIsExportMenuOpen(false);
-                handleExportCsv();
-              }}
               onExcel={() => {
                 setIsExportMenuOpen(false);
                 handleExportExcel();
               }}
             />
-          }
-        />
+          </div>
+        </div>
 
         <DataTable
           data={paginatedLogs}
           getRowKey={(log) => log.id}
-          minWidth="900px"
-          maxHeight="min(36rem, calc(100vh - 18rem))"
+          minWidth="1000px"
           emptyMessage={
             <div>
               <FileText className="mx-auto mb-3 h-10 w-10 text-[#9aa3b2]" />
@@ -724,6 +577,20 @@ export default function MaintenanceLogs() {
               width: "13%",
               render: (log) => formatOdometer(log.odometerReading),
             },
+            {
+              key: "status",
+              header: "Status",
+              width: "9%",
+              render: (log) => (
+                <StatusBadge
+                  status={
+                    log.status === "Completed"
+                      ? maintenanceStatusLabels[MaintenanceStatusEnum.COMPLETED]
+                      : log.status
+                  }
+                />
+              ),
+            },
             { key: "mechanic", header: "Mechanic", width: "13%", render: (log) => log.mechanic },
             {
               key: "cost",
@@ -733,29 +600,21 @@ export default function MaintenanceLogs() {
             },
             {
               key: "actions",
-              header: "",
+              header: "Actions",
               width: "8%",
               align: "center",
               render: (log) => (
-                <ActionMenu
-                  open={openActionMenuId === log.id}
-                  onToggle={(event) => {
+                <ActionButton
+                  variant="secondary"
+                  className="h-9 px-3"
+                  onClick={(event) => {
                     event.stopPropagation();
-                    setOpenActionMenuId((current) =>
-                      current === log.id ? null : log.id,
-                    );
+                    setViewingLog(log);
                   }}
-                  items={[
-                    {
-                      label: "View",
-                      icon: Eye,
-                      onClick: () => {
-                        setOpenActionMenuId(null);
-                        setViewingLog(log);
-                      },
-                    },
-                  ]}
-                />
+                >
+                  <Eye className="h-4 w-4" />
+                  View
+                </ActionButton>
               ),
             },
           ]}

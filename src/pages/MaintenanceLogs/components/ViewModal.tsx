@@ -1,5 +1,4 @@
 import { X } from "lucide-react";
-import { createPortal } from "react-dom";
 import { useBodyScrollLock } from "../../../lib/hooks/useBodyScrollLock";
 
 type MaintenanceStatus = "Completed" | "Flagged";
@@ -61,17 +60,17 @@ const LogClassBadge = ({ value }: { value: MaintenanceClass }) => (
 export default function ViewModal({ isOpen, log, onClose }: ViewModalProps) {
   useBodyScrollLock(isOpen && Boolean(log));
 
-  if (!isOpen || !log || typeof document === "undefined") return null;
+  if (!isOpen || !log) return null;
 
-  return createPortal((
+  return (
     <div
-      className="modal-overlay"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="modal-content flex max-h-[calc(100dvh-2rem)] w-full max-w-5xl flex-col">
-        <div className="flex shrink-0 items-center justify-between border-b border-[var(--color-divider)] px-6 py-5">
+      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-2xl">
+        <div className="mb-5 flex items-center justify-between border-b border-[var(--color-divider)] pb-4">
           <div>
             <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
               Maintenance Log Details
@@ -83,15 +82,14 @@ export default function ViewModal({ isOpen, log, onClose }: ViewModalProps) {
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"
+            className="rounded-lg p-1.5 text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-input-bg)] hover:text-[var(--color-text-primary)]"
             aria-label="Close maintenance log details"
           >
-            <X className="h-5 w-5" />
+            <X size={18} />
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-        <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
           <div>
             <span className={labelClasses}>Plate No.</span>
             <span className={valueClasses}>{log.plateNo}</span>
@@ -188,8 +186,16 @@ export default function ViewModal({ isOpen, log, onClose }: ViewModalProps) {
           </div>
         </div>
 
+        <div className="mt-7 flex justify-end border-t border-[var(--color-divider)] pt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-4 py-2.5 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)]"
+          >
+            Close
+          </button>
         </div>
       </div>
     </div>
-  ), document.body);
+  );
 }

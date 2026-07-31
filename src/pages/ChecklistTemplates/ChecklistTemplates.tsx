@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import {
+  CheckCircle2,
   ClipboardCheck,
   Plus,
   Trash2,
   GripVertical,
   Edit,
-  Filter,
+  Save,
   X,
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
@@ -15,7 +15,6 @@ import {
   ActionMenu,
   ConfirmationModal,
   DataTable,
-  LegendHelp,
   Pagination,
   SearchInput,
   ToastNotification,
@@ -49,32 +48,27 @@ export default function ChecklistTemplates() {
   const [editingItems, setEditingItems] = useState<ChecklistItemTemplate[]>([]);
   const [isAddingType, setIsAddingType] = useState(false);
   const [newTypeName, setNewTypeName] = useState("");
-  const [newTemplateItems, setNewTemplateItems] = useState<ChecklistItemTemplate[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [templateUsageFilter, setTemplateUsageFilter] = useState<"all" | "used" | "unused">("all");
-  const [templateSizeFilter, setTemplateSizeFilter] = useState<"all" | "empty" | "withItems">("all");
-  const [draftUsageFilter, setDraftUsageFilter] = useState<"all" | "used" | "unused">("all");
-  const [draftSizeFilter, setDraftSizeFilter] = useState<"all" | "empty" | "withItems">("all");
-  const [showTemplateFilters, setShowTemplateFilters] = useState(false);
   const [itemFilter, setItemFilter] = useState("");
-  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [templatePage, setTemplatePage] = useState(1);
   const [checklistPage, setChecklistPage] = useState(1);
   const [editingType, setEditingType] = useState<string | null>(null);
   const [editingTypeValue, setEditingTypeValue] = useState<string>("");
   const [isEditingChecklist, setIsEditingChecklist] = useState(false);
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
-  const [confirmAddType, setConfirmAddType] = useState(false);
-  const [confirmDeleteTemplateItem, setConfirmDeleteTemplateItem] = useState<string | null>(null);
   const [confirmDeleteType, setConfirmDeleteType] = useState<string | null>(null);
   const [blockedDeleteType, setBlockedDeleteType] = useState<string | null>(
     null,
   );
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState<ChecklistItemTemplate | null>(null);
   const [duplicateType, setDuplicateType] = useState<string | null>(null);
   const [duplicateTypeSource, setDuplicateTypeSource] = useState<string | null>(
     null,
   );
   const [openTemplateActionMenuId, setOpenTemplateActionMenuId] = useState<
+    string | null
+  >(null);
+  const [openItemActionMenuId, setOpenItemActionMenuId] = useState<
     string | null
   >(null);
   const [toast, setToast] = useState<{
@@ -85,12 +79,9 @@ export default function ChecklistTemplates() {
   useBodyScrollLock(
     Boolean(
       confirmDeleteType ||
-        confirmAddType ||
-        confirmDeleteTemplateItem ||
         blockedDeleteType ||
-        duplicateType ||
-        isTemplateModalOpen ||
-        isAddingType,
+        confirmDeleteItem ||
+        duplicateType,
     ),
   );
 
@@ -134,6 +125,7 @@ export default function ChecklistTemplates() {
   useEffect(() => {
     const closeActionMenus = () => {
       setOpenTemplateActionMenuId(null);
+      setOpenItemActionMenuId(null);
     };
     document.addEventListener("click", closeActionMenus);
     return () => document.removeEventListener("click", closeActionMenus);
@@ -145,10 +137,39 @@ export default function ChecklistTemplates() {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
+  const handleAddItem = () => {
+    if (!selectedType || !isEditingChecklist) return;
+    if (templateHasMaintenanceSchedule(selectedType)) {
+      showStructureLockedMessage();
+      return;
+    }
+    const newItem: ChecklistItemTemplate = {
+      id: Date.now().toString(),
+      text: "",
+    };
+    setEditingItems((items) => [...items, newItem]);
+    setChecklistPage(Math.ceil((editingItems.length + 1) / itemsPerPage));
+  };
+
   const handleUpdateItem = (id: string, text: string) => {
     setEditingItems((items) =>
       items.map((item) => (item.id === id ? { ...item, text } : item)),
     );
+  };
+
+  const handleDeleteItem = (item: ChecklistItemTemplate) => {
+    const isUnsavedItem = !(
+      templates[selectedType] ?? []
+    ).some((savedItem) => savedItem.id === item.id);
+
+    if (isUnsavedItem && item.text.trim() === "") {
+      setEditingItems((items) =>
+        items.filter((currentItem) => currentItem.id !== item.id),
+      );
+      return;
+    }
+
+    setConfirmDeleteItem(item);
   };
 
   const handleReorderItems = (draggedId: string, targetId: string) => {
@@ -173,46 +194,33 @@ export default function ChecklistTemplates() {
     });
   };
 
-  const commitTemplateModalChanges = () => {
-    if (!selectedType || templateHasMaintenanceSchedule(selectedType)) {
-      if (selectedType) showStructureLockedMessage();
-      return false;
-    }
+  const handleCancelEditChecklist = () => {
+    if (!selectedType) return;
 
-    const nextType =
-      editingType === selectedType && editingTypeValue.trim()
-        ? editingTypeValue.trim()
-        : selectedType;
-    const existingType = Object.keys(templates).find(
-      (type) =>
-        type !== selectedType && type.toLowerCase() === nextType.toLowerCase(),
-    );
+    setEditingItems([...templates[selectedType] ?? []]);
+    setIsEditingChecklist(false);
+  };
 
-    if (existingType) {
-      setDuplicateType(existingType);
-      setDuplicateTypeSource(selectedType);
-      return false;
+  const handleSave = () => {
+    if (!canSaveTemplate) return;
+    if (templateHasMaintenanceSchedule(selectedType)) {
+      showStructureLockedMessage();
+      return;
     }
 
     const saveableItems = editingItems.filter(
       (item) => item.text.trim() !== "",
     );
-    const newTemplates: Record<ChecklistTemplateName, ChecklistItemTemplate[]> = {
+    const newTemplates = {
       ...templates,
+      [selectedType]: saveableItems,
     };
-
-    if (nextType !== selectedType) {
-      delete newTemplates[selectedType];
-    }
-    newTemplates[nextType] = saveableItems;
-
-    setTemplates(newTemplates);
-    setSelectedType(nextType);
     setEditingItems(saveableItems);
+    setTemplates(newTemplates);
     saveChecklistTemplates(newTemplates).catch((error) => {
-      console.error("Failed to save template", error);
+      console.error("Failed to save templates", error);
     });
-    return true;
+    setIsEditingChecklist(false);
   };
 
   const handleAddType = () => {
@@ -228,70 +236,17 @@ export default function ChecklistTemplates() {
       return;
     }
 
-    const saveableItems = newTemplateItems.filter(
-      (item) => item.text.trim() !== "",
-    );
-    const newTemplates = { [trimmed]: saveableItems, ...templates };
+    const newTemplates = { [trimmed]: [], ...templates };
     setTemplates(newTemplates);
     saveChecklistTemplates(newTemplates).catch((error) => {
       console.error("Failed to save templates", error);
     });
     setNewTypeName("");
-    setNewTemplateItems([]);
     setIsAddingType(false);
     setSelectedType(trimmed);
     setTemplatePage(1);
     setChecklistPage(1);
-    setEditingItems(saveableItems);
-    setIsTemplateModalOpen(true);
-  };
-
-  const openAddTemplateModal = () => {
-    setNewTypeName("");
-    setNewTemplateItems([
-      { id: `new-${Date.now()}`, text: "" },
-    ]);
-    setIsAddingType(true);
-  };
-
-  const closeAddTemplateModal = () => {
-    setIsAddingType(false);
-    setNewTypeName("");
-    setNewTemplateItems([]);
-  };
-
-  const addNewTemplateItem = () => {
-    setNewTemplateItems((items) => [
-      ...items,
-      { id: `new-${Date.now()}-${items.length}`, text: "" },
-    ]);
-  };
-
-  const handleReorderNewTemplateItems = (draggedId: string, targetId: string) => {
-    setNewTemplateItems((items) => {
-      const fromIndex = items.findIndex((item) => item.id === draggedId);
-      const toIndex = items.findIndex((item) => item.id === targetId);
-
-      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
-        return items;
-      }
-
-      const updatedItems = [...items];
-      const [movedItem] = updatedItems.splice(fromIndex, 1);
-      updatedItems.splice(toIndex, 0, movedItem);
-      return updatedItems;
-    });
-  };
-
-  const updateNewTemplateItem = (id: string, text: string) => {
-    setNewTemplateItems((items) =>
-      items.map((item) => (item.id === id ? { ...item, text } : item)),
-    );
-  };
-
-  const removeNewTemplateItem = (id: string) => {
-    setNewTemplateItems((items) => items.filter((item) => item.id !== id));
-    setConfirmDeleteTemplateItem(null);
+    setEditingItems([]);
   };
 
   const replaceDuplicateType = () => {
@@ -303,7 +258,7 @@ export default function ChecklistTemplates() {
 
     const replacementItems = duplicateTypeSource
       ? (templates[duplicateTypeSource] ?? [])
-      : newTemplateItems.filter((item) => item.text.trim() !== "");
+      : [];
     const newTemplates = { ...templates, [duplicateType]: replacementItems };
     if (duplicateTypeSource && duplicateTypeSource !== duplicateType) {
       delete newTemplates[duplicateTypeSource];
@@ -312,7 +267,6 @@ export default function ChecklistTemplates() {
     setSelectedType(duplicateType);
     setEditingItems([...replacementItems]);
     setNewTypeName("");
-    setNewTemplateItems([]);
     setIsAddingType(false);
     setEditingType(null);
     setEditingTypeValue("");
@@ -349,7 +303,71 @@ export default function ChecklistTemplates() {
     setConfirmDeleteType(null);
   };
 
+  const performDeleteItem = () => {
+    if (!confirmDeleteItem) return;
+    const nextItems = editingItems.filter(
+      (item) => item.id !== confirmDeleteItem.id,
+    );
+    setEditingItems(nextItems);
+
+    if (selectedType) {
+      const nextTemplates = {
+        ...templates,
+        [selectedType]: nextItems,
+      };
+
+      setTemplates(nextTemplates);
+      saveChecklistTemplates(nextTemplates).catch((error) => {
+        console.error("Failed to update checklist item", error);
+      });
+    }
+
+    setConfirmDeleteItem(null);
+  };
+
+  const handleStartEditType = (type: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditingType(type);
+    setEditingTypeValue(type);
+  };
+
   const handleCancelEditType = () => {
+    setEditingType(null);
+    setEditingTypeValue("");
+  };
+
+  const handleSubmitEditType = (oldType: string) => {
+    const trimmed = editingTypeValue.trim();
+    if (!trimmed) {
+      handleCancelEditType();
+      return;
+    }
+    if (trimmed === oldType) {
+      handleCancelEditType();
+      return;
+    }
+    const existingType = Object.keys(templates).find(
+      (type) =>
+        type !== oldType && type.toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (existingType) {
+      setDuplicateType(existingType);
+      setDuplicateTypeSource(oldType);
+      return;
+    }
+    const newTemplates: Record<ChecklistTemplateName, ChecklistItemTemplate[]> = {
+      ...templates,
+    };
+    newTemplates[trimmed] = newTemplates[oldType] ?? [];
+    delete newTemplates[oldType];
+    setTemplates(newTemplates);
+    saveChecklistTemplates(newTemplates).catch((error) => {
+      console.error("Failed to save templates", error);
+    });
+    if (selectedType === oldType) {
+      setSelectedType(trimmed);
+      setEditingItems([...newTemplates[trimmed]]);
+    }
     setEditingType(null);
     setEditingTypeValue("");
   };
@@ -357,27 +375,11 @@ export default function ChecklistTemplates() {
   const hasSelectedTemplate =
     selectedType !== "" &&
     Object.prototype.hasOwnProperty.call(templates, selectedType);
+  const canSaveTemplate = hasSelectedTemplate;
   const hasTemplateSearch = searchTerm.trim().length > 0;
-  const visibleTemplates = Object.keys(templates)
-    .filter((type) => {
-      const matchesSearch = type.toLowerCase().includes(searchTerm.trim().toLowerCase());
-      const usageCount = getTemplateUsageCount(type);
-      const itemCount = templates[type]?.length ?? 0;
-      const matchesUsage =
-        templateUsageFilter === "all" ||
-        (templateUsageFilter === "used" && usageCount > 0) ||
-        (templateUsageFilter === "unused" && usageCount === 0);
-      const matchesSize =
-        templateSizeFilter === "all" ||
-        (templateSizeFilter === "empty" && itemCount === 0) ||
-        (templateSizeFilter === "withItems" && itemCount > 0);
-
-      return matchesSearch && matchesUsage && matchesSize;
-    })
-    .sort((left, right) => left.localeCompare(right));
-  const activeTemplateFilterCount =
-    (templateUsageFilter === "all" ? 0 : 1) +
-    (templateSizeFilter === "all" ? 0 : 1);
+  const visibleTemplates = Object.keys(templates).filter((type) =>
+    type.toLowerCase().includes(searchTerm.trim().toLowerCase()),
+  );
   const hasChecklistItemSearch = itemFilter.trim().length > 0;
   const filteredItems = editingItems.filter((item) =>
     item.text.toLowerCase().includes(itemFilter.trim().toLowerCase()),
@@ -401,46 +403,22 @@ export default function ChecklistTemplates() {
     activeChecklistPage * itemsPerPage,
   );
 
-  const openTemplateModal = (type: string, mode: "view" | "edit") => {
+  const selectTemplate = (type: string) => {
     if (editingType === type) return;
+    const changedTemplate = selectedType !== type;
     setSelectedType(type);
     setChecklistPage(1);
-    setItemFilter("");
-    const items = Object.prototype.hasOwnProperty.call(templates, type)
-      ? [...templates[type]]
-      : [];
-    setEditingItems(items);
-    setIsEditingChecklist(mode === "edit");
-    setEditingType(mode === "edit" ? type : null);
-    setEditingTypeValue(mode === "edit" ? type : "");
-    setIsTemplateModalOpen(true);
-  };
-
-  const selectTemplate = (type: string) => {
-    openTemplateModal(type, "view");
-  };
-
-  const openTemplateForEdit = (type: string) => {
-    if (templateHasMaintenanceSchedule(type)) {
-      showStructureLockedMessage();
-      return;
-    }
-    openTemplateModal(type, "edit");
-  };
-
-  const closeTemplateModal = (shouldSave = false) => {
-    if (shouldSave && (isEditingChecklist || editingType === selectedType)) {
-      const committed = commitTemplateModalChanges();
-      if (!committed) return;
-    }
-    setIsTemplateModalOpen(false);
     setIsEditingChecklist(false);
-    setEditingType(null);
-    setEditingTypeValue("");
-    setItemFilter("");
-    setChecklistPage(1);
-    if (selectedType) {
-      setEditingItems([...templates[selectedType] ?? []]);
+    setEditingItems(
+      Object.prototype.hasOwnProperty.call(templates, type)
+        ? [...templates[type]]
+        : [],
+    );
+    if (changedTemplate) {
+      setToast({
+        type: "success",
+        message: `Now using template: ${type}.`,
+      });
     }
   };
 
@@ -456,253 +434,179 @@ export default function ChecklistTemplates() {
         subtitle={"Manage and configure checklist templates"}
       />
 
-      <section className="space-y-5">
-        <div className="rounded-xl border border-[var(--color-border)] bg-white p-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center">
-              <SearchInput
-                className="w-full sm:w-96"
-                value={searchTerm}
-                onChange={(event) => {
-                  setSearchTerm(event.target.value);
-                  setTemplatePage(1);
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.42fr)_minmax(0,1fr)] xl:items-start">
+      <section className="min-w-0 space-y-5">
+        <div className="flex flex-col gap-3">
+          <SearchInput
+            className="w-full"
+            value={searchTerm}
+            onChange={(event) => {
+              setSearchTerm(event.target.value);
+              setTemplatePage(1);
+            }}
+            placeholder="Search templates..."
+          />
+
+          {isAddingType ? (
+            <div className="flex w-full flex-col gap-2 rounded-xl border border-[#d8dee8] bg-white p-3">
+              <input
+                type="text"
+                value={newTypeName}
+                onChange={(event) => setNewTypeName(event.target.value)}
+                placeholder="Type name..."
+                className="h-10 rounded-lg border border-[#cbd3df] bg-white px-3 text-sm text-[#141827] outline-none transition focus:border-[#070b45] focus:ring-2 focus:ring-[#070b45]/10"
+                autoFocus
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") handleAddType();
+                  if (event.key === "Escape") {
+                    setIsAddingType(false);
+                    setNewTypeName("");
+                  }
                 }}
-                placeholder="Search templates..."
               />
-
-              <div className="flex items-center gap-2">
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setDraftUsageFilter(templateUsageFilter);
-                    setDraftSizeFilter(templateSizeFilter);
-                    setShowTemplateFilters((current) => !current);
+              <div className="grid grid-cols-2 gap-2">
+                <ActionButton
+                  variant="secondary"
+                  className="w-full"
+                  onClick={() => {
+                    setIsAddingType(false);
+                    setNewTypeName("");
                   }}
-                  className={`relative flex h-10 w-10 items-center justify-center rounded-xl border transition ${
-                    showTemplateFilters || activeTemplateFilterCount > 0
-                      ? "border-[#070b45] bg-[#f6f8fc]"
-                      : "border-[#d8dee8] bg-[#f6f8fc] hover:border-[#070b45]"
-                  }`}
-                  aria-expanded={showTemplateFilters}
-                  aria-label="Filter checklist templates"
                 >
-                  <Filter className="h-5 w-5 text-[#63728a]" strokeWidth={2.4} />
-                  {activeTemplateFilterCount > 0 ? (
-                    <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#070b45] px-1 text-[10px] font-bold text-white">
-                      {activeTemplateFilterCount}
-                    </span>
-                  ) : null}
-                </button>
-
-                {showTemplateFilters ? (
-                  <div
-                    className="absolute left-0 top-12 z-40 w-[min(92vw,540px)] rounded-xl border border-[#e0e5ee] bg-white p-6 shadow-[0_18px_45px_rgba(15,23,42,0.18)] animate-in fade-in zoom-in-95 duration-150"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <h3 className="text-xl font-extrabold text-[#141827]">
-                      Filter by
-                    </h3>
-                    <div className="my-5 h-px bg-[#dde3eb]" />
-
-                    <div className="space-y-6">
-                      <div>
-                        <p className="text-sm font-bold text-black">Usage</p>
-                        <div className="mt-4 grid gap-x-8 gap-y-4 sm:grid-cols-2">
-                          {[
-                            ["all", "All Templates"],
-                            ["used", "Used in schedules"],
-                            ["unused", "Unused"],
-                          ].map(([value, label]) => (
-                            <label key={value} className="flex cursor-pointer items-center gap-3 text-base font-semibold text-[#141827]">
-                              <span
-                                className={`flex h-5 w-5 items-center justify-center rounded border-2 ${
-                                  draftUsageFilter === value
-                                    ? "border-[#070b45] bg-[#eef2ff]"
-                                    : "border-[#cbd3df] bg-white"
-                                }`}
-                              />
-                              <input
-                                type="radio"
-                                name="templateUsageFilter"
-                                value={value}
-                                checked={draftUsageFilter === value}
-                                onChange={() => setDraftUsageFilter(value as "all" | "used" | "unused")}
-                                className="sr-only"
-                              />
-                              {label}
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="h-px bg-[#dde3eb]" />
-
-                      <div>
-                        <p className="text-sm font-bold text-black">Checklist items</p>
-                        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                          {[
-                            ["all", "Any item count"],
-                            ["withItems", "Has checklist items"],
-                            ["empty", "No checklist items"],
-                          ].map(([value, label]) => (
-                            <label key={value} className="block">
-                              <span className="text-sm font-semibold text-[#64748b]">
-                                {label}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setDraftSizeFilter(value as "all" | "empty" | "withItems")}
-                                className={`mt-2 h-10 w-full rounded-xl border px-4 text-left text-sm transition ${
-                                  draftSizeFilter === value
-                                    ? "border-[#070b45] bg-[#eef2ff] font-semibold text-[#070b45]"
-                                    : "border-[#d8dee8] bg-white text-[#141827] hover:border-[#070b45]"
-                                }`}
-                              >
-                                {label}
-                              </button>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTemplateUsageFilter(draftUsageFilter);
-                          setTemplateSizeFilter(draftSizeFilter);
-                          setTemplatePage(1);
-                          setShowTemplateFilters(false);
-                        }}
-                        className="h-10 rounded-lg bg-[#070b45] text-sm font-bold text-white transition hover:bg-[#11175f]"
-                      >
-                        Apply
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDraftUsageFilter("all");
-                          setDraftSizeFilter("all");
-                          setTemplateUsageFilter("all");
-                          setTemplateSizeFilter("all");
-                          setTemplatePage(1);
-                          setShowTemplateFilters(false);
-                        }}
-                        className="h-10 rounded-lg border-2 border-[#070b45] bg-white text-sm font-bold text-[#070b45] transition hover:bg-[#f6f8fc]"
-                      >
-                        Clear
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-              <LegendHelp
-                title="Template Legend"
-                items={[
-                  { label: "Used", description: "Template is already attached to one or more schedules.", tone: "#0f766e" },
-                  { label: "Unused", description: "Template is available but not yet used by schedules.", tone: "#64748b" },
-                  { label: "Has Items", description: "Template contains checklist steps.", tone: "#2563eb" },
-                  { label: "Empty", description: "Template has no checklist steps yet.", tone: "#dc2626" },
-                ]}
-              />
+                  Cancel
+                </ActionButton>
+                <ActionButton className="w-full" onClick={handleAddType}>Add</ActionButton>
               </div>
             </div>
-
-            <ActionButton className="w-full sm:w-auto" onClick={openAddTemplateModal}>
+          ) : (
+            <ActionButton className="w-full" onClick={() => setIsAddingType(true)}>
               <Plus className="h-4 w-4" />
               Add New Type
             </ActionButton>
-          </div>
+          )}
         </div>
 
-      {paginatedTemplates.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            {paginatedTemplates.map((type) => {
-              const usageCount = getTemplateUsageCount(type);
-              const itemCount = templates[type]?.length ?? 0;
-              const isActive = selectedType === type;
-
-              return (
-                <article
-                  key={type}
-                  className={`enterprise-card flex min-h-40 flex-col justify-between p-5 ${
-                    isActive ? "border-[#1a1f6e] bg-[#f8faff]" : ""
-                  }`}
-                  onClick={() => selectTemplate(type)}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1 text-left">
-                      <h2 className="truncate text-base font-bold text-[#141827]">
-                        {type}
-                      </h2>
-                      <p className="mt-2 text-sm text-[#64748b]">
-                        {itemCount} checklist item{itemCount === 1 ? "" : "s"}
-                      </p>
-                    </div>
-                    <ActionMenu
-                      open={openTemplateActionMenuId === type}
-                      onToggle={(event) => {
-                        event.stopPropagation();
-                        setOpenTemplateActionMenuId((current) =>
-                          current === type ? null : type,
-                        );
-                      }}
-                      items={[
-                        {
-                          label: "View",
-                          icon: ClipboardCheck,
-                          onClick: () => {
-                            setOpenTemplateActionMenuId(null);
-                            openTemplateModal(type, "view");
-                          },
-                        },
-                        {
-                          label: "Edit",
-                          icon: Edit,
-                          onClick: () => {
-                            setOpenTemplateActionMenuId(null);
-                            openTemplateForEdit(type);
-                          },
-                        },
-                        {
-                          label: "Delete",
-                          icon: Trash2,
-                          danger: true,
-                          onClick: () => {
-                            setOpenTemplateActionMenuId(null);
-                            if (templateHasMaintenanceSchedule(type)) {
-                              setBlockedDeleteType(type);
-                            } else {
-                              setConfirmDeleteType(type);
-                            }
-                          },
-                        },
-                      ]}
-                    />
-                  </div>
-                  <div className="mt-6 border-t border-slate-200 pt-4 text-sm">
-                    <span className="text-[#64748b]">
-                      Used in {usageCount} schedule{usageCount === 1 ? "" : "s"}
+        <DataTable
+          data={paginatedTemplates}
+          getRowKey={(type) => type}
+          minWidth="100%"
+          onRowClick={selectTemplate}
+          emptyMessage={
+            hasTemplateSearch
+              ? "No templates match your search."
+              : "No templates yet. Add a new type to get started."
+          }
+          columns={[
+            {
+              key: "template",
+              header: "Template",
+              width: "58%",
+              render: (type) =>
+                editingType === type ? (
+                  <input
+                    type="text"
+                    value={editingTypeValue}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={(event) => setEditingTypeValue(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") handleSubmitEditType(type);
+                      if (event.key === "Escape") handleCancelEditType();
+                    }}
+                    className="h-9 w-full rounded-lg border border-[#cbd3df] bg-white px-3 text-sm font-semibold text-[#141827] outline-none focus:border-[#070b45]"
+                    autoFocus
+                  />
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`font-semibold ${
+                        selectedType === type ? "text-[#070b45]" : "text-[#2f3b52]"
+                      }`}
+                    >
+                      {type}
                     </span>
+                    {selectedType === type ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-[#070b45] bg-[#eef2ff] px-2.5 py-1 text-[10px] font-bold uppercase text-[#070b45]">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Current
+                      </span>
+                    ) : null}
                   </div>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center">
-            <ClipboardCheck className="mx-auto h-10 w-10 text-slate-400" />
-            <p className="mt-3 font-bold text-[#141827]">
-              {hasTemplateSearch ? "No templates match your search." : "No templates yet."}
-            </p>
-            <p className="mt-1 text-sm text-[#64748b]">
-              {hasTemplateSearch ? "Try a different keyword." : "Add a checklist type to get started."}
-            </p>
-          </div>
-        )}
+                ),
+            },
+            {
+              key: "items",
+              header: "Items",
+              width: "18%",
+              render: (type) => templates[type]?.length ?? 0,
+            },
+            {
+              key: "actions",
+              header: "Actions",
+              width: "24%",
+              align: "center",
+              render: (type) =>
+                editingType === type ? (
+                  <div className="flex justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleSubmitEditType(type);
+                      }}
+                      className="rounded-lg p-2 text-[#070b45] transition hover:bg-[#eef2ff]"
+                      title="Save Type"
+                    >
+                      <Save className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleCancelEditType();
+                      }}
+                      className="rounded-lg p-2 text-[#ff4040] transition hover:bg-[#fff1f1]"
+                      title="Cancel Type Edit"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <ActionMenu
+                    open={openTemplateActionMenuId === type}
+                    onToggle={(event) => {
+                      event.stopPropagation();
+                      setOpenTemplateActionMenuId((current) =>
+                        current === type ? null : type,
+                      );
+                    }}
+                    items={[
+                      {
+                        label: "Edit",
+                        icon: Edit,
+                        onClick: () => {
+                          setOpenTemplateActionMenuId(null);
+                          handleStartEditType(type);
+                        },
+                      },
+                      {
+                        label: "Delete",
+                        icon: Trash2,
+                        danger: true,
+                        onClick: () => {
+                          setOpenTemplateActionMenuId(null);
+                          if (templateHasMaintenanceSchedule(type)) {
+                            setBlockedDeleteType(type);
+                          } else {
+                            setConfirmDeleteType(type);
+                          }
+                        },
+                      },
+                    ]}
+                  />
+                ),
+            },
+          ]}
+        />
 
         {visibleTemplates.length > itemsPerPage ? (
           <Pagination
@@ -717,64 +621,101 @@ export default function ChecklistTemplates() {
         ) : null}
       </section>
 
-      {isAddingType && typeof document !== "undefined" && createPortal(
-        <div className="modal-overlay z-[70]">
-          <div className="modal-content w-full max-w-2xl p-6">
-            <div className="mb-5 flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-bold text-[#141827]">
-                  Add Checklist Template
-                </h2>
-                <p className="mt-1 text-sm text-[#64748b]">
-                  Create a new checklist type, then add checklist items.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  closeAddTemplateModal();
-                }}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[#64748b] transition hover:bg-[var(--color-card-bg-hover)] hover:text-[#141827]"
-                aria-label="Close add template"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <label className="block text-sm font-semibold text-[#334155]" htmlFor="new-template-name">
-              Template Name
-            </label>
-            <input
-              id="new-template-name"
-              type="text"
-              value={newTypeName}
-              onChange={(event) => setNewTypeName(event.target.value)}
-              placeholder="e.g., Cooling System Inspection"
-              className="mt-2 h-10 w-full rounded-xl border border-[#cbd3df] bg-white px-3 text-sm text-[#141827] outline-none transition focus:border-[#070b45] focus:ring-2 focus:ring-[#070b45]/10"
-              autoFocus
-              onKeyDown={(event) => {
-                if (event.key === "Enter") handleAddType();
-                if (event.key === "Escape") closeAddTemplateModal();
+      <section className="min-w-0 space-y-5">
+        {hasSelectedTemplate ? (
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#070b45] bg-[#eef2ff] px-4 py-3 text-[#070b45]">
+            <CheckCircle2 className="h-5 w-5" />
+            <span className="text-sm font-bold uppercase tracking-wide">
+              Current Template
+            </span>
+            <span className="text-sm font-semibold">{selectedType}</span>
+          </div>
+        ) : null}
+
+        <div className="flex flex-col gap-4 border-b border-[#dde4ef] pb-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-[#141827]">
+              {hasSelectedTemplate ? selectedType : "Checklist Items"}
+            </h2>
+            <p className="mt-1 text-sm text-[#6f7790]">
+              Configure the checklist items mechanics must complete.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {isEditingChecklist ? (
+              <ActionButton variant="secondary" onClick={handleCancelEditChecklist}>
+                Cancel Edit
+              </ActionButton>
+            ) : null}
+            <ActionButton
+              onClick={() => {
+                if (isEditingChecklist) {
+                  handleSave();
+                } else {
+                  if (templateHasMaintenanceSchedule(selectedType)) {
+                    showStructureLockedMessage();
+                    return;
+                  }
+                  setIsEditingChecklist(true);
+                }
               }}
-            />
-            <div className="mt-5 border-t border-slate-200 pt-5">
-              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-[#141827]">Checklist Items</h3>
-                  <p className="mt-1 text-xs text-[#64748b]">Add the first items now, or leave them blank and edit later.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={addNewTemplateItem}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-[#cbd3df] px-4 text-sm font-bold text-[#070b45] transition hover:bg-[#f8faff]"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Item
-                </button>
-              </div>
-              <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
-                {newTemplateItems.map((item, index) => (
+              disabled={!hasSelectedTemplate || (!canSaveTemplate && isEditingChecklist)}
+            >
+              {isEditingChecklist ? "Save Checklist" : "Edit Checklist"}
+            </ActionButton>
+            <ActionButton
+              onClick={handleAddItem}
+              disabled={!hasSelectedTemplate || !isEditingChecklist}
+            >
+              <Plus className="h-4 w-4" />
+              Add Item
+            </ActionButton>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <SearchInput
+            className="w-full max-w-xl"
+            value={itemFilter}
+            onChange={(event) => {
+              setItemFilter(event.target.value);
+              setChecklistPage(1);
+            }}
+            placeholder="Filter checklist items..."
+          />
+          <p className="text-sm text-[#6f7790]">
+            Showing {paginatedItems.length} of {filteredItems.length} matching item{filteredItems.length === 1 ? "" : "s"}
+          </p>
+        </div>
+
+        <DataTable
+          data={paginatedItems}
+          getRowKey={(item) => item.id}
+          minWidth="100%"
+          emptyMessage={
+            hasChecklistItemSearch
+              ? "No checklist items match your filter."
+              : hasSelectedTemplate
+                ? "This template has no checklist items."
+                : "Select or create a checklist template."
+          }
+          columns={[
+            {
+              key: "order",
+              header: "item no.",
+              width: "10%",
+              render: (item) =>
+                (activeChecklistPage - 1) * itemsPerPage +
+                filteredItems.findIndex((current) => current.id === item.id) +
+                1,
+            },
+            {
+              key: "item",
+              header: "Checklist Item",
+              width: "72%",
+              render: (item) =>
+                isEditingChecklist ? (
                   <div
-                    key={item.id}
                     draggable
                     onDragStart={() => setDraggedItemId(item.id)}
                     onDragEnd={() => setDraggedItemId(null)}
@@ -785,253 +726,74 @@ export default function ChecklistTemplates() {
                         setDraggedItemId(null);
                         return;
                       }
-                      handleReorderNewTemplateItems(draggedItemId, item.id);
+                      handleReorderItems(draggedItemId, item.id);
                       setDraggedItemId(null);
                     }}
-                    className={`flex items-center gap-3 rounded-xl transition ${
-                      draggedItemId === item.id ? "bg-[#f6f8fc]" : ""
+                    className={`flex items-center gap-3 ${
+                      draggedItemId === item.id ? "text-[#070b45]" : ""
                     }`}
                   >
-                    <span className="flex h-10 w-14 shrink-0 cursor-grab items-center justify-center gap-1 rounded-xl bg-slate-100 text-sm font-bold text-slate-600">
-                      <GripVertical className="h-4 w-4 text-slate-400" />
-                      {index + 1}
-                    </span>
+                    <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-[#6f7790]" />
                     <input
                       type="text"
                       value={item.text}
                       onChange={(event) =>
-                        updateNewTemplateItem(item.id, event.target.value)
+                        handleUpdateItem(item.id, event.target.value)
                       }
-                      placeholder="Enter checklist item..."
-                      className="h-10 flex-1 rounded-xl border border-[#cbd3df] bg-white px-3 text-sm text-[#141827] outline-none focus:border-[#070b45]"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDeleteTemplateItem(item.id)}
-                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[#ff4040] transition hover:bg-[#fff1f1]"
-                      aria-label="Remove checklist item"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-                {newTemplateItems.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-sm text-[#64748b]">
-                    No checklist items added yet.
-                  </div>
-                ) : null}
-              </div>
-            </div>
-            <div className="mt-6 flex justify-end gap-3">
-              <ActionButton
-                variant="secondary"
-                onClick={closeAddTemplateModal}
-              >
-                Cancel
-              </ActionButton>
-              <ActionButton onClick={() => setConfirmAddType(true)} disabled={!newTypeName.trim()}>
-                Create Template
-              </ActionButton>
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )}
-
-      {isTemplateModalOpen && hasSelectedTemplate && typeof document !== "undefined" && createPortal(
-        <div className="modal-overlay z-[70]">
-          <div className="modal-content flex max-h-[calc(100dvh-2rem)] w-full max-w-4xl flex-col">
-            <div className="flex shrink-0 flex-col gap-4 border-b border-slate-200 bg-slate-50 px-6 py-5 lg:flex-row lg:items-start lg:justify-between">
-              <div className="min-w-0 flex-1">
-                {editingType === selectedType ? (
-                  <div className="max-w-3xl">
-                    <input
-                      type="text"
-                      value={editingTypeValue}
-                      onChange={(event) => setEditingTypeValue(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") event.currentTarget.blur();
-                      }}
-                      className="h-10 min-w-0 flex-1 rounded-xl border border-[#cbd3df] bg-white px-4 text-base font-bold text-[#141827] outline-none transition focus:border-[#070b45] focus:ring-2 focus:ring-[#070b45]/10"
-                      autoFocus
+                      placeholder="Enter checklist task description..."
+                      className="h-9 w-full rounded-lg border border-[#cbd3df] bg-white px-3 text-sm text-[#141827] outline-none focus:border-[#070b45]"
                     />
                   </div>
                 ) : (
-                  <div className="flex min-w-0 items-center gap-2">
-                    <h2 className="truncate text-xl font-bold text-[#141827]">
-                      {selectedType}
-                    </h2>
-                    <button
-                      type="button"
-                      onClick={() => openTemplateForEdit(selectedType)}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-[#64748b] transition hover:bg-slate-100 hover:text-[#070b45]"
-                      title="Edit template title"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </button>
-                  </div>
-                )}
-                <p className="mt-1 text-sm text-[#64748b]">
-                  Checklist template details
-                </p>
-              </div>
-              <div className="flex items-start gap-3">
-                <button
-                  type="button"
-                  onClick={() => closeTemplateModal(false)}
-                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[#64748b] transition hover:bg-[var(--color-card-bg-hover)] hover:text-[#141827]"
-                  aria-label="Close checklist template"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto bg-white px-6 py-5">
-              <div className="mb-5 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 lg:grid-cols-[minmax(16rem,1fr)_auto] lg:items-center lg:justify-between">
-                <SearchInput
-                  className="w-full sm:w-96"
-                  value={itemFilter}
-                  onChange={(event) => {
-                    setItemFilter(event.target.value);
-                    setChecklistPage(1);
+                  <span className="text-[#141827]">
+                    {item.text || "Untitled checklist item"}
+                  </span>
+                ),
+            },
+            {
+              key: "actions",
+              header: "Actions",
+              width: "20%",
+              align: "center",
+              render: (item) => (
+                <ActionMenu
+                  open={openItemActionMenuId === item.id}
+                  onToggle={(event) => {
+                    event.stopPropagation();
+                    setOpenItemActionMenuId((current) =>
+                      current === item.id ? null : item.id,
+                    );
                   }}
-                  placeholder="Filter checklist items..."
+                  items={[
+                    {
+                      label: "Delete",
+                      icon: Trash2,
+                      danger: true,
+                      onClick: () => {
+                        setOpenItemActionMenuId(null);
+                        handleDeleteItem(item);
+                      },
+                    },
+                  ]}
                 />
-                <p className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-[#64748b]">
-                  Showing {paginatedItems.length} of {filteredItems.length} matching item{filteredItems.length === 1 ? "" : "s"}
-                </p>
-              </div>
+              ),
+            },
+          ]}
+        />
 
-              <DataTable
-                data={paginatedItems}
-                getRowKey={(item) => item.id}
-                minWidth="760px"
-                emptyMessage={
-                  hasChecklistItemSearch
-                    ? "No checklist items match your filter."
-                    : "This template has no checklist items."
-                }
-                columns={[
-                  {
-                    key: "order",
-                    header: "item no.",
-                    width: "104px",
-                    render: (item) =>
-                      (activeChecklistPage - 1) * itemsPerPage +
-                      filteredItems.findIndex((current) => current.id === item.id) +
-                      1,
-                  },
-                  {
-                    key: "item",
-                    header: "Checklist Item",
-                    width: "auto",
-                    render: (item) =>
-                      isEditingChecklist ? (
-                        <div
-                          draggable
-                          onDragStart={() => setDraggedItemId(item.id)}
-                          onDragEnd={() => setDraggedItemId(null)}
-                          onDragOver={(event) => event.preventDefault()}
-                          onDrop={(event) => {
-                            event.preventDefault();
-                            if (!draggedItemId || draggedItemId === item.id) {
-                              setDraggedItemId(null);
-                              return;
-                            }
-                            handleReorderItems(draggedItemId, item.id);
-                            setDraggedItemId(null);
-                          }}
-                          className={`flex items-center gap-4 ${
-                            draggedItemId === item.id ? "text-[#070b45]" : ""
-                          }`}
-                        >
-                          <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-[#64748b]" />
-                          <input
-                            type="text"
-                            value={item.text}
-                            onChange={(event) =>
-                              handleUpdateItem(item.id, event.target.value)
-                            }
-                            placeholder="Enter checklist task description..."
-                            className="h-10 w-full rounded-xl border border-[#cbd3df] bg-white px-3 text-sm text-[#141827] outline-none focus:border-[#070b45]"
-                          />
-                        </div>
-                      ) : (
-                        <span className="text-[#141827]">
-                          {item.text || "Untitled checklist item"}
-                        </span>
-                      ),
-                  },
-                ]}
-              />
-
-              {filteredItems.length > itemsPerPage ? (
-                <Pagination
-                  page={activeChecklistPage}
-                  totalPages={checklistTotalPages}
-                  totalItems={filteredItems.length}
-                  pageSize={itemsPerPage}
-                  pageSizeOptions={[itemsPerPage]}
-                  onPageChange={setChecklistPage}
-                  onPageSizeChange={() => undefined}
-                />
-              ) : null}
-            </div>
-            {isEditingChecklist ? (
-              <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-slate-200 bg-white px-6 py-5 sm:flex-row sm:justify-end">
-                <ActionButton
-                  variant="secondary"
-                  onClick={() => closeTemplateModal(false)}
-                >
-                  Cancel
-                </ActionButton>
-                <ActionButton onClick={() => closeTemplateModal(true)}>
-                  Save Changes
-                </ActionButton>
-              </div>
-            ) : null}
-          </div>
-        </div>,
-        document.body,
-      )}
-
-      <ConfirmationModal
-        isOpen={confirmAddType}
-        message={
-          <>
-            Are you sure you want to add this checklist template?
-            <span className="mt-2 block font-bold">{newTypeName.trim()}</span>
-          </>
-        }
-        confirmLabel="Yes"
-        onConfirm={() => {
-          setConfirmAddType(false);
-          handleAddType();
-        }}
-        onCancel={() => setConfirmAddType(false)}
-      />
-
-      <ConfirmationModal
-        isOpen={Boolean(confirmDeleteTemplateItem)}
-        variant="danger"
-        message={
-          <>
-            Are you sure you want to delete this checklist item?
-            <span className="mt-2 block font-bold">
-              {newTemplateItems.find((item) => item.id === confirmDeleteTemplateItem)?.text ||
-                "Untitled checklist item"}
-            </span>
-          </>
-        }
-        confirmLabel="Yes"
-        onConfirm={() => {
-          if (confirmDeleteTemplateItem) {
-            removeNewTemplateItem(confirmDeleteTemplateItem);
-          }
-        }}
-        onCancel={() => setConfirmDeleteTemplateItem(null)}
-      />
+        {filteredItems.length > itemsPerPage ? (
+          <Pagination
+            page={activeChecklistPage}
+            totalPages={checklistTotalPages}
+            totalItems={filteredItems.length}
+            pageSize={itemsPerPage}
+            pageSizeOptions={[itemsPerPage]}
+            onPageChange={setChecklistPage}
+            onPageSizeChange={() => undefined}
+          />
+        ) : null}
+      </section>
+      </div>
 
       <ConfirmationModal
         isOpen={Boolean(confirmDeleteType)}
@@ -1053,9 +815,9 @@ export default function ChecklistTemplates() {
         onCancel={() => setConfirmDeleteType(null)}
       />
 
-      {blockedDeleteType && typeof document !== "undefined" && createPortal(
-        <div className="modal-overlay z-[60]">
-          <div className="modal-content w-full max-w-md p-6">
+      {blockedDeleteType && (
+        <div className="modal-overlay z-[60] px-4 backdrop-blur-sm">
+          <div className="modal-content w-full max-w-md rounded-xl p-6">
             <h3 className="mb-3 text-lg font-bold text-[var(--color-text-primary)]">
               Template Cannot Be Deleted
             </h3>
@@ -1090,13 +852,12 @@ export default function ChecklistTemplates() {
               </button>
             </div>
           </div>
-        </div>,
-        document.body,
+        </div>
       )}
 
-      {duplicateType && typeof document !== "undefined" && createPortal(
-        <div className="modal-overlay z-[60]">
-          <div className="modal-content w-full max-w-md p-6">
+      {duplicateType && (
+        <div className="modal-overlay z-[60] px-4 backdrop-blur-sm">
+          <div className="modal-content w-full max-w-md rounded-xl p-6">
             <h3 className="mb-3 text-lg font-bold text-[var(--color-text-primary)]">
               Existing Checklist Template
             </h3>
@@ -1116,7 +877,6 @@ export default function ChecklistTemplates() {
                     handleCancelEditType();
                   } else {
                     setNewTypeName("");
-                    setNewTemplateItems([]);
                     setIsAddingType(false);
                   }
                   setDuplicateTypeSource(null);
@@ -1141,10 +901,28 @@ export default function ChecklistTemplates() {
               </button>
             </div>
           </div>
-        </div>,
-        document.body,
+        </div>
       )}
 
+      <ConfirmationModal
+        isOpen={Boolean(confirmDeleteItem)}
+        variant="danger"
+        message={
+          confirmDeleteItem ? (
+            <>
+              Are you sure you want to delete this checklist item?
+              <span className="mt-2 block font-bold">
+                {confirmDeleteItem.text || "Untitled checklist item"}
+              </span>
+            </>
+          ) : (
+            ""
+          )
+        }
+        confirmLabel="Yes"
+        onConfirm={performDeleteItem}
+        onCancel={() => setConfirmDeleteItem(null)}
+      />
     </div>
   );
 }

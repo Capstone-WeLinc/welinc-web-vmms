@@ -1,8 +1,6 @@
 import { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Calendar } from 'lucide-react';
 import { printToPDF } from "../../../lib/utils/fuelExport";
-import { ExportButton, Pagination } from '../../../components/ui';
-import { exportRowsToCsv, exportRowsToExcel } from "../../../lib/utils/frontendExport";
 
 const branchData = [
   { name: 'Main Branch', vehicles: 6, fillUps: 8, liters: 520, cost: 34321, efficiency: 8.5 },
@@ -19,7 +17,6 @@ export default function FleetWideReport() {
   const [tempTo, setTempTo] = useState('2026-05-30');
 
   const [currentLeftMonth, setCurrentLeftMonth] = useState(new Date(2026, 4, 1));
-  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
@@ -121,7 +118,7 @@ export default function FleetWideReport() {
     let styles = "p-2 text-center text-sm relative transition-all select-none cursor-pointer font-medium h-9 w-9 flex items-center justify-center mx-auto rounded-lg ";
 
     if (dStr === tempFrom || dStr === tempTo) {
-      styles += "bg-[var(--color-brand-warning)] text-[var(--color-brand-black)] font-bold !rounded-full z-10 scale-105";
+      styles += "bg-[var(--color-brand-warning)] text-[var(--color-brand-black)] font-bold !rounded-full shadow-md z-10 scale-105";
     } else if (tempFrom && tempTo && dStr > tempFrom && dStr < tempTo) {
       styles += "bg-[var(--color-brand-primary)]/15 text-[var(--color-brand-primary)] !rounded-none";
     } else if (isSunday) {
@@ -160,21 +157,18 @@ export default function FleetWideReport() {
     setTempTo('');
   };
 
-  const getExportRows = () => {
+  const handleExportExcel = () => {
     const headers = ['Branch', 'Vehicles', 'Total Fill-Ups', 'Total Liters', 'Total Cost (₱)', 'Avg Efficiency (km/L)'];
     const rows = filteredBranches.map(b => [b.name, b.vehicles, b.fillUps, b.liters, b.cost, b.efficiency.toFixed(1)]);
     const totalRow = ['Fleet Total', totals.vehicles, totals.fillUps, totals.liters, totals.cost, totals.efficiency];
-    return { headers, rows: [...rows, totalRow] };
-  };
-
-  const handleExportCsv = () => {
-    const { headers, rows } = getExportRows();
-    exportRowsToCsv(`fleet-fuel-report-${dateFrom}-to-${dateTo}.csv`, headers, rows);
-  };
-
-  const handleExportExcel = () => {
-    const { headers, rows } = getExportRows();
-    exportRowsToExcel(`fleet-fuel-report-${dateFrom}-to-${dateTo}.xls`, headers, rows);
+    const csv = [headers, ...rows, totalRow].map(row => row.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `fleet-fuel-report-${dateFrom}-to-${dateTo}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleExportPDF = () => {
@@ -190,25 +184,22 @@ export default function FleetWideReport() {
             <p className="text-sm text-[var(--color-text-secondary)]">{formatLabel(formatDisplayDate(dateFrom), formatDisplayDate(dateTo))}</p>
           </div>
 
-          <ExportButton
-            open={isExportMenuOpen}
-            onToggle={(event) => {
-              event.stopPropagation();
-              setIsExportMenuOpen((current) => !current);
-            }}
-            onPdf={() => {
-              setIsExportMenuOpen(false);
-              handleExportPDF();
-            }}
-            onCsv={() => {
-              setIsExportMenuOpen(false);
-              handleExportCsv();
-            }}
-            onExcel={() => {
-              setIsExportMenuOpen(false);
-              handleExportExcel();
-            }}
-          />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportExcel}
+              className="rounded-xl bg-[var(--color-brand-success)]/15 border border-[var(--color-brand-success)]/20 px-4 h-10 text-sm font-medium text-[var(--color-brand-success)] hover:bg-[var(--color-brand-success)]/25 transition active:scale-95 cursor-pointer flex items-center gap-2"
+            >
+              <Download size={16} />
+              Export .xlsx
+            </button>
+            <button
+              onClick={handleExportPDF}
+              className="rounded-xl bg-[var(--color-brand-primary)]/15 border border-[var(--color-brand-primary)]/20 px-4 h-10 text-sm font-medium text-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary)]/25 transition active:scale-95 cursor-pointer flex items-center gap-2"
+            >
+              <Download size={16} />
+              Export PDF
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -239,7 +230,7 @@ export default function FleetWideReport() {
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setIsCalendarOpen(false)} />
 
-                <div className="absolute left-0 mt-2 z-50 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-2xl flex flex-col gap-4 animate-in fade-in-50 slide-in-from-top-1 duration-150 max-w-[95vw] w-160">
+                <div className="absolute left-0 mt-2 z-50 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-2xl flex flex-col gap-4 animate-in fade-in-50 slide-in-from-top-1 duration-150 max-w-[95vw] w-160">
 
                   <div className="flex justify-end">
                     <div className="flex items-center gap-2 rounded-lg border border-[var(--color-brand-primary)]/30 bg-[var(--color-input-bg)]/50 px-3 h-8 text-xs font-mono font-medium text-[var(--color-brand-primary)]">
@@ -325,7 +316,7 @@ export default function FleetWideReport() {
                     <button
                       type="button"
                       onClick={handleApply}
-                      className="rounded-xl bg-[var(--color-brand-primary)] px-5 h-9 text-xs font-semibold text-white hover:bg-[var(--color-brand-primary-dark)] transition active:scale-95 cursor-pointer"
+                      className="rounded-xl bg-[var(--color-brand-primary)] px-5 h-9 text-xs font-semibold text-white hover:bg-[var(--color-brand-primary-dark)] transition active:scale-95 cursor-pointer shadow-md"
                     >
                       Select dates
                     </button>
@@ -339,21 +330,21 @@ export default function FleetWideReport() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5">
+        <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card">
           <div className="text-sm font-medium text-[var(--color-text-secondary)] mb-2">Total Fleet Fuel Cost</div>
           <div className="text-3xl font-bold text-[var(--color-text-primary)] font-mono">₱{totals.cost.toLocaleString()}</div>
         </div>
-        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5">
+        <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card">
           <div className="text-sm font-medium text-[var(--color-text-secondary)] mb-2">Total Liters Consumed</div>
           <div className="text-3xl font-bold text-[var(--color-text-primary)] font-mono">{totals.liters}L</div>
         </div>
-        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5">
+        <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card">
           <div className="text-sm font-medium text-[var(--color-text-secondary)] mb-2">Avg Fleet Efficiency</div>
           <div className="text-3xl font-bold text-[var(--color-brand-primary)] font-mono">{totals.efficiency} km/L</div>
         </div>
       </div>
 
-      <div className="overflow-auto overscroll-contain rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] lg:max-h-[min(40rem,calc(100vh-12rem))]">
+      <div className="overflow-auto overscroll-contain rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card lg:max-h-[min(40rem,calc(100vh-12rem))]">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="sticky top-0 z-10 border-b border-[var(--color-divider)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
@@ -401,13 +392,36 @@ export default function FleetWideReport() {
         </table>
       </div>
 
-      <Pagination
-        page={Math.min(currentPage, Math.max(1, totalPages))}
-        totalPages={Math.max(1, totalPages)}
-        totalItems={filteredBranches.length}
-        pageSize={itemsPerPage}
-        onPageChange={setCurrentPage}
-      />
+      <div className="pt-2 flex items-center justify-between text-sm text-[var(--color-text-secondary)]">
+        <div>
+          Showing <span className="text-[var(--color-text-primary)] font-semibold">{paginatedBranches.length}</span> of{' '}
+          <span className="text-[var(--color-text-primary)] font-semibold">{filteredBranches.length}</span> matching entries
+        </div>
+
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-20 transition cursor-pointer disabled:cursor-not-allowed"
+            aria-label="Previous Page"
+          >
+            <ChevronLeft size={16} />
+          </button>
+
+          <span className="text-xs text-[var(--color-text-secondary)] select-none font-medium">
+            Page {currentPage} of {totalPages || 1}
+          </span>
+
+          <button
+            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            disabled={currentPage === totalPages || totalPages === 0}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-20 transition cursor-pointer disabled:cursor-not-allowed"
+            aria-label="Next Page"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

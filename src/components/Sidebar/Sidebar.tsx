@@ -1,20 +1,19 @@
 import type { UserRecord } from "../../lib/api/authService";
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { isChiefMechanicRole, isMechanicRole, isOperationsRole } from "../../lib/utils/permissions";
+import { isMechanicRole, isOperationsRole } from "../../lib/utils/permissions";
 import { ConfirmationModal } from "../ui";
 import logo from "../../assets/logo.png";
 import {
   LayoutDashboard,
+  LayoutGrid,
   LogOut,
   Users,
   CalendarClock,
   Wrench,
   ClipboardList,
   ClipboardCheck,
-  FileBarChart2,
-  Fuel,
-  ReceiptText,
+  BrainCircuit,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -28,15 +27,15 @@ const navItems = [
   { label: "Work Orders", icon: Wrench, path: "/work-orders" },
   { label: "Checklist Templates", icon: ClipboardCheck, path: "/checklist-templates" },
   { label: "Maintenance Logs", icon: ClipboardList, path: "/maintenance-logs" },
-  { label: "Maintenance Expenses", icon: ReceiptText, path: "/maintenance-expenses" },
-  { label: "Maintenance Reports", icon: FileBarChart2, path: "/maintenance-reports" },
-  { label: "Fuel Expenses", icon: Fuel, path: "/fuel-expenses" },
+  { label: "AI / Analytics", icon: BrainCircuit, path: "/ai-analytics" },
+//  { label: "Maintenance Reports", icon: FileBarChart2, path: "/maintenance-reports" },
+//  { label: "Fuel Management", icon: Fuel, path: "/fuel-management" },
+//  { label: "Expense & Profitability", icon: DollarSign, path: "/expense-profitability" },
 ];
 
 const roleLabelMap: Record<string, string> = {
   ADMIN: "Administrator",
   OPERATIONS: "Operations",
-  CHIEF_MECHANIC: "Chief Mechanic",
   MECHANIC: "Mechanic",
 };
 
@@ -44,7 +43,7 @@ const asideBaseClasses = "group/sidebar fixed left-0 top-0 z-50 flex h-screen w-
 const headerClasses = "flex h-24 items-center gap-0 border-b border-white/5 px-5 transition-all duration-300 group-hover/sidebar:gap-3";
 const logoFrameClasses = "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden border border-[#f4c400] bg-[#061056] shadow-[0_0_0_1px_rgba(244,196,0,0.12)]";
 const labelRevealClasses = "max-w-0 min-w-0 translate-x-2 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 ease-out group-hover/sidebar:max-w-[190px] group-hover/sidebar:translate-x-0 group-hover/sidebar:opacity-100";
-const navClasses = "flex min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-2";
+const navClasses = "flex min-h-0 flex-1 overflow-hidden py-2";
 const navListClasses = 'm-0 p-0 list-none';
 const navItemClasses = 'mb-0.5';
 const footerClasses = "border-t border-white/5 px-4 py-4";
@@ -61,17 +60,41 @@ const getNavLinkClass = (isActive: boolean) => {
 export default function Sidebar({ currentUser }: SidebarProps) {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const isMechanic = isMechanicRole(currentUser);
-  const isChiefMechanic = isChiefMechanicRole(currentUser);
   const isOperations = isOperationsRole(currentUser);
   const visibleNavItems = isMechanic
-      ? navItems.filter((item) => ["/dashboard", "/maintenance-scheduling", "/work-orders", "/maintenance-logs"].includes(item.path))
-    : isChiefMechanic
-      ? navItems.filter((item) => ["/dashboard", "/maintenance-scheduling", "/work-orders", "/maintenance-logs"].includes(item.path))
+    ? navItems.filter((item) => ["/dashboard", "/work-orders", "/maintenance-logs"].includes(item.path))
     : isOperations
       ? navItems.filter((item) =>
-          ["/dashboard", "/maintenance-scheduling", "/work-orders", "/checklist-templates", "/maintenance-logs", "/maintenance-reports", "/fuel-expenses"].includes(item.path),
+          ["/dashboard", "/maintenance-scheduling", "/work-orders", "/maintenance-logs", "/maintenance-reports", "/fuel-management", "/ai-analytics"].includes(item.path),
         )
       : navItems;
+
+  const getSubsystemCount = () => {
+    try {
+      const token = window.localStorage.getItem('accessToken');
+      if (!token) return 0;
+      const [, payload] = token.split('.');
+      if (!payload) return 0;
+      const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+      const json = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join(''),
+      );
+      const decoded = JSON.parse(json) as { roles?: { system: string }[] };
+      const subsystemRoles = (decoded.roles || []).filter((r) =>
+        ['VRMS', 'VMMS', 'BMS'].includes(r.system.toUpperCase())
+      );
+      const uniqueSystems = new Set(subsystemRoles.map(r => r.system.toUpperCase()));
+      return uniqueSystems.size;
+    } catch (err) {
+      console.error('Error parsing token to count subsystems:', err);
+      return 2;
+    }
+  };
+
+  const hasMultipleSystems = getSubsystemCount() > 1;
 
   const handleSignOut = () => {
     setIsLogoutModalOpen(false);
@@ -84,6 +107,16 @@ export default function Sidebar({ currentUser }: SidebarProps) {
     }
     const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:8000";
     window.location.href = `${portalUrl}/login?logout=true`;
+  };
+
+  const handleSwitchToVrms = () => {
+    const token = window.localStorage.getItem('accessToken');
+    const vrmsUrl = import.meta.env.VITE_VRMS_URL || "http://localhost:8001";
+    if (token) {
+      window.location.href = `${vrmsUrl}/login?token=${token}`;
+    } else {
+      window.location.href = vrmsUrl;
+    }
   };
 
   const currentRole = currentUser ? roleLabelMap[currentUser.role] ?? currentUser.role : "Administrator";
@@ -136,6 +169,18 @@ export default function Sidebar({ currentUser }: SidebarProps) {
             <p className="text-xs leading-4 text-white">{currentRole}</p>
           </div>
         </NavLink>
+
+        {hasMultipleSystems && (
+          <button
+            className={`${baseButtonClasses} mb-1 text-[#8e96cf] hover:bg-white/5 hover:text-white`}
+            onClick={handleSwitchToVrms}
+            title="Switch to VRMS"
+            type="button"
+          >
+            <LayoutGrid size={20} strokeWidth={1.7} />
+            <span className={labelRevealClasses}>Switch to VRMS</span>
+          </button>
+        )}
 
         <button
           className={`${baseButtonClasses} text-[#ef4444] hover:bg-red-500/10`}

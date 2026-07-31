@@ -1,9 +1,7 @@
 import { X } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { createPortal } from "react-dom";
 import { getVehicles } from "../../lib/api/vehicleService";
 import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
-import { DropdownSelect } from "../../components/ui";
 import {
   defaultChecklistTemplates,
   type ChecklistTemplateName,
@@ -108,7 +106,7 @@ function SearchableSelect({ id, label, options, placeholder = 'Select...', value
           id={id}
           type="button"
           onClick={handleToggleOpen}
-          className="flex h-10 w-full cursor-pointer items-center justify-between rounded-xl border border-[var(--color-input-border)] bg-white px-3 text-left text-sm text-[var(--color-text-primary)] outline-none transition focus:border-[#070b45] focus:ring-2 focus:ring-[#070b45]/10"
+          className="w-full rounded-xl border border-[var(--color-input-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] text-left flex items-center justify-between cursor-pointer"
         >
           <span className={value ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]'}>
             {value ? options.find((o) => o.value === value)?.label : placeholder}
@@ -119,14 +117,14 @@ function SearchableSelect({ id, label, options, placeholder = 'Select...', value
         </button>
 
         {open && (
-          <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-72 overflow-hidden rounded-xl border border-[#dce3ed] bg-white py-2 shadow-[0_18px_45px_rgba(15,23,42,0.14)]">
+          <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-72 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-lg">
             <div className="p-3">
               <input
                 autoFocus
                 value={query}
                 onChange={(e) => handleQueryChange(e.target.value)}
                 placeholder="Search..."
-                className="h-10 w-full rounded-xl border border-[var(--color-input-border)] bg-white px-3 text-sm text-[var(--color-text-primary)] outline-none transition focus:border-[#070b45] focus:ring-2 focus:ring-[#070b45]/10"
+                className="w-full rounded-md bg-[var(--color-input-bg)] border border-[var(--color-input-border)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none"
               />
             </div>
             <ul className="max-h-56 overflow-y-auto m-0 p-0 list-none">
@@ -142,7 +140,7 @@ function SearchableSelect({ id, label, options, placeholder = 'Select...', value
                     setOpen(false);
                     setQuery('');
                   }}
-                  className={`cursor-pointer px-4 py-3 text-sm font-semibold ${highlight === idx ? 'bg-[#f6f8fc] text-[#070b45]' : 'text-[#141827] hover:bg-[#f6f8fc]'}`}
+                  className={`cursor-pointer px-4 py-3 text-sm ${highlight === idx ? 'bg-[var(--color-brand-primary)] text-white' : 'text-[var(--color-text-primary)]'}`}
                 >
                   {opt.label}
                 </li>
@@ -184,7 +182,7 @@ export default function AddExpenseModal({
       .catch(() => setVehicleOptions([]));
   }, []);
 
-  if (!isOpen || typeof document === "undefined") return null;
+  if (!isOpen) return null;
 
   const handleInputChange = (
     field: string,
@@ -207,16 +205,16 @@ export default function AddExpenseModal({
     }
   };
 
-  return createPortal((
-    <div className="modal-overlay">
-      <div className="modal-content max-w-145 flex max-h-[90vh] flex-col">
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <div className="max-w-145 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-2xl flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)] bg-[var(--color-input-bg)] shrink-0">
           <h2 className="text-lg font-bold text-[var(--color-text-primary)]">
             Add Maintenance Expense
           </h2>
           <button
             onClick={onClose}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"
+            className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:bg-[var(--color-input-bg-hover)] hover:text-[var(--color-text-primary)] transition"
           >
             <X size={20} />
           </button>
@@ -243,19 +241,26 @@ export default function AddExpenseModal({
               <label className="mb-2 text-sm font-medium text-[var(--color-text-secondary)]">
                 Checklist Template *
               </label>
-              <DropdownSelect
+              <select
                 value={formData.description}
-                onChange={(value) => handleInputChange("description", value)}
-                label="Checklist Template"
-                buttonClassName="rounded-lg border-[var(--color-input-border)] bg-[var(--color-input-bg)] px-4 text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)]"
-                options={[
-                  { value: "", label: "Select Checklist Template..." },
-                  ...checklistTemplates.map((type) => ({
-                    value: type,
-                    label: type,
-                  })),
-                ]}
-              />
+                onChange={(e) =>
+                  handleInputChange("description", e.target.value)
+                }
+                className="w-full appearance-none rounded-lg border border-[var(--color-input-border)] bg-[var(--color-input-bg)] px-4 py-2.5 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-hidden"
+              >
+                <option value="" className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]">
+                  Select Checklist Template...
+                </option>
+                {checklistTemplates.map((type) => (
+                  <option
+                    key={type}
+                    value={type}
+                    className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]"
+                  >
+                    {type}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <InputField
@@ -284,5 +289,5 @@ export default function AddExpenseModal({
         </div>
       </div>
     </div>
-  ), document.body);
+  );
 }

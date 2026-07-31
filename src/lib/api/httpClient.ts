@@ -1,4 +1,5 @@
 const API_BASE = resolveApiBaseUrl();
+const ANALYTICS_API_BASE = resolveAnalyticsApiBaseUrl();
 export const useBackend = API_BASE !== "" && API_BASE !== "undefined";
 
 function resolveApiBaseUrl(): string {
@@ -9,6 +10,18 @@ function resolveApiBaseUrl(): string {
   return normalized === "undefined" ? "" : normalized;
 }
 
+function resolveAnalyticsApiBaseUrl(): string {
+  const raw = import.meta.env.VITE_ANALYTICS_API_URL;
+  if (!raw || raw === "undefined") {
+    // Fall back to main backend if analytics service is not configured
+    return API_BASE;
+  }
+  const normalized = String(raw)
+    .trim()
+    .replace(/\/+$/, "");
+  return normalized;
+}
+
 const buildUrl = (path: string) => {
   const resolvedPath = path.startsWith("/") ? path : `/${path}`;
 
@@ -16,7 +29,23 @@ const buildUrl = (path: string) => {
     return resolvedPath;
   }
 
-  return new URL(path.replace(/^\/+/, ""), `${API_BASE}/`).toString();
+  // Route analytics calls to the standalone analytics microservice if configured
+  if (ANALYTICS_API_BASE) {
+    if (resolvedPath.startsWith("/vmms/analytics")) {
+      const analyticsPath = resolvedPath.replace(/^\/vmms\/analytics/, "/analytics");
+      return new URL(analyticsPath.replace(/^\/+/, ""), `${ANALYTICS_API_BASE}/`).toString();
+    }
+
+    if (resolvedPath.startsWith("/analytics")) {
+      return new URL(resolvedPath.replace(/^\/+/, ""), `${ANALYTICS_API_BASE}/`).toString();
+    }
+
+    if (resolvedPath.startsWith("/maintenance-schedules/search")) {
+      return new URL(resolvedPath.replace(/^\/+/, ""), `${ANALYTICS_API_BASE}/`).toString();
+    }
+  }
+
+  return new URL(path.replace(/^\/{1,}/, ""), `${API_BASE}/`).toString();
 };
 
 const defaultHeaders = {

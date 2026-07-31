@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { TrendingUp, TrendingDown, AlertTriangle, PhilippinePeso } from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertTriangle, DollarSign } from 'lucide-react';
 import {
   getTransactions,
   getProfitabilitySummary,
@@ -9,7 +9,6 @@ import {
 import PageHeader from '../../components/PageHeader/PageHeader';
 import AddIncomeModal from './AddIncomeModal';
 import AddExpenseModal from './AddExpenseModal';
-import { DropdownSelect } from '../../components/ui';
 
 type KPIStatCardProps = {
   icon: ReactNode;
@@ -22,28 +21,26 @@ type KPIStatCardProps = {
 
 function KPIStatCard({ icon, value, label, subtitle, iconBgColor, iconColor }: KPIStatCardProps) {
   return (
-    <div className="enterprise-kpi-card">
-      <div className="relative ml-2 flex items-start justify-between gap-3">
-        <div>
-          <div className="enterprise-kpi-label">{label}</div>
-          <div className="enterprise-kpi-value">{value}</div>
-          {subtitle && (
-            <div className="mt-2 text-sm font-semibold" style={{ color: iconColor }}>{subtitle}</div>
-          )}
-        </div>
-        <div className="enterprise-icon-box" style={{ background: iconBgColor, color: iconColor }}>
+    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card transition duration-200 ease-in-out">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ background: iconBgColor, color: iconColor }}>
           {icon}
         </div>
       </div>
+      <div className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">{value}</div>
+      <div className="mt-2 text-xs font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">{label}</div>
+      {subtitle && (
+        <div className="mt-3 text-sm font-medium" style={{ color: iconColor }}>{subtitle}</div>
+      )}
     </div>
   );
 }
 
 export default function ExpenseTrackingPage() {
   const [summary, setSummary] = useState<ProfitabilitySummary>({
-    totalIncome: '₱0',
-    totalExpenses: '₱0',
-    netProfit: '₱0',
+    totalIncome: '$0',
+    totalExpenses: '$0',
+    netProfit: '$0',
     profitMargin: 0,
     flaggedVehicles: [],
     profitabilityRanking: [],
@@ -57,9 +54,12 @@ export default function ExpenseTrackingPage() {
   const {
     totalIncome,
     totalExpenses,
+    netProfit,
     profitMargin,
     flaggedVehicles,
+    profitabilityRanking,
     incomeByClientType,
+    topProfitableVehicles,
   } = summary;
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -95,11 +95,11 @@ export default function ExpenseTrackingPage() {
   });
 
   const tabs = [
-    { id: 'monitoring', label: 'Cost Monitoring' },
+    { id: 'ranking', label: 'Profitability Ranking' },
     { id: 'history', label: 'Transaction History' },
     { id: 'breakdown', label: 'Expense Breakdown' },
   ];
-  const [activeTab, setActiveTab] = useState('monitoring');
+  const [activeTab, setActiveTab] = useState('ranking');
 
   const [isIncomeOpen, setIsIncomeOpen] = useState(false);
   const [isExpenseOpen, setIsExpenseOpen] = useState(false);
@@ -108,9 +108,9 @@ export default function ExpenseTrackingPage() {
     <div className="space-y-6">
       {/* Header */}
       <PageHeader
-        icon={PhilippinePeso}
-        title="Expense Tracking"
-        subtitle="Finance view for fleet expenses, transactions, cost breakdowns, and flagged vehicle costs"
+        icon={DollarSign}
+        title="Expense Tracking & Profitability"
+        subtitle="Monitor expenses, costs, and profitability metrics"
       />
 
       {/* Action Buttons */}
@@ -151,10 +151,10 @@ export default function ExpenseTrackingPage() {
           iconColor="#ef4444"
         />
         <KPIStatCard
-          icon={<PhilippinePeso className="w-4 h-4" />}
-          value={`${profitMargin}%`}
-          label="Budget Variance"
-          subtitle="Mock finance indicator"
+          icon={<DollarSign className="w-4 h-4" />}
+          value={netProfit}
+          label="Net Fleet Profit"
+          subtitle={`Margin: ${profitMargin}%`}
           iconBgColor="rgba(26, 31, 110, 0.12)"
           iconColor="#1a1f6e"
         />
@@ -188,7 +188,7 @@ export default function ExpenseTrackingPage() {
       {/* Flagged vehicles banner */}
       {flaggedVehicles.length > 0 && (
         <div className="mx-3 mb-4 rounded-3xl border border-amber-400/20 bg-[var(--color-input-bg)]/80 p-4 shadow-[0_0_24px_rgba(26,31,110,0.12)]">
-          <div className="flex flex-col gap-3 rounded-xl border border-amber-300/15 bg-[var(--color-card-bg)] p-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-3 rounded-2xl border border-amber-300/15 bg-[var(--color-card-bg)] p-4 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-3 text-amber-800 font-semibold text-sm">
               <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-amber-400/10 text-amber-700">⚠️</span>
               <span>Flagged Vehicles — Require Immediate Attention</span>
@@ -197,13 +197,13 @@ export default function ExpenseTrackingPage() {
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             {flaggedVehicles.map((v) => (
-              <div key={v.id} className="rounded-xl border border-amber-300/20 bg-[var(--color-card-bg)] px-4 py-5 transition hover:border-amber-300/40 hover:bg-[var(--color-input-bg-hover)]">
+              <div key={v.id} className="rounded-2xl border border-amber-300/20 bg-[var(--color-card-bg)] px-4 py-5 transition hover:border-amber-300/40 hover:bg-[var(--color-input-bg-hover)]">
                 <div className="flex items-center justify-between gap-4">
                   <div>
             <div className="text-base font-bold text-[var(--color-text-primary)]">{v.name}</div>
                     <div className="mt-1 text-xs text-[var(--color-text-secondary)]">{v.plate} • {v.model}</div>
                   </div>
-                  <div className="text-sm font-bold text-[#c41c3b]">Review</div>
+                  <div className="text-sm font-bold text-[#c41c3b]">{v.netProfit}</div>
                 </div>
                 <div className="mt-4 text-sm leading-6 text-[var(--color-text-secondary)]">{v.flagReason}</div>
               </div>
@@ -227,17 +227,21 @@ export default function ExpenseTrackingPage() {
             ))}
           </div>
 
-          <div className="min-w-50">
-            <DropdownSelect
+          <div className="relative min-w-50">
+            <select
               value={vehicleFilter}
-              onChange={setVehicleFilter}
-              label="Vehicle"
-              buttonClassName="rounded-full px-4"
-              options={vehicleOptions.map((vehicle) => ({
-                value: vehicle,
-                label: vehicle,
-              }))}
-            />
+              onChange={(e) => setVehicleFilter(e.target.value)}
+              className="w-full rounded-full border border-[var(--color-border)] bg-[var(--color-input-bg)] px-4 py-2 text-sm text-[var(--color-text-primary)] outline-none appearance-none"
+            >
+              {vehicleOptions.map((vehicle) => (
+                <option key={vehicle} value={vehicle} className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]">
+                  {vehicle}
+                </option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-[var(--color-text-secondary)]">
+              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="none"><path d="M5 7l5 5 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
           </div>
 
           <div className="ml-auto text-xs text-[var(--color-text-secondary)]">{filteredTransactions.length} entries</div>
@@ -245,30 +249,40 @@ export default function ExpenseTrackingPage() {
       )}
 
       {/* Main content: tabs */}
-      {activeTab === 'monitoring' && (
-        <section className="mx-3 mt-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
-          <h3 className="text-sm font-bold text-[var(--color-text-primary)] mb-3">Vehicle Cost Monitoring</h3>
+      {activeTab === 'ranking' && (
+        <section className="mx-3 mt-3 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card">
+          <h3 className="text-sm font-bold text-[var(--color-text-primary)] mb-3">Vehicle Profitability Ranking</h3>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-sm text-[var(--color-text-secondary)]">
               <thead className="sticky top-0 z-10 bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
                 <tr>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Rank</th>
                   <th className="px-4 py-2 text-xs font-semibold uppercase">Vehicle</th>
                   <th className="px-4 py-2 text-xs font-semibold uppercase">Plate</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Total Income</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Individual</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Corporate</th>
                   <th className="px-4 py-2 text-xs font-semibold uppercase">Fuel</th>
                   <th className="px-4 py-2 text-xs font-semibold uppercase">Maint.</th>
                   <th className="px-4 py-2 text-xs font-semibold uppercase">Repairs</th>
-                  <th className="px-4 py-2 text-xs font-semibold uppercase">Finance Note</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Net Profit</th>
+                  <th className="px-4 py-2 text-xs font-semibold uppercase">Margin</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-divider)]">
-                {breakdownRows.map((row) => (
-                  <tr key={row.vehicle} className="hover:bg-[var(--color-input-bg-hover)] transition-colors">
-                    <td className="px-4 py-2 font-medium text-[var(--color-text-primary)]">{row.vehicle}</td>
-                    <td className="px-4 py-2">{row.plate}</td>
-                    <td className="px-4 py-2">{row.fuel}</td>
-                    <td className="px-4 py-2">{row.maintenance}</td>
-                    <td className="px-4 py-2">{row.repairs}</td>
-                    <td className="px-4 py-2"><span className="inline-block rounded-full bg-[var(--color-input-bg)] px-2 py-1 text-xs font-medium text-[var(--color-text-secondary)]">Monitor cost trend</span></td>
+                {profitabilityRanking.map((r, i) => (
+                  <tr key={r.id} className="hover:bg-[var(--color-input-bg-hover)] transition-colors">
+                    <td className="px-4 py-2">#{i + 1}</td>
+                    <td className="px-4 py-2 font-medium text-[var(--color-text-primary)]">{r.vehicleName}</td>
+                    <td className="px-4 py-2">{r.plate}</td>
+                    <td className="px-4 py-2 font-semibold text-[#0369a1]">{r.income}</td>
+                    <td className="px-4 py-2">{r.individual}</td>
+                    <td className="px-4 py-2">{r.corporate}</td>
+                    <td className="px-4 py-2">{r.fuel}</td>
+                    <td className="px-4 py-2">{r.maint}</td>
+                    <td className="px-4 py-2">{r.repairs}</td>
+                    <td className="px-4 py-2 text-green-400 font-semibold">{r.netProfit}</td>
+                    <td className="px-4 py-2"><span className="inline-block rounded-full bg-[var(--color-input-bg)] px-2 py-1 text-xs font-medium text-[var(--color-text-secondary)]">{r.margin}%</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -278,7 +292,7 @@ export default function ExpenseTrackingPage() {
       )}
 
       {activeTab === 'history' && (
-        <section className="mx-3 mt-3 overflow-auto overscroll-contain rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 lg:max-h-[min(40rem,calc(100vh-12rem))]">
+        <section className="mx-3 mt-3 overflow-auto overscroll-contain rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card lg:max-h-[min(40rem,calc(100vh-12rem))]">
           <table className="w-full border-collapse text-left text-sm text-[var(--color-text-secondary)]">
             <thead className="sticky top-0 z-10 bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]">
               <tr>
@@ -316,7 +330,7 @@ export default function ExpenseTrackingPage() {
       )}
 
       {activeTab === 'breakdown' && (
-        <section className="mx-3 mt-3 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)]">
+        <section className="mx-3 mt-3 overflow-hidden rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card">
           <div className="bg-[var(--color-input-bg)] px-5 py-4 text-sm font-medium text-[var(--color-text-primary)]">Expense Breakdown by Vehicle</div>
           <div className="flex flex-wrap items-center gap-4 border-b border-[var(--color-border)] bg-[var(--color-input-bg)] px-5 py-3 text-xs text-[var(--color-text-secondary)]">
             <div className="flex items-center gap-2">
@@ -390,7 +404,7 @@ export default function ExpenseTrackingPage() {
       {/* Bottom panels – keep existing */}
       <section className="grid grid-cols-2 gap-3 mx-3 mt-3 mb-6">
         {/* Income by Client Type */}
-        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 transition duration-200 hover:border-[var(--color-border)]">
+        <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card transition duration-200 hover:border-[var(--color-border)]">
           <h3 className="font-semibold mb-2 text-sm text-[var(--color-text-primary)]">Income by Client Type</h3>
           <div className="flex items-center justify-between mb-1">
             <span className="text-sm text-[var(--color-text-secondary)]">Corporate</span>
@@ -403,19 +417,20 @@ export default function ExpenseTrackingPage() {
           </div>
           <div className="h-3 bg-[var(--color-brand-success)] rounded-full" style={{ width: `${incomeByClientType.individual.percentage}%` }}></div>
         </div>
-        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 transition duration-200 hover:border-[var(--color-border)]">
-          <h3 className="font-semibold mb-2 text-sm text-[var(--color-text-primary)]">Finance Review Queue</h3>
+        {/* Top 3 Most Profitable */}
+        <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card transition duration-200 hover:border-[var(--color-border)]">
+          <h3 className="font-semibold mb-2 text-sm text-[var(--color-text-primary)]">Top 3 Most Profitable</h3>
           <ul className="space-y-2">
-            {flaggedVehicles.slice(0, 3).map((v, i) => (
+            {topProfitableVehicles.map((v, i) => (
               <li key={v.id} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 bg-[#1a1f6e] text-white rounded-full flex items-center justify-center text-xs">
+                  <div className="w-5 h-5 bg-green-500 text-white rounded-full flex items-center justify-center text-xs">
                     {i + 1}
                   </div>
                   <span className="font-medium text-sm text-[var(--color-text-primary)]">{v.name}</span>
                   <span className="text-xs text-[var(--color-text-secondary)]">{v.plate}</span>
                 </div>
-                <span className="text-sm font-medium text-[#c41c3b]">Flagged</span>
+                <span className="text-sm font-medium text-green-500">{v.netProfit}</span>
               </li>
             ))}
           </ul>

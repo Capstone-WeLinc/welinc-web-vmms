@@ -1,12 +1,8 @@
 import { useState } from 'react';
-import { createPortal } from 'react-dom';
 import { mockFuelFillUps } from "../../../lib/mocks/fuelMocks";
 import { useBodyScrollLock } from "../../../lib/hooks/useBodyScrollLock";
-import { luzonFuelStations } from "../../../data/luzonFuelStations";
 import type { FuelFillUp } from '../types';
 import { X } from 'lucide-react';
-import StationCombobox from './StationCombobox';
-import { DropdownSelect } from '../../../components/ui';
 
 interface InputFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
@@ -24,7 +20,7 @@ function InputField({ label, id, className, ...props }: InputFieldProps) {
       )}
       <input
         id={id}
-        className={`${className ?? ''} h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 text-sm text-[var(--color-text-primary)]`}
+        className={`${className ?? ''} w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]`}
         {...props}
       />
     </div>
@@ -51,22 +47,24 @@ function SelectField({ label, id, options, className, ...props }: SelectFieldPro
           {label}
         </label>
       )}
-      <DropdownSelect
-        value={String(props.value ?? "")}
-        options={options}
-        onChange={(value) =>
-          props.onChange?.({ target: { value } } as React.ChangeEvent<HTMLSelectElement>)
-        }
-        label={label || id}
-        className={className}
-      />
+      <select
+        id={id}
+        className={`${className ?? ''} w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] appearance-none cursor-pointer`}
+        {...props}
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value} className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)]">
+            {opt.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
 
 // Semantic layout constants and inline styles
-const modalOverlayClasses = 'modal-overlay';
-const modalContentClasses = 'modal-content w-full max-w-2xl p-6';
+const modalOverlayClasses = 'fixed inset-0 z-50 flex items-center justify-center modal-overlay';
+const modalContentClasses = 'w-full max-w-2xl rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-2xl modal-content';
 const modalHeaderClasses = 'mb-6 flex items-center justify-between';
 const formGridClasses = 'grid gap-6 md:grid-cols-2';
 const footerRowClasses = 'flex justify-end gap-3 border-t border-[var(--color-border)] pt-6';
@@ -91,7 +89,6 @@ export default function LogFuelFillUp({ onClose, onAdd }: LogFuelFillUpProps) {
 
   const vehicles = Array.from(new Set(mockFuelFillUps.map(f => f.vehicleId)));
   const filledByPersons = Array.from(new Set(mockFuelFillUps.map(f => f.filledBy)));
-  const fuelStations = Array.from(new Set([...luzonFuelStations, ...mockFuelFillUps.map(f => f.station).filter(Boolean)])).sort();
 
   const vehiclesOptions = vehicles.map(v => ({
     value: v,
@@ -130,9 +127,7 @@ export default function LogFuelFillUp({ onClose, onAdd }: LogFuelFillUpProps) {
     onClose?.();
   };
 
-  if (typeof document === 'undefined') return null;
-
-  return createPortal((
+  return (
     <div className={modalOverlayClasses}>
       <div className={modalContentClasses}>
 
@@ -142,7 +137,7 @@ export default function LogFuelFillUp({ onClose, onAdd }: LogFuelFillUpProps) {
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"
+            className="rounded-lg p-2 text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] transition"
           >
             <X size={20} strokeWidth={1.8} />
           </button>
@@ -194,7 +189,7 @@ export default function LogFuelFillUp({ onClose, onAdd }: LogFuelFillUpProps) {
                 <label className="text-sm font-medium text-[var(--color-text-secondary)]">
                   Total Fuel Cost (auto-calculated)
                 </label>
-                <div className="flex h-10 items-center rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3.5">
+                <div className="flex items-center rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3.5 py-2.5 h-10.5">
                   <span className="text-[var(--color-text-secondary)] text-sm">₱</span>
                   <input
                     type="text"
@@ -216,13 +211,13 @@ export default function LogFuelFillUp({ onClose, onAdd }: LogFuelFillUpProps) {
               required
             />
 
-            <StationCombobox
+            {/* Fueling Station - typable */}
+            <InputField
               label="Fueling Station*"
               id="station"
+              placeholder="Enter station name"
               value={formData.station}
-              options={fuelStations}
-              onChange={(station) => setFormData({ ...formData, station })}
-              placeholder="Search or select station..."
+              onChange={(e) => setFormData({ ...formData, station: e.target.value })}
               required
             />
 
@@ -241,13 +236,13 @@ export default function LogFuelFillUp({ onClose, onAdd }: LogFuelFillUpProps) {
             <button
               type="button"
               onClick={onClose}
-              className="h-10 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-5 text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] transition active:scale-95"
+              className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-5 py-2.5 text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] transition active:scale-95"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="h-10 rounded-xl bg-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20 px-6 text-sm font-medium text-white hover:bg-[var(--color-brand-primary-dark)] transition active:scale-95"
+              className="rounded-xl bg-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20 px-6 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-brand-primary-dark)] transition active:scale-95"
             >
               Save Entry
             </button>
@@ -255,5 +250,5 @@ export default function LogFuelFillUp({ onClose, onAdd }: LogFuelFillUpProps) {
         </form>
       </div>
     </div>
-  ), document.body);
+  );
 }

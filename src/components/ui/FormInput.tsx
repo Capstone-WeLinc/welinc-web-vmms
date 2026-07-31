@@ -23,7 +23,7 @@ const FormInput = React.forwardRef<HTMLInputElement, FormInputProps>(
     },
     ref
   ) => {
-    const baseInputStyles = 'h-10 w-full px-4 rounded-xl bg-[var(--color-input-bg)] border border-[var(--color-input-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] transition-colors focus:outline-none focus:border-[var(--color-brand-primary)] focus:ring-2 focus:ring-[var(--color-brand-primary)]/20';
+    const baseInputStyles = 'w-full px-4 py-3 rounded-xl bg-[var(--color-input-bg)] border border-[var(--color-input-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] transition-colors focus:outline-none focus:border-[var(--color-brand-primary)] focus:ring-2 focus:ring-[var(--color-brand-primary)]/20';
 
     const errorStyles = error ? 'border-[var(--color-brand-danger)] focus:border-[var(--color-brand-danger)] focus:ring-[var(--color-brand-danger)]/20' : '';
 

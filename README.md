@@ -33,5 +33,5 @@ The app expects the backend to run at `http://localhost:3000`.
 - `/Checklist Template`
 - `/Maintenance Logs`
 - `/Maintenance Reports`
-- `/Fuel Management`
-- `/Expense & Profitability`
+- `/Fuel Expense`
+- `/Maintenance Expense`

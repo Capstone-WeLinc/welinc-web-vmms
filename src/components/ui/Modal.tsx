@@ -1,6 +1,4 @@
 import React, { useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
 import { useBodyScrollLock } from '../../lib/hooks/useBodyScrollLock';
 import Button from './Button';
 
@@ -54,17 +52,17 @@ const Modal: React.FC<ModalProps> = ({
     }
   }, [isOpen, onClose]);
 
-  if (!isOpen || typeof document === 'undefined') return null;
+  if (!isOpen) return null;
 
   const sizeStyles = {
-    sm: 'max-w-lg',
-    md: 'max-w-3xl',
-    lg: 'max-w-6xl',
+    sm: 'max-w-sm',
+    md: 'max-w-md',
+    lg: 'max-w-lg',
   };
 
-  const modal = (
+  return (
     <div
-      className="modal-overlay"
+      className="modal-overlay p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
@@ -82,29 +80,19 @@ const Modal: React.FC<ModalProps> = ({
       >
         {/* Header */}
         {title && (
-          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--color-divider)] px-5 py-4 sm:px-8 sm:py-6">
-            <div>
-              <h2
-                id="modal-title"
-                className="text-xl font-extrabold text-[var(--color-text-primary)]"
-              >
-                {title}
-              </h2>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] transition hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"
-              aria-label="Close modal"
+          <div className="border-b border-[var(--color-divider)] px-6 py-4">
+            <h2
+              id="modal-title"
+              className="text-lg font-bold text-[var(--color-text-primary)]"
             >
-              <X className="h-5 w-5" />
-            </button>
+              {title}
+            </h2>
           </div>
         )}
 
         {/* Content */}
         {(message !== undefined || children !== undefined) && (
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-8 sm:py-6">
+          <div className="flex-1 overflow-y-auto px-6 py-4">
             {message !== undefined && (
               <p className="text-sm text-[var(--color-text-secondary)]">
                 {message}
@@ -116,7 +104,7 @@ const Modal: React.FC<ModalProps> = ({
 
         {/* Footer */}
         {(footer !== undefined || onConfirm) && (
-          <div className="shrink-0 border-t border-[var(--color-divider)] px-5 py-4 sm:px-8 sm:py-6">
+          <div className="border-t border-[var(--color-divider)] px-6 py-4">
             {footer !== undefined ? (
               footer
             ) : (
@@ -142,8 +130,6 @@ const Modal: React.FC<ModalProps> = ({
       </div>
     </div>
   );
-
-  return createPortal(modal, document.body);
 };
 
 export default Modal;

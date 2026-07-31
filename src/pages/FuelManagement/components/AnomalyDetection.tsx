@@ -2,7 +2,6 @@ import { useState } from 'react';
 import type { FuelAnomaly } from '../types';
 import FuelStatusBadge from './FuelStatusBadge';
 import { AlertTriangle, Zap, Filter } from 'lucide-react';
-import { DropdownSelect, LegendHelp } from '../../../components/ui';
 
 interface AnomalyDetectionProps {
   anomalies: FuelAnomaly[];
@@ -33,13 +32,13 @@ export default function AnomalyDetection({ anomalies }: AnomalyDetectionProps) {
   // layout & style constants
   const containerClasses = 'space-y-6';
   const metricsGridClasses = 'grid gap-4 sm:grid-cols-2';
-  const infoBannerClasses = 'rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4';
+  const infoBannerClasses = 'rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card';
   const searchRowClasses = 'flex items-center gap-3 w-full';
   const searchInputClasses = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]';
-  const filterButtonClasses = `flex h-10 items-center gap-2 rounded-xl border px-4 text-sm font-medium transition ${showFilters ? 'border-[var(--color-brand-warning)]/20 bg-[var(--color-brand-warning)]/10 text-[var(--color-brand-warning)]' : 'border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)]'}`;
-  const filterPanelClasses = 'flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4';
-  const cardBaseClasses = 'rounded-xl p-5 border border-[var(--color-border)] bg-[var(--color-card-bg)] transition-all duration-200';
-  const countCardClasses = 'rounded-xl p-5 border border-[var(--color-border)] bg-[var(--color-card-bg)]';
+  const filterButtonClasses = `flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${showFilters ? 'border-[var(--color-brand-warning)]/20 bg-[var(--color-brand-warning)]/10 text-[var(--color-brand-warning)]' : 'border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)]'}`;
+  const filterPanelClasses = 'flex items-center gap-3 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card';
+  const cardBaseClasses = 'rounded-[14px] p-5 border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card transition-all duration-200';
+  const countCardClasses = 'rounded-[14px] p-5 border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card';
 
   return (
     <div className={containerClasses}>
@@ -80,37 +79,26 @@ export default function AnomalyDetection({ anomalies }: AnomalyDetectionProps) {
           />
         </div>
 
-        <div className="flex items-center gap-2">
-          <button onClick={() => setShowFilters(!showFilters)} className={filterButtonClasses}>
-            <Filter size={16} strokeWidth={1.8} />
-            <span>Filter</span>
-          </button>
-          <LegendHelp
-            title="Anomaly Legend"
-            items={[
-              { label: "Anomaly", description: "Efficiency is far from the fleet average and needs review.", tone: "#dc2626" },
-              { label: "Below Avg", description: "Efficiency is lower than expected but less severe.", tone: "#f59e0b" },
-              { label: "Normal", description: "Fuel usage is within the expected range.", tone: "#059669" },
-            ]}
-          />
-        </div>
+        <button onClick={() => setShowFilters(!showFilters)} className={filterButtonClasses}>
+          <Filter size={16} strokeWidth={1.8} />
+          <span>Filter</span>
+        </button>
       </div>
 
       {showFilters && (
         <div className={filterPanelClasses}>
-          <label htmlFor="status-filter" className="text-xs font-medium text-[var(--color-text-secondary)] whitespace-nowrap">Filter status</label>
-          <DropdownSelect
+          <label htmlFor="status-filter" className="text-xs font-medium text-[var(--color-text-secondary)] whitespace-nowrap">Filter Status:</label>
+          <select
+            id="status-filter"
             value={statusFilter}
-            onChange={setStatusFilter}
-            label="Filter status"
-            className="w-44"
-            options={[
-              { value: "All", label: "All statuses" },
-              { value: "Anomaly", label: "Anomaly" },
-              { value: "Below Avg", label: "Below Avg" },
-              { value: "Normal", label: "Normal" },
-            ]}
-          />
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]"
+          >
+            <option value="All">All Statuses</option>
+            <option value="Anomaly">Anomaly</option>
+            <option value="Below Avg">Below Avg</option>
+            <option value="Normal">Normal</option>
+          </select>
         </div>
       )}
 
@@ -143,7 +131,7 @@ export default function AnomalyDetection({ anomalies }: AnomalyDetectionProps) {
                     <div className={`ml-auto text-xs font-bold ${diffColor}`}>{diff >= 0 ? '+' : ''}{diffPercent}%</div>
                   </div>
 
-                  <div className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-2">
+                  <div className="flex items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-2 shadow-card">
                     <Zap size={16} className="text-[var(--color-text-secondary)]" strokeWidth={1.8} />
                     <div>
                       <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--color-text-secondary)]">Fleet avg</div>
@@ -152,7 +140,7 @@ export default function AnomalyDetection({ anomalies }: AnomalyDetectionProps) {
                   </div>
 
                   {anomaly.recommendation && (
-                    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-3">
+                    <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-3 shadow-card">
                       <p className="text-sm text-[var(--color-text-secondary)]">{anomaly.recommendation}</p>
                     </div>
                   )}
@@ -163,7 +151,7 @@ export default function AnomalyDetection({ anomalies }: AnomalyDetectionProps) {
         </div>
       ) : (
 
-        <div className="rounded-xl border border-dashed border-[var(--color-border)] p-12 text-center">
+        <div className="rounded-[14px] border border-dashed border-[var(--color-border)] p-12 text-center">
           <p className="text-sm text-[var(--color-text-secondary)]">No vehicles match your search or filter configuration.</p>
         </div>
       )}
