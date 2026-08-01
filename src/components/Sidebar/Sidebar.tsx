@@ -22,7 +22,7 @@ interface SidebarProps {
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
-  { label: "AI / Analytics", icon: BrainCircuit, path: "/ai-analytics" },
+  { label: "Analytics", icon: BrainCircuit, path: "/ai-analytics" },
   { label: "User Management", icon: Users, path: "/users" },
   { label: "Maintenance Scheduling", icon: CalendarClock, path: "/maintenance-scheduling" },
   { label: "Work Orders", icon: Wrench, path: "/work-orders" },
