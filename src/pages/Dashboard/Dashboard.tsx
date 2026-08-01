@@ -218,7 +218,6 @@ export default function Dashboard() {
       status,
       count: filteredSchedules.filter((task) => task.status === status).length,
     }));
-  const maxStatusCount = Math.max(...statusBreakdown.map((item) => item.count), 1);
 
   const overdue = schedules
     .filter((task) => task.status === MaintenanceStatus.OVERDUE)

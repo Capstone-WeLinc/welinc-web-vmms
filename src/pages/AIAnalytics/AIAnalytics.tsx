@@ -7,10 +7,8 @@ import {
   ShieldCheck,
   Activity,
   Sparkles,
-  ArrowUpRight,
   RefreshCw,
   FileText,
-  Filter,
   AlertOctagon,
   Download,
   Server,
@@ -33,9 +31,7 @@ import {
   type AnalyticsHealthResponse,
   type AnalyticsOverviewResponse,
   type AnalyticsVehicleResponse,
-  type AnalyticsVehicle,
   type AnalyticsAlertResponse,
-  type AnalyticsAlert,
   type AnalyticsInsightsResponse,
   type AnalyticsReportResponse,
   type ScheduleSearchResult,
@@ -451,8 +447,6 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
   const summaryMetrics = overview?.summaryMetrics;
   const forecast = overview?.forecast;
   const anomalies = overview?.anomalies;
-  const trends = overview?.trends;
-
   const stats = useMemo(() => {
     return [
       {
@@ -544,7 +538,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
             <span className="text-[var(--color-text-secondary)]">:{health?.port ?? 3001}</span>
           </div>
 
-          <Button variant="outline" size="sm" onClick={() => void loadData()} disabled={loading}>
+          <Button variant="secondary" size="sm" onClick={() => void loadData()} disabled={loading}>
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
         </div>
@@ -772,7 +766,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
                       <div key={i} className="flex items-center justify-between rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs">
                         <div>
                           <p className="font-semibold text-rose-600">Missing Next Due Date: {m.vehiclePlate}</p>
-                          <p className="text-[var(--color-text-secondary)]">{formatWorkOrderNumber(m.scheduleId)} ({m.maintenanceTitle})</p>
+                          <p className="text-[var(--color-text-secondary)]">{formatWorkOrderNumber(String(m.scheduleId))} ({m.maintenanceTitle})</p>
                         </div>
                         <Badge variant="danger">Date Missing</Badge>
                       </div>
@@ -977,7 +971,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
             <div className="mt-6 space-y-3">
               {filteredAlerts.map((alert) => {
                 const severity = String(alert.severity).toUpperCase();
-                let badgeVariant: "danger" | "warning" | "info" = "info";
+                let badgeVariant: "danger" | "warning" | "success" = "success";
                 if (severity === "HIGH") badgeVariant = "danger";
                 if (severity === "MEDIUM") badgeVariant = "warning";
 
@@ -1031,7 +1025,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
               </div>
 
               <div className="flex items-center gap-3">
-                <Button variant="outline" size="sm" onClick={handleExportJson}>
+                <Button variant="secondary" size="sm" onClick={handleExportJson}>
                   <Download className="mr-2 h-4 w-4" />
                   Export JSON Report
                 </Button>
@@ -1079,7 +1073,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
                   <tbody className="divide-y divide-[var(--color-border)]">
                     {(fullReport?.schedules ?? []).slice(0, 10).map((s) => (
                       <tr key={String(s.scheduleId)} className="hover:bg-[var(--color-input-bg)]/40">
-                        <td className="p-3 font-mono font-semibold">{formatWorkOrderNumber(s.scheduleId)}</td>
+                        <td className="p-3 font-mono font-semibold">{formatWorkOrderNumber(String(s.scheduleId))}</td>
                         <td className="p-3 font-semibold">{s.vehiclePlate}</td>
                         <td className="p-3">{s.maintenanceTitle}</td>
                         <td className="p-3">{s.assignedMechanic ?? "Unassigned"}</td>
