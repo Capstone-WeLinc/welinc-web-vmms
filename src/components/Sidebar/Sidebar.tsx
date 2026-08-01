@@ -22,12 +22,12 @@ interface SidebarProps {
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
+  { label: "AI / Analytics", icon: BrainCircuit, path: "/ai-analytics" },
   { label: "User Management", icon: Users, path: "/users" },
   { label: "Maintenance Scheduling", icon: CalendarClock, path: "/maintenance-scheduling" },
   { label: "Work Orders", icon: Wrench, path: "/work-orders" },
   { label: "Checklist Templates", icon: ClipboardCheck, path: "/checklist-templates" },
   { label: "Maintenance Logs", icon: ClipboardList, path: "/maintenance-logs" },
-  { label: "AI / Analytics", icon: BrainCircuit, path: "/ai-analytics" },
 //  { label: "Maintenance Reports", icon: FileBarChart2, path: "/maintenance-reports" },
 //  { label: "Fuel Management", icon: Fuel, path: "/fuel-management" },
 //  { label: "Expense & Profitability", icon: DollarSign, path: "/expense-profitability" },
