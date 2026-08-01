@@ -276,14 +276,68 @@ export default function Dashboard() {
       <div>
         <Panel title="Maintenance Status Breakdown" subtitle="Current work order distribution by status">
           <div className="space-y-4 p-5">
-            {statusBreakdown.map(({ status, count }) => (
-              <div key={status}>
-                <div className="mb-1.5 flex justify-between text-sm"><span>{maintenanceStatusLabels[status]}</span><strong>{count}</strong></div>
-                <div className="h-2 overflow-hidden rounded-full bg-[var(--color-input-bg)]">
-                  <div className="h-full rounded-full transition-all" style={{ width: `${(count / maxStatusCount) * 100}%`, backgroundColor: statusColors[status] }} />
+            {/* Total Summary */}
+            <div className="flex items-center justify-between text-xs font-semibold text-[var(--color-text-secondary)]">
+              <span>Work Order Composition</span>
+              <span className="font-bold text-[var(--color-text-primary)]">
+                {statusBreakdown.reduce((acc, s) => acc + s.count, 0)} Total Work Orders
+              </span>
+            </div>
+
+            {/* Stacked Proportional Distribution Bar */}
+            {(() => {
+              const total = statusBreakdown.reduce((acc, s) => acc + s.count, 0);
+              return (
+                <div className="flex h-3.5 w-full overflow-hidden rounded-full border border-[var(--color-border)] bg-[var(--color-input-bg)] p-0.5 shadow-inner">
+                  {total > 0 ? (
+                    statusBreakdown.map(({ status, count }) => {
+                      const pct = Math.round((count / total) * 100);
+                      if (pct === 0) return null;
+                      return (
+                        <div
+                          key={status}
+                          className="h-full transition-all duration-300 first:rounded-l-full last:rounded-r-full"
+                          style={{ width: `${pct}%`, backgroundColor: statusColors[status] }}
+                          title={`${maintenanceStatusLabels[status]}: ${count} (${pct}%)`}
+                        />
+                      );
+                    })
+                  ) : (
+                    <div className="h-full w-full rounded-full bg-[var(--color-border)] opacity-30" />
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })()}
+
+            {/* Categorical Breakdown Pills / List */}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {(() => {
+                const total = statusBreakdown.reduce((acc, s) => acc + s.count, 0);
+                return statusBreakdown.map(({ status, count }) => {
+                  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                  return (
+                    <div
+                      key={status}
+                      className="flex items-center justify-between rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-3 text-sm shadow-xs"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span
+                          className="h-3 w-3 rounded-full shadow-xs"
+                          style={{ backgroundColor: statusColors[status] }}
+                        />
+                        <span className="font-semibold text-[var(--color-text-primary)]">
+                          {maintenanceStatusLabels[status]}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-bold text-[var(--color-text-primary)]">{count}</span>
+                        <span className="ml-1.5 text-xs text-[var(--color-text-secondary)]">({pct}%)</span>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
           </div>
         </Panel>
       </div>

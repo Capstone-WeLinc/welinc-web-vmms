@@ -213,34 +213,112 @@ function MetricTile({ label, value, hint, icon: Icon }: { label: string; value: 
 function StatusBars({ items }: { items: Array<{ status: string; percentage?: number; scheduleCount?: number }> }) {
   const normalizedItems = items.map((item) => ({
     status: String(item.status ?? "Unknown"),
-    percentage: Number(item.percentage ?? item.scheduleCount ?? 0),
+    percentage: Number(item.percentage ?? 0),
     scheduleCount: Number(item.scheduleCount ?? 0),
   }));
+
   const totalCount = normalizedItems.reduce((sum, item) => sum + (item.scheduleCount || 0), 0);
 
+  const itemsWithPct = normalizedItems.map((item) => {
+    const calcPct = totalCount > 0 ? Math.round((item.scheduleCount / totalCount) * 100) : item.percentage;
+    return {
+      ...item,
+      displayPercentage: Math.min(100, Math.max(0, calcPct)),
+    };
+  });
+
+  const getStatusConfig = (status: string) => {
+    const key = status.toUpperCase();
+    if (key === "COMPLETED") {
+      return {
+        bg: "bg-emerald-500",
+        text: "text-emerald-500",
+        lightBg: "bg-emerald-500/10 border-emerald-500/20",
+        icon: CheckCircle2,
+      };
+    }
+    if (key === "IN_PROGRESS" || key === "IN PROGRESS") {
+      return {
+        bg: "bg-amber-500",
+        text: "text-amber-500",
+        lightBg: "bg-amber-500/10 border-amber-500/20",
+        icon: Clock,
+      };
+    }
+    if (key === "OVERDUE") {
+      return {
+        bg: "bg-rose-500",
+        text: "text-rose-500",
+        lightBg: "bg-rose-500/10 border-rose-500/20",
+        icon: AlertTriangle,
+      };
+    }
+    return {
+      bg: "bg-[var(--color-brand-primary)]",
+      text: "text-[var(--color-brand-primary)]",
+      lightBg: "bg-[var(--color-brand-primary)]/10 border-[var(--color-brand-primary)]/20",
+      icon: Layers,
+    };
+  };
+
   return (
-    <div className="space-y-3">
-      {normalizedItems.map((item) => {
-        const displayPercentage = totalCount > 0 ? Math.round((item.scheduleCount / totalCount) * 100) : item.percentage;
-        const width = Math.min(100, Math.max(0, displayPercentage));
+    <div className="space-y-4">
+      {/* Total schedules summary header */}
+      <div className="flex items-center justify-between text-xs font-semibold text-[var(--color-text-secondary)]">
+        <span>Fleet Maintenance Distribution</span>
+        <span className="font-bold text-[var(--color-text-primary)]">{totalCount} total schedules</span>
+      </div>
 
-        let badgeColor = "bg-[var(--color-brand-primary)]";
-        if (item.status.toUpperCase() === "OVERDUE") badgeColor = "bg-rose-500";
-        if (item.status.toUpperCase() === "COMPLETED") badgeColor = "bg-emerald-500";
-        if (item.status.toUpperCase() === "IN_PROGRESS") badgeColor = "bg-amber-500";
+      {/* Multi-Segment Stacked Proportion Distribution Bar */}
+      <div className="flex h-3.5 w-full overflow-hidden rounded-full border border-[var(--color-border)] bg-[var(--color-input-bg)] p-0.5 shadow-inner">
+        {totalCount > 0 ? (
+          itemsWithPct.map((item) => {
+            if (item.displayPercentage === 0) return null;
+            const config = getStatusConfig(item.status);
+            return (
+              <div
+                key={item.status}
+                className={`h-full transition-all duration-300 ${config.bg} first:rounded-l-full last:rounded-r-full`}
+                style={{ width: `${item.displayPercentage}%` }}
+                title={`${item.status}: ${item.scheduleCount} (${item.displayPercentage}%)`}
+              />
+            );
+          })
+        ) : (
+          <div className="h-full w-full rounded-full bg-[var(--color-border)] opacity-30" />
+        )}
+      </div>
 
-        return (
-          <div key={item.status}>
-            <div className="mb-1 flex items-center justify-between text-sm">
-              <span className="font-medium text-[var(--color-text-primary)]">{item.status}</span>
-              <span className="text-[var(--color-text-secondary)]">{item.scheduleCount} ({displayPercentage}%)</span>
+      {/* Categorical Details Breakdown Grid */}
+      <div className="grid gap-2.5 sm:grid-cols-2">
+        {itemsWithPct.map((item) => {
+          const config = getStatusConfig(item.status);
+          const Icon = config.icon;
+
+          return (
+            <div
+              key={item.status}
+              className={`flex items-center justify-between rounded-xl border p-3 ${config.lightBg}`}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className={`flex h-7 w-7 items-center justify-center rounded-lg bg-white/60 dark:bg-black/20 ${config.text}`}>
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-[var(--color-text-primary)]">{item.status}</p>
+                  <p className="text-[11px] text-[var(--color-text-secondary)]">{item.scheduleCount} schedules</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-extrabold ${config.text} bg-white/80 dark:bg-black/30 shadow-xs`}>
+                  {item.displayPercentage}%
+                </span>
+                <p className="mt-0.5 text-[10px] font-medium text-[var(--color-text-secondary)]">fleet share</p>
+              </div>
             </div>
-            <div className="h-2.5 rounded-full bg-[var(--color-input-bg)]">
-              <div className={`h-2.5 rounded-full ${badgeColor}`} style={{ width: `${width}%` }} />
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -253,22 +331,48 @@ function TrendBars({ items }: { items: Array<{ monthKey: string; scheduledCount?
     activeCount: Number(item.activeCount ?? 0),
     overdueCount: Number(item.overdueCount ?? 0),
   }));
-  const maxScheduled = Math.max(1, ...normalizedItems.map((item) => item.scheduledCount));
+
+  const maxVal = Math.max(
+    1,
+    ...normalizedItems.flatMap((item) => [item.scheduledCount, item.completedCount])
+  );
 
   return (
     <div className="mt-4 flex items-end gap-3 overflow-x-auto pb-2">
       {normalizedItems.map((item) => {
         const scheduled = item.scheduledCount;
         const completed = item.completedCount;
-        const scheduledHeight = Math.max(24, Math.round((scheduled / maxScheduled) * 100));
-        const completedHeight = scheduled > 0 ? Math.max(8, Math.round((completed / scheduled) * 100)) : 0;
+        const scheduledHeight = scheduled > 0 ? Math.max(12, Math.round((scheduled / maxVal) * 100)) : 4;
+        const completedHeight = completed > 0 ? Math.max(12, Math.round((completed / maxVal) * 100)) : 4;
+
         return (
           <div key={item.monthKey} className="min-w-[75px] flex-1 text-center">
-            <div className="flex h-28 items-end justify-center gap-1.5 rounded-xl bg-[var(--color-input-bg)] p-2">
-              <div className="w-full rounded-t-md bg-[var(--color-brand-primary)]" style={{ height: `${scheduledHeight}%` }} title={`Scheduled: ${scheduled}`} />
-              <div className="w-full rounded-t-md bg-emerald-500/80" style={{ height: `${completedHeight}%` }} title={`Completed: ${completed}`} />
+            <div className="flex h-32 items-end justify-center gap-1.5 rounded-xl border border-[var(--color-border)]/50 bg-[var(--color-input-bg)] p-2">
+              <div className="group relative flex w-full flex-col items-center justify-end h-full">
+                <span className="mb-1 text-[10px] font-bold text-[var(--color-brand-primary)] transition-opacity group-hover:opacity-100 sm:opacity-80">
+                  {scheduled}
+                </span>
+                <div
+                  className="w-full rounded-t-md bg-[var(--color-brand-primary)] shadow-sm transition-all duration-300 hover:brightness-110"
+                  style={{ height: `${scheduledHeight}%` }}
+                  title={`Scheduled: ${scheduled}`}
+                />
+              </div>
+
+              <div className="group relative flex w-full flex-col items-center justify-end h-full">
+                <span className="mb-1 text-[10px] font-bold text-emerald-500 transition-opacity group-hover:opacity-100 sm:opacity-80">
+                  {completed}
+                </span>
+                <div
+                  className="w-full rounded-t-md bg-emerald-500 shadow-sm transition-all duration-300 hover:brightness-110"
+                  style={{ height: `${completedHeight}%` }}
+                  title={`Completed: ${completed}`}
+                />
+              </div>
             </div>
-            <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">{item.monthKey.slice(5)}</p>
+            <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">
+              {item.monthKey.slice(5)}
+            </p>
           </div>
         );
       })}
