@@ -40,9 +40,14 @@ const buildUrl = (path: string) => {
       return new URL(resolvedPath.replace(/^\/+/, ""), `${ANALYTICS_API_BASE}/`).toString();
     }
 
+    if (resolvedPath.startsWith("/workorders")) {
+      return new URL(resolvedPath.replace(/^\/+/, ""), `${ANALYTICS_API_BASE}/`).toString();
+    }
+
     if (resolvedPath.startsWith("/maintenance-schedules/search")) {
       return new URL(resolvedPath.replace(/^\/+/, ""), `${ANALYTICS_API_BASE}/`).toString();
     }
+
   }
 
   return new URL(path.replace(/^\/{1,}/, ""), `${API_BASE}/`).toString();

@@ -5,7 +5,10 @@ import {
   AlertTriangle,
   ChevronLeft,
   CheckCircle2,
+  Sparkles,
+  BrainCircuit,
 } from "lucide-react";
+
 import PageHeader from "../../components/PageHeader/PageHeader";
 import {
   ActionButton,
@@ -39,6 +42,11 @@ import { getVehicles, type VehicleOption } from "../../lib/api/vehicleService";
 import { getCurrentUser, type UserRecord } from "../../lib/api/authService";
 import { getGarages } from "../../lib/api/locationService";
 import { isMechanicRole } from "../../lib/utils/permissions";
+import {
+  getWorkOrderRecommendations,
+  type WorkOrderAiRecommendation,
+} from "../../lib/api/analyticsService";
+
 import {
   formatWorkOrderNumber,
   getCalculatedMaintenanceStatus,
@@ -291,11 +299,43 @@ export default function WorkOrders() {
     useState<PendingWorkOrderAction>(null);
   const [pendingStartChange, setPendingStartChange] = useState<(() => void) | null>(null);
 
+  const [aiRec, setAiRec] = useState<WorkOrderAiRecommendation | null>(null);
+  const [loadingAiRec, setLoadingAiRec] = useState(false);
+
+  useEffect(() => {
+    if (!selectedTask) {
+      setAiRec(null);
+      setLoadingAiRec(false);
+      return;
+    }
+
+    setLoadingAiRec(true);
+    const currentItems = checklists.get(selectedTask.id) || [];
+    getWorkOrderRecommendations(selectedTask.id, {
+      title: selectedTask.title,
+      vehiclePlate: getVehiclePlateNumber(selectedTask.vehicleId),
+      assignedMechanic: selectedTask.assignedDriver,
+      status: selectedTask.status,
+      odometerReading: selectedTask.odometerReading,
+      triggerType: selectedTask.triggerType,
+      checklistItems: currentItems.map((it) => ({ text: it.text })),
+    })
+      .then((data) => setAiRec(data))
+      .catch((err) => {
+        console.warn("Failed to fetch AI recommendation for selected task:", err);
+        setAiRec(null);
+      })
+      .finally(() => setLoadingAiRec(false));
+  }, [selectedTask?.id]);
+
+
+
   useEffect(() => {
     const closeActionMenu = () => setOpenActionMenuId(null);
     document.addEventListener("click", closeActionMenu);
     return () => document.removeEventListener("click", closeActionMenu);
   }, []);
+
 
   useEffect(() => {
     if (!toast) return;
@@ -578,6 +618,8 @@ export default function WorkOrders() {
     return garages.find((garage) => garage.id === garageId)?.name ?? garageId;
   };
 
+
+
   const renderScheduleDetails = (task: MaintenanceTask) => {
     const details = [
       { label: "Work Order No.", value: formatWorkOrderNumber(task.id) },
@@ -639,6 +681,184 @@ export default function WorkOrders() {
             </table>
           ))}
         </div>
+      </div>
+    );
+  };
+  const parseAiExecutionSections = (text: string) => {
+    if (!text) return [];
+
+    const lines = text.split(/\r?\n/);
+    const result: { title: string; items: string[] }[] = [];
+    let current: { title: string; items: string[] } | null = null;
+
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line) continue;
+
+      const isHeading =
+        /^(?:\#+\s*|\*\*\d+[\.\)]|\d+[\.\)])\s*/.test(line) ||
+        (line.endsWith(":") && line.length < 80 && !line.includes("•"));
+
+      if (isHeading) {
+        if (current && current.items.length > 0) {
+          result.push(current);
+        }
+        const cleanTitle = line
+          .replace(/^[#*\d\.\)\s]+/, "")
+          .replace(/[:*]+$/, "")
+          .trim();
+        current = { title: cleanTitle || line, items: [] };
+      } else if (current) {
+        current.items.push(line.replace(/^[-*•]\s*/, ""));
+      } else {
+        current = { title: "Execution Advisory", items: [line.replace(/^[-*•]\s*/, "")] };
+      }
+    }
+
+    if (current && current.items.length > 0) {
+      result.push(current);
+    }
+
+    return result;
+  };
+
+  const renderAiRecommendations = () => {
+    if (!selectedTask) return null;
+
+    const sections = aiRec?.aiRecommendations ? parseAiExecutionSections(aiRec.aiRecommendations) : [];
+
+    return (
+      <div className="mb-6 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-[0_25px_50px_rgba(0,0,0,0.08)]">
+        {/* Advisory Header Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--color-divider)] bg-gradient-to-r from-blue-950/20 via-[var(--color-card-bg)] to-indigo-950/20 px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-500 border border-blue-500/20">
+              <Sparkles size={20} />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-[var(--color-text-primary)] flex items-center gap-2">
+                <span>Gemini AI Execution Recommendations &amp; Procedure</span>
+                {aiRec?.priority && (
+                  <span className="rounded-full bg-blue-500/10 px-2.5 py-0.5 text-[10px] font-extrabold tracking-wider text-blue-500 border border-blue-500/20">
+                    {aiRec.priority} PRIORITY
+                  </span>
+                )}
+              </h3>
+              <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
+                AI-driven technical procedure suggestions, required tools, and execution steps for {selectedTask.title}.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 rounded-xl bg-blue-500/10 px-3 py-1.5 border border-blue-500/20 text-xs font-semibold text-blue-400">
+            <Sparkles size={14} />
+            <span>AI Execution Advisory</span>
+          </div>
+        </div>
+
+        {loadingAiRec ? (
+          <div className="flex items-center justify-center gap-3 px-6 py-8 text-xs text-[var(--color-text-secondary)]">
+            <BrainCircuit className="animate-pulse text-blue-500" size={22} />
+            <span>Generating Gemini AI execution procedure &amp; technical suggestions for {selectedTask.title}...</span>
+          </div>
+        ) : aiRec ? (
+          <div className="p-6 space-y-6">
+
+            {/* AI Technical Execution Checklist & Suggestions */}
+            {aiRec.checklist && aiRec.checklist.length > 0 && (
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-blue-500 mb-3 flex items-center gap-1.5">
+                  <BrainCircuit size={14} />
+                  <span>Step-by-Step Technical Execution Suggestions</span>
+                </h4>
+                <div className="grid gap-3">
+                  {aiRec.checklist.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded-2xl border border-[var(--color-divider)] bg-[var(--color-card-bg-hover)] p-4 text-xs transition hover:border-blue-500/30"
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="font-bold text-[var(--color-text-primary)] text-xs flex items-center gap-2">
+                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-500/15 text-[10px] font-bold text-blue-500">
+                            {item.stepNumber || idx + 1}
+                          </span>
+                          {item.title}
+                        </span>
+                        {item.priority && (
+                          <span className="text-[10px] font-semibold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full">
+                            {item.priority}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[var(--color-text-secondary)] leading-relaxed pl-7">
+                        {item.description}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Parsed AI Procedure Sections */}
+            {sections.length > 0 ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                {sections.map((sec, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-2xl border border-[var(--color-divider)] bg-[var(--color-card-bg-hover)] p-4 text-xs space-y-2"
+                  >
+                    <h4 className="font-bold text-[var(--color-text-primary)] uppercase tracking-wider text-[11px] flex items-center gap-1.5 text-blue-400">
+                      <Wrench size={13} />
+                      {sec.title}
+                    </h4>
+                    <ul className="space-y-1.5 text-[var(--color-text-secondary)] pl-1 leading-relaxed">
+                      {sec.items.slice(0, 4).map((it, i) => (
+                        <li key={i} className="flex items-start gap-2">
+                          <span className="text-blue-500 font-bold">•</span>
+                          <span>{it}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              /* Fallback if unparsed string */
+              <div className="rounded-2xl border border-[var(--color-divider)] bg-[var(--color-card-bg-hover)] p-4 text-xs whitespace-pre-line leading-relaxed text-[var(--color-text-secondary)]">
+                {aiRec.aiRecommendations}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-5 text-xs text-[var(--color-text-secondary)]">
+            <div className="flex items-center gap-2">
+              <Sparkles className="text-blue-400" size={16} />
+              <span>Gemini AI Analytics Service (port 3001) is unreachable or offline.</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (!selectedTask) return;
+                setLoadingAiRec(true);
+                const currentItems = checklists.get(selectedTask.id) || [];
+                getWorkOrderRecommendations(selectedTask.id, {
+                  title: selectedTask.title,
+                  vehiclePlate: getVehiclePlateNumber(selectedTask.vehicleId),
+                  assignedMechanic: selectedTask.assignedDriver,
+                  status: selectedTask.status,
+                  odometerReading: selectedTask.odometerReading,
+                  triggerType: selectedTask.triggerType,
+                  checklistItems: currentItems,
+                })
+                  .then((data) => setAiRec(data))
+                  .catch(() => setAiRec(null))
+                  .finally(() => setLoadingAiRec(false));
+              }}
+              className="rounded-lg bg-blue-500/10 px-3 py-1.5 font-semibold text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition"
+            >
+            </button>
+          </div>
+        )}
       </div>
     );
   };
@@ -1510,7 +1730,12 @@ export default function WorkOrders() {
             </div>
           )}
 
-          {(!isMechanic || workOrderStep === 1) && renderScheduleDetails(selectedTask)}
+          {(!isMechanic || workOrderStep === 1) && (
+            <>
+              {renderScheduleDetails(selectedTask)}
+              {renderAiRecommendations()}
+            </>
+          )}
 
           {!canMechanicStartTask && (
             <div className="mb-6 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-4 shadow-card">
@@ -1592,7 +1817,19 @@ export default function WorkOrders() {
                           }`}
                         >
                           <div className="text-sm font-medium text-[var(--color-text-primary)]">
-                            {item.text}
+                            <div>{item.text}</div>
+                            {(() => {
+                              const recStep = aiRec?.checklist?.find(
+                                (c) => c.title.toLowerCase().trim() === item.text.toLowerCase().trim()
+                              );
+                              if (!recStep?.description) return null;
+                              return (
+                                <div className="mt-1 flex items-start gap-1 text-[11px] font-normal text-[var(--color-text-secondary)]">
+                                  <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-blue-400" />
+                                  <span>{recStep.description}</span>
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           <div className="flex justify-center">

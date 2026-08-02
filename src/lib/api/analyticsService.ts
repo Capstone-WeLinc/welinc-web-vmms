@@ -455,3 +455,62 @@ export async function searchMaintenanceSchedules(query: string, limit = 8): Prom
     return [];
   }
 }
+
+export interface WorkOrderAiRecommendation {
+
+  scheduleId: string;
+  vehiclePlate: string;
+  maintenanceTitle: string;
+  assignedMechanic: string;
+  status: string;
+  priority: string;
+  daysOverdue?: number;
+  totalCost?: number;
+  aiRecommendations: string;
+  checklist: Array<{
+    stepNumber: number;
+    title: string;
+    description: string;
+    priority: string;
+  }>;
+  generatedAt: string;
+}
+
+export interface WorkOrderTaskDetails {
+  title?: string;
+  vehiclePlate?: string;
+  assignedMechanic?: string | null;
+  status?: string;
+  odometerReading?: string | number | null;
+  triggerType?: string | null;
+  intervalType?: string | null;
+  notes?: string | null;
+  checklistItems?: Array<{ text: string; status?: string }>;
+}
+
+export async function getWorkOrderRecommendations(
+  scheduleId: string,
+  taskDetails?: WorkOrderTaskDetails
+): Promise<WorkOrderAiRecommendation | null> {
+  const title = taskDetails?.title || "";
+  const vehicle = taskDetails?.vehiclePlate || "";
+  const itemsParam = (taskDetails?.checklistItems || [])
+    .map((it) => it.text)
+    .filter(Boolean)
+    .join("|");
+
+  try {
+    const params: Record<string, string> = { title, vehicle };
+    if (itemsParam) params.items = itemsParam;
+
+    const queryParams = new URLSearchParams(params).toString();
+    const data = await fetchJSON<WorkOrderAiRecommendation>(
+      `/analytics/workorders/recommendations/${scheduleId}?${queryParams}`
+    );
+    if (data && data.aiRecommendations) return data;
+  } catch (error) {
+    console.warn(`AI recommendation API fetch failed for schedule ${scheduleId}:`, error);
+  }
+
+  return null;
+}

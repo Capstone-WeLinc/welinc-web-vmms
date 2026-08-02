@@ -10,7 +10,6 @@ import {
 import Sidebar from "./components/Sidebar/Sidebar";
 import { getCurrentUser } from "./lib/api/authService";
 import Dashboard from "./pages/Dashboard/Dashboard";
-import PlaceholderPage from "./pages/PlaceholderPage/PlaceholderPage";
 import SchedulingPage from "./pages/Maintenance Scheduling/MaintenanceScheduling";
 import ChecklistTemplates from "./pages/ChecklistTemplates/ChecklistTemplates";
 import WorkOrders from "./pages/WorkOrders/WorkOrders";
@@ -23,8 +22,8 @@ import Profile from "./pages/Profile/Profile";
 import AIAnalyticsPage from "./pages/AIAnalytics/AIAnalytics";
 import { useBackend } from "./lib/api/httpClient";
 
-import { FileBarChart2 } from "lucide-react";
 import { setLastActivity, msUntilAbsoluteExpiry, msUntilInactivityExpiry, clearSession } from "./lib/utils/session";
+
 import { isMechanicRole, isOperationsRole } from "./lib/utils/permissions";
 import { useAuthStore } from "./store/authStore";
 
