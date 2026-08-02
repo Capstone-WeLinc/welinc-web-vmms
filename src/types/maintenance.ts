@@ -89,5 +89,9 @@ export interface MaintenanceTask {
   intervalType?: MaintenanceIntervalType;
   startReferenceDate?: string;
   workOrderProgress?: unknown;
+  partsCost?: number | string;
+  laborCost?: number | string;
+  totalCost?: number | string;
+  materialCost?: number | string;
   deletedAt?: string | null;
 }

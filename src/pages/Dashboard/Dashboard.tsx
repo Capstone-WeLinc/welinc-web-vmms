@@ -18,6 +18,7 @@ import {
   maintenanceStatusLabels,
   type MaintenanceTask,
 } from "../../types/maintenance";
+import { getTaskTotalCost } from "../../lib/utils/maintenanceCosts";
 import { isMechanicRole } from "../../lib/utils/permissions";
 import { formatWorkOrderNumber } from "../../lib/utils/workOrders";
 
@@ -46,26 +47,7 @@ const isCurrentMonth = (task: MaintenanceTask) => {
 };
 
 const getMaterialCost = (task: MaintenanceTask) => {
-  const progress = task.workOrderProgress;
-  if (!progress || typeof progress !== "object" || Array.isArray(progress)) return 0;
-
-  const execution = (progress as { execution?: unknown }).execution;
-  if (!execution || typeof execution !== "object" || Array.isArray(execution)) return 0;
-
-  const items = (execution as { items?: unknown }).items;
-  if (!Array.isArray(items)) return 0;
-
-  return items.reduce((total, item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) return total;
-    const value = (item as { partsCost?: unknown }).partsCost;
-    const parsed =
-      typeof value === "number"
-        ? value
-        : typeof value === "string"
-          ? Number(value.replace(/[^\d.-]/g, ""))
-          : 0;
-    return total + (Number.isFinite(parsed) ? parsed : 0);
-  }, 0);
+  return getTaskTotalCost(task);
 };
 
 const formatCurrency = (value: number) =>
@@ -374,3 +356,4 @@ export default function Dashboard() {
     </div>
   );
 }
+

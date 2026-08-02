@@ -8,6 +8,7 @@ import { getMaintenanceSchedules } from "../../lib/api/maintenanceService";
 import type { MaintenanceTask } from "../../lib/api/maintenanceService";
 import { getVehicles, type VehicleOption } from "../../lib/api/vehicleService";
 import { getGarages } from "../../lib/api/locationService";
+import { getTaskTotalCost } from "../../lib/utils/maintenanceCosts";
 import { isMechanicRole } from "../../lib/utils/permissions";
 import { formatLogNumber } from "../../lib/utils/workOrders";
 import {
@@ -152,10 +153,7 @@ const mapScheduleToLog = (
   const checklist = progress?.checklist ?? [];
   const execution = progress?.execution;
   const executionItems = execution?.items ?? [];
-  const materialCost = executionItems.reduce(
-    (total, item) => total + parseCost(item.partsCost),
-    0,
-  );
+  const materialCost = getTaskTotalCost(task);
   const costBreakdown = executionItems
     .filter(
       (item) =>
@@ -193,7 +191,7 @@ const mapScheduleToLog = (
     changedParts: executionItems.filter((item) => item.status === "changed").length,
     materialCost,
     costBreakdown,
-    cost: materialCost || readNumber(task, ["materialCost"]),
+    cost: materialCost,
     remarks: execution?.remarks || "N/A",
     technicianSignature: execution?.technicianSignature || "N/A",
   };
