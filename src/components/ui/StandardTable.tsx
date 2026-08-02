@@ -164,6 +164,115 @@ export const SearchInput = ({ className = "", ...props }: SearchInputProps) => (
   </div>
 );
 
+export interface DropdownSelectOption {
+  value: string;
+  label: string;
+}
+
+export interface DropdownSelectProps {
+  label?: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: DropdownSelectOption[];
+  className?: string;
+}
+
+export const DropdownSelect = ({
+  label,
+  value,
+  onChange,
+  options,
+  className = "",
+}: DropdownSelectProps) => (
+  <select
+    aria-label={label || "Select option"}
+    value={value}
+    onChange={(event) => onChange(event.target.value)}
+    className={`h-10 w-full rounded-xl border border-[#c8ced8] bg-white px-3 text-sm font-semibold text-[#141827] outline-none focus:border-[#070b45] focus:ring-2 focus:ring-[#070b45]/10 ${className}`}
+  >
+    {options.map((option) => (
+      <option key={option.value} value={option.value}>
+        {option.label}
+      </option>
+    ))}
+  </select>
+);
+
+export interface SortSelectOption {
+  value: string;
+  label: string;
+}
+
+export interface SortSelectProps {
+  label?: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: SortSelectOption[];
+  className?: string;
+}
+
+export const SortSelect = ({
+  label,
+  value,
+  onChange,
+  options,
+  className = "",
+}: SortSelectProps) => (
+  <div className={`relative ${className}`}>
+    <select
+      aria-label={label || "Sort"}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className="h-11 w-full appearance-none rounded-xl border border-[#c8ced8] bg-white pl-4 pr-10 text-sm font-semibold text-[#141827] outline-none transition focus:border-[#070b45] focus:ring-2 focus:ring-[#070b45]/10"
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  </div>
+);
+
+export interface TableToolbarProps {
+  search?: ReactNode;
+  sort?: ReactNode;
+  actions?: ReactNode;
+  className?: string;
+}
+
+export const TableToolbar = ({
+  search,
+  sort,
+  actions,
+  className = "",
+}: TableToolbarProps) => (
+  <div className={`mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${className}`}>
+    <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+      {search}
+      {sort}
+    </div>
+    {actions && <div className="flex items-center gap-2">{actions}</div>}
+  </div>
+);
+
+export function getStatusTone(status: string): string {
+  const normalized = status.toLowerCase();
+  if (normalized.includes("complete") || normalized === "active") return "#059669";
+  if (normalized.includes("progress")) return "#2563eb";
+  if (normalized === "due") return "#7c3aed";
+  if (
+    normalized.includes("overdue") ||
+    normalized.includes("flag") ||
+    normalized.includes("failed") ||
+    normalized.includes("cancel")
+  ) {
+    return "#dc2626";
+  }
+  if (normalized.includes("pending") || normalized.includes("hold")) return "#d97706";
+  return "#64748b";
+}
+
 interface FilterPanelProps {
   open: boolean;
   onToggle: () => void;
@@ -178,6 +287,7 @@ interface FilterPanelProps {
   onClear: () => void;
   className?: string;
   children?: ReactNode;
+  legendTitle?: string;
 }
 
 export const FilterDropdown = ({
@@ -587,9 +697,10 @@ interface ExportButtonProps {
   onToggle: (event: MouseEvent<HTMLButtonElement>) => void;
   onPdf: () => void;
   onExcel: () => void;
+  onCsv?: () => void;
 }
 
-export const ExportButton = ({ open, onToggle, onPdf, onExcel }: ExportButtonProps) => (
+export const ExportButton = ({ open, onToggle, onPdf, onExcel, onCsv }: ExportButtonProps) => (
   <div className="relative">
     <button
       type="button"
@@ -608,6 +719,11 @@ export const ExportButton = ({ open, onToggle, onPdf, onExcel }: ExportButtonPro
         <button type="button" className="block w-full px-4 py-2.5 text-left text-sm text-[#344158] hover:bg-[#f8fafc]" onClick={onPdf}>
           PDF
         </button>
+        {onCsv && (
+          <button type="button" className="block w-full px-4 py-2.5 text-left text-sm text-[#344158] hover:bg-[#f8fafc]" onClick={onCsv}>
+            CSV
+          </button>
+        )}
         <button type="button" className="block w-full px-4 py-2.5 text-left text-sm text-[#344158] hover:bg-[#f8fafc]" onClick={onExcel}>
           Excel
         </button>

@@ -26,6 +26,7 @@ import { setLastActivity, msUntilAbsoluteExpiry, msUntilInactivityExpiry, clearS
 
 import { isMechanicRole, isOperationsRole } from "./lib/utils/permissions";
 import { useAuthStore } from "./store/authStore";
+import MaintenanceReports from "./pages/MaintenanceReports/MaintenanceReports";
 
 function RequireAuthWrapper({
   children,
@@ -321,7 +322,7 @@ function App() {
                 isAuthenticated={isAuthenticated}
                 location={location}
               >
-                <AIAnalyticsPage initialTab="report" />
+                <MaintenanceReports />
               </RequireAuthWrapper>
             }
           />

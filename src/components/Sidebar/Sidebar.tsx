@@ -14,6 +14,8 @@ import {
   ClipboardList,
   ClipboardCheck,
   BrainCircuit,
+  FileBarChart2,
+  Fuel,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -28,8 +30,8 @@ const navItems = [
   { label: "Work Orders", icon: Wrench, path: "/work-orders" },
   { label: "Checklist Templates", icon: ClipboardCheck, path: "/checklist-templates" },
   { label: "Maintenance Logs", icon: ClipboardList, path: "/maintenance-logs" },
-//  { label: "Maintenance Reports", icon: FileBarChart2, path: "/maintenance-reports" },
-//  { label: "Fuel Management", icon: Fuel, path: "/fuel-management" },
+  { label: "Maintenance Reports", icon: FileBarChart2, path: "/maintenance-reports" },
+  { label: "Fuel Management", icon: Fuel, path: "/fuel-management" },
 //  { label: "Expense & Profitability", icon: DollarSign, path: "/expense-profitability" },
 ];
 
