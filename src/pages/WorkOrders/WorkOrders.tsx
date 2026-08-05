@@ -301,31 +301,36 @@ export default function WorkOrders() {
 
   const [aiRec, setAiRec] = useState<WorkOrderAiRecommendation | null>(null);
   const [loadingAiRec, setLoadingAiRec] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!selectedTask) {
-      setAiRec(null);
-      setLoadingAiRec(false);
-      return;
-    }
-
+  const handleGenerateWorkOrderAi = (task: MaintenanceTask) => {
+    if (!task) return;
     setLoadingAiRec(true);
-    const currentItems = checklists.get(selectedTask.id) || [];
-    getWorkOrderRecommendations(selectedTask.id, {
-      title: selectedTask.title,
-      vehiclePlate: getVehiclePlateNumber(selectedTask.vehicleId),
-      assignedMechanic: selectedTask.assignedDriver,
-      status: selectedTask.status,
-      odometerReading: selectedTask.odometerReading,
-      triggerType: selectedTask.triggerType,
+    setAiError(null);
+    const currentItems = checklists.get(task.id) || [];
+    getWorkOrderRecommendations(task.id, {
+      title: task.title,
+      vehiclePlate: getVehiclePlateNumber(task.vehicleId),
+      assignedMechanic: task.assignedDriver,
+      status: task.status,
+      odometerReading: task.odometerReading,
+      triggerType: task.triggerType,
       checklistItems: currentItems.map((it) => ({ text: it.text })),
     })
       .then((data) => setAiRec(data))
-      .catch((err) => {
+      .catch((err: unknown) => {
         console.warn("Failed to fetch AI recommendation for selected task:", err);
+        const msg = err instanceof Error ? err.message : "Failed to generate AI recommendations for this work order.";
+        setAiError(msg);
         setAiRec(null);
       })
       .finally(() => setLoadingAiRec(false));
+  };
+
+  useEffect(() => {
+    setAiRec(null);
+    setAiError(null);
+    setLoadingAiRec(false);
   }, [selectedTask?.id]);
 
 
@@ -727,6 +732,75 @@ export default function WorkOrders() {
 
     const sections = aiRec?.aiRecommendations ? parseAiExecutionSections(aiRec.aiRecommendations) : [];
 
+    if (aiError && !loadingAiRec) {
+      return (
+        <div className="mb-6 overflow-hidden rounded-3xl border border-rose-500/30 bg-rose-500/5 shadow-sm p-8 text-center flex flex-col items-center justify-center space-y-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-500 border border-rose-500/20 shadow-sm">
+            <AlertTriangle size={32} />
+          </div>
+          <div className="max-w-xl space-y-1.5">
+            <h3 className="text-lg font-bold text-[var(--color-text-primary)]">AI Recommendation Generation Failed</h3>
+            <p className="text-xs text-rose-500 font-medium leading-relaxed">{aiError}</p>
+            <p className="text-xs text-[var(--color-text-secondary)]">
+              Please check your network connection or backend services and try re-generating.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleGenerateWorkOrderAi(selectedTask)}
+            disabled={loadingAiRec}
+            className="mt-2 flex items-center gap-2 rounded-xl bg-[var(--color-brand-primary)] px-6 py-2.5 text-xs font-semibold text-white shadow-md hover:brightness-110 transition disabled:opacity-50"
+          >
+            <Sparkles size={15} />
+            <span>Re-Generate Recommendations</span>
+          </button>
+        </div>
+      );
+    }
+
+    if (!aiRec && !loadingAiRec) {
+      return (
+        <div className="mb-6 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-[0_25px_50px_rgba(0,0,0,0.08)] p-8 text-center flex flex-col items-center justify-center space-y-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20 shadow-sm">
+            <BrainCircuit size={32} />
+          </div>
+          <div className="max-w-xl space-y-1.5">
+            <h3 className="text-lg font-bold text-[var(--color-text-primary)]">AI Work Order Recommendations & Procedure</h3>
+            <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
+              Click below to analyze task requirements for <strong className="text-[var(--color-text-primary)]">{selectedTask.title}</strong> and generate AI execution procedures and technical suggestions.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleGenerateWorkOrderAi(selectedTask)}
+            disabled={loadingAiRec}
+            className="mt-2 flex items-center gap-2 rounded-xl bg-[var(--color-brand-primary)] px-6 py-2.5 text-xs font-semibold text-white shadow-md hover:brightness-110 transition disabled:opacity-50"
+          >
+            <Sparkles size={15} />
+            <span>Generate AI Recommendations</span>
+          </button>
+        </div>
+      );
+    }
+
+    if (!aiRec && loadingAiRec) {
+      return (
+        <div className="mb-6 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-12 text-center flex flex-col items-center justify-center space-y-4 shadow-sm">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20 shadow-sm">
+            <Sparkles size={28} className="animate-spin" />
+          </div>
+          <div className="max-w-xl space-y-1.5">
+            <h3 className="text-lg font-bold text-[var(--color-text-primary)]">Generating AI Recommendations...</h3>
+            <p className="text-xs text-[var(--color-text-secondary)]">
+              Analyzing vehicle diagnostics, checklist requirements, and technical procedures for <strong className="text-[var(--color-text-primary)]">{selectedTask.title}</strong>.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    if (!aiRec) return null;
+
     return (
       <div className="mb-6 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-[0_25px_50px_rgba(0,0,0,0.08)]">
         {/* Advisory Header Bar */}
@@ -738,7 +812,7 @@ export default function WorkOrders() {
             <div>
               <h3 className="text-base font-bold text-[var(--color-text-primary)] flex items-center gap-2">
                 <span>Gemini AI Execution Recommendations &amp; Procedure</span>
-                {aiRec?.priority && (
+                {aiRec.priority && (
                   <span className="rounded-full bg-blue-500/10 px-2.5 py-0.5 text-[10px] font-extrabold tracking-wider text-blue-500 border border-blue-500/20">
                     {aiRec.priority} PRIORITY
                   </span>
@@ -750,115 +824,83 @@ export default function WorkOrders() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 rounded-xl bg-blue-500/10 px-3 py-1.5 border border-blue-500/20 text-xs font-semibold text-blue-400">
-            <Sparkles size={14} />
-            <span>AI Execution Advisory</span>
-          </div>
+          <button
+            type="button"
+            onClick={() => handleGenerateWorkOrderAi(selectedTask)}
+            disabled={loadingAiRec}
+            className="flex items-center gap-2 rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:brightness-110 transition disabled:opacity-50"
+          >
+            <Sparkles size={14} className={loadingAiRec ? "animate-spin" : ""} />
+            <span>{loadingAiRec ? "Generating..." : "Re-Generate Recommendations"}</span>
+          </button>
         </div>
 
-        {loadingAiRec ? (
-          <div className="flex items-center justify-center gap-3 px-6 py-8 text-xs text-[var(--color-text-secondary)]">
-            <BrainCircuit className="animate-pulse text-blue-500" size={22} />
-            <span>Generating Gemini AI execution procedure &amp; technical suggestions for {selectedTask.title}...</span>
-          </div>
-        ) : aiRec ? (
-          <div className="p-6 space-y-6">
-
-            {/* AI Technical Execution Checklist & Suggestions */}
-            {aiRec.checklist && aiRec.checklist.length > 0 && (
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-blue-500 mb-3 flex items-center gap-1.5">
-                  <BrainCircuit size={14} />
-                  <span>Step-by-Step Technical Execution Suggestions</span>
-                </h4>
-                <div className="grid gap-3">
-                  {aiRec.checklist.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="rounded-2xl border border-[var(--color-divider)] bg-[var(--color-card-bg-hover)] p-4 text-xs transition hover:border-blue-500/30"
-                    >
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="font-bold text-[var(--color-text-primary)] text-xs flex items-center gap-2">
-                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-500/15 text-[10px] font-bold text-blue-500">
-                            {item.stepNumber || idx + 1}
-                          </span>
-                          {item.title}
-                        </span>
-                        {item.priority && (
-                          <span className="text-[10px] font-semibold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full">
-                            {item.priority}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[var(--color-text-secondary)] leading-relaxed pl-7">
-                        {item.description}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Parsed AI Procedure Sections */}
-            {sections.length > 0 ? (
-              <div className="grid gap-4 md:grid-cols-2">
-                {sections.map((sec, idx) => (
+        <div className="p-6 space-y-6">
+          {/* AI Technical Execution Checklist & Suggestions */}
+          {aiRec.checklist && aiRec.checklist.length > 0 && (
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-blue-500 mb-3 flex items-center gap-1.5">
+                <BrainCircuit size={14} />
+                <span>Step-by-Step Technical Execution Suggestions</span>
+              </h4>
+              <div className="grid gap-3">
+                {aiRec.checklist.map((item, idx) => (
                   <div
                     key={idx}
-                    className="rounded-2xl border border-[var(--color-divider)] bg-[var(--color-card-bg-hover)] p-4 text-xs space-y-2"
+                    className="rounded-2xl border border-[var(--color-divider)] bg-[var(--color-card-bg-hover)] p-4 text-xs transition hover:border-blue-500/30"
                   >
-                    <h4 className="font-bold text-[var(--color-text-primary)] uppercase tracking-wider text-[11px] flex items-center gap-1.5 text-blue-400">
-                      <Wrench size={13} />
-                      {sec.title}
-                    </h4>
-                    <ul className="space-y-1.5 text-[var(--color-text-secondary)] pl-1 leading-relaxed">
-                      {sec.items.slice(0, 4).map((it, i) => (
-                        <li key={i} className="flex items-start gap-2">
-                          <span className="text-blue-500 font-bold">•</span>
-                          <span>{it}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-bold text-[var(--color-text-primary)] text-xs flex items-center gap-2">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-500/15 text-[10px] font-bold text-blue-500">
+                          {item.stepNumber || idx + 1}
+                        </span>
+                        {item.title}
+                      </span>
+                      {item.priority && (
+                        <span className="text-[10px] font-semibold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full">
+                          {item.priority}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[var(--color-text-secondary)] leading-relaxed pl-7">
+                      {item.description}
+                    </p>
                   </div>
                 ))}
               </div>
-            ) : (
-              /* Fallback if unparsed string */
-              <div className="rounded-2xl border border-[var(--color-divider)] bg-[var(--color-card-bg-hover)] p-4 text-xs whitespace-pre-line leading-relaxed text-[var(--color-text-secondary)]">
-                {aiRec.aiRecommendations}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-5 text-xs text-[var(--color-text-secondary)]">
-            <div className="flex items-center gap-2">
-              <Sparkles className="text-blue-400" size={16} />
-              <span>Gemini AI Analytics Service (port 3001) is unreachable or offline.</span>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                if (!selectedTask) return;
-                setLoadingAiRec(true);
-                const currentItems = checklists.get(selectedTask.id) || [];
-                getWorkOrderRecommendations(selectedTask.id, {
-                  title: selectedTask.title,
-                  vehiclePlate: getVehiclePlateNumber(selectedTask.vehicleId),
-                  assignedMechanic: selectedTask.assignedDriver,
-                  status: selectedTask.status,
-                  odometerReading: selectedTask.odometerReading,
-                  triggerType: selectedTask.triggerType,
-                  checklistItems: currentItems,
-                })
-                  .then((data) => setAiRec(data))
-                  .catch(() => setAiRec(null))
-                  .finally(() => setLoadingAiRec(false));
-              }}
-              className="rounded-lg bg-blue-500/10 px-3 py-1.5 font-semibold text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition"
-            >
-            </button>
-          </div>
-        )}
+          )}
+
+          {/* Parsed AI Procedure Sections */}
+          {sections.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              {sections.map((sec, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-2xl border border-[var(--color-divider)] bg-[var(--color-card-bg-hover)] p-4 text-xs space-y-2"
+                >
+                  <h4 className="font-bold text-[var(--color-text-primary)] uppercase tracking-wider text-[11px] flex items-center gap-1.5 text-blue-400">
+                    <Wrench size={13} />
+                    {sec.title}
+                  </h4>
+                  <ul className="space-y-1.5 text-[var(--color-text-secondary)] pl-1 leading-relaxed">
+                    {sec.items.slice(0, 4).map((it, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="text-blue-500 font-bold">•</span>
+                        <span>{it}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          ) : (
+            /* Fallback if unparsed string */
+            <div className="rounded-2xl border border-[var(--color-divider)] bg-[var(--color-card-bg-hover)] p-4 text-xs whitespace-pre-line leading-relaxed text-[var(--color-text-secondary)]">
+              {aiRec.aiRecommendations}
+            </div>
+          )}
+        </div>
       </div>
     );
   };

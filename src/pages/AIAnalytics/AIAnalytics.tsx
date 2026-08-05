@@ -10,8 +10,6 @@ import {
   RefreshCw,
   FileText,
   AlertOctagon,
-  Download,
-  Server,
   Car,
   Clock,
   Layers,
@@ -28,7 +26,6 @@ import {
   getAnalyticsInsights,
   getAnalyticsReport,
   searchMaintenanceSchedules,
-  type AnalyticsHealthResponse,
   type AnalyticsOverviewResponse,
   type AnalyticsVehicleResponse,
   type AnalyticsAlertResponse,
@@ -378,7 +375,6 @@ function TrendBars({ items }: { items: Array<{ monthKey: string; scheduledCount?
 
 export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTab?: "overview" | "vehicles" | "alerts" | "report" }) {
   const [activeTab, setActiveTab] = useState<"overview" | "vehicles" | "alerts" | "report">(initialTab);
-  const [health, setHealth] = useState<AnalyticsHealthResponse | null>(null);
   const [overview, setOverview] = useState<AnalyticsOverviewResponse | null>(null);
   const [vehicles, setVehicles] = useState<AnalyticsVehicleResponse | null>(null);
   const [alerts, setAlerts] = useState<AnalyticsAlertResponse | null>(null);
@@ -386,7 +382,9 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
   const [fullReport, setFullReport] = useState<AnalyticsReportResponse | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<ScheduleSearchResult[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [hasGenerated, setHasGenerated] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [refreshingInsights, setRefreshingInsights] = useState(false);
   const [vehicleRiskFilter, setVehicleRiskFilter] = useState<"ALL" | "HIGH" | "MEDIUM" | "LOW">("ALL");
   const [vehicleSearch, setVehicleSearch] = useState("");
@@ -394,8 +392,9 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
 
   const loadData = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const [healthData, overviewData, vehicleData, alertsData, aiInsightsData, reportData] = await Promise.all([
+      const [, overviewData, vehicleData, alertsData, aiInsightsData, reportData] = await Promise.all([
         getAnalyticsHealth(),
         getAnalyticsOverview(),
         getAnalyticsVehicles(),
@@ -403,20 +402,24 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
         getAnalyticsInsights(),
         getAnalyticsReport(),
       ]);
-      setHealth(healthData);
       setOverview(overviewData);
       setVehicles(vehicleData);
       setAlerts(alertsData);
       setAiInsights(aiInsightsData);
       setFullReport(reportData);
+      setHasGenerated(true);
+    } catch (err: unknown) {
+      console.error("Failed to load analytics data:", err);
+      const message = err instanceof Error ? err.message : "Failed to connect to analytics service.";
+      setError(message);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
+  const handleManualGenerate = () => {
     void loadData();
-  }, []);
+  };
 
   const handleRefreshInsights = async () => {
     setRefreshingInsights(true);
@@ -457,8 +460,8 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
       },
       {
         label: "Total Maintenance Cost",
-        value: snapshot.totalMaintenanceCost !== undefined ? `$${Number(snapshot.totalMaintenanceCost).toLocaleString()}` : "—",
-        hint: `Avg/Vehicle: $${summaryMetrics?.avgCostPerVehicle ?? 0}`,
+        value: snapshot.totalMaintenanceCost !== undefined ? `₱${Number(snapshot.totalMaintenanceCost).toLocaleString()}` : "—",
+        hint: `Avg/Vehicle: ₱${summaryMetrics?.avgCostPerVehicle ?? 0}`,
         icon: ShieldCheck,
       },
       {
@@ -501,15 +504,165 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
     return list;
   }, [alerts, alertSeverityFilter]);
 
-  const handleExportJson = () => {
-    if (!fullReport) return;
-    const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(fullReport, null, 2))}`;
-    const downloadAnchor = document.createElement("a");
-    downloadAnchor.setAttribute("href", jsonString);
-    downloadAnchor.setAttribute("download", `analytics_report_${new Date().toISOString().slice(0, 10)}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
+  const printCleanAnalyticsReport = (isPdfOnly: boolean) => {
+    if (!fullReport) {
+      alert("No analytics report data available to export or print.");
+      return;
+    }
+    const printWin = window.open("", "_blank");
+    if (!printWin) {
+      alert("Please allow pop-ups to export or print the report.");
+      return;
+    }
+
+    const generatedDate = fullReport.dataSource?.generatedAt
+      ? formatDate(fullReport.dataSource.generatedAt)
+      : formatDate(new Date().toISOString());
+
+    const schedulesRows = (fullReport.schedules ?? [])
+      .map(
+        (s) => `
+      <tr>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-family: monospace; font-weight: bold;">${formatWorkOrderNumber(String(s.scheduleId))}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${s.vehiclePlate || "—"}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${s.maintenanceTitle || "—"}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${s.assignedMechanic || "Unassigned"}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${s.scheduleStatus || "PENDING"}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${formatDate(s.nextDueDate)}</td>
+      </tr>
+    `,
+      )
+      .join("");
+
+    const vehiclesRows = (fullReport.vehicles ?? [])
+      .map(
+        (v) => `
+      <tr>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${v.plateNumber}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${v.vehicleModel || "Commercial Truck"}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: ${v.riskLevel === "HIGH" ? "#dc2626" : v.riskLevel === "MEDIUM" ? "#d97706" : "#16a34a"}">${v.riskLevel} (${v.riskScore}/100)</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${v.riskReason || "Normal"}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${(v.currentOdometer || 0).toLocaleString()} KM</td>
+      </tr>
+    `,
+      )
+      .join("");
+
+    const alertsRows = (fullReport.alerts ?? [])
+      .map(
+        (a) => `
+      <tr>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: ${a.severity === "HIGH" ? "#dc2626" : "#d97706"}">${a.severity}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${a.maintenanceTitle}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${a.vehiclePlate}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${a.message}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${a.recommendedAction || "Inspect vehicle"}</td>
+      </tr>
+    `,
+      )
+      .join("");
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Aggregated Fleet Analytics Report ${isPdfOnly ? "(PDF Export)" : "(Print Summary)"}</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; margin: 24px; color: #0f172a; background: #ffffff; line-height: 1.5; }
+    h1 { font-size: 20px; text-transform: uppercase; color: #1a1f6e; margin-bottom: 4px; border-bottom: 2px solid #1a1f6e; padding-bottom: 8px; }
+    .subtitle { font-size: 12px; color: #64748b; margin-bottom: 20px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; font-size: 12px; }
+    .card-title { font-weight: bold; color: #1a1f6e; margin-bottom: 8px; font-size: 13px; text-transform: uppercase; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 24px; font-size: 11px; }
+    th { background: #1a1f6e; color: #ffffff; padding: 8px 12px; text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600; }
+    h2 { font-size: 14px; text-transform: uppercase; color: #1a1f6e; margin-top: 24px; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+    @media print { body { margin: 0; } }
+  </style>
+</head>
+<body>
+  <h1>Vehicle Maintenance Management System</h1>
+  <div class="subtitle">Aggregated Fleet Analytics & Diagnostic Report • Generated: ${generatedDate}</div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">Report Metadata</div>
+      <div>Data Source: <strong>${fullReport.dataSource?.type ?? "DUCKDB_DATAMART"}</strong></div>
+      <div>Generated Date: ${generatedDate}</div>
+      <div>Total Tracked Vehicles: <strong>${fullReport.vehicles?.length ?? 0}</strong></div>
+      <div>Total Active Alerts: <strong>${fullReport.alerts?.length ?? 0}</strong></div>
+      <div>Total Maintenance Schedules: <strong>${fullReport.schedules?.length ?? 0}</strong></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Fleet Snapshot Summary</div>
+      <div>Total Fleet Vehicles: <strong>${fullReport.snapshot?.totalVehicles ?? 0}</strong></div>
+      <div>Total Fleet Schedules: <strong>${fullReport.snapshot?.totalSchedules ?? 0}</strong></div>
+      <div>Fleet Completion Rate: <strong>${fullReport.snapshot?.completionRate ?? 0}%</strong></div>
+      <div>Fleet Maintenance Spend: <strong>$${(fullReport.snapshot?.totalMaintenanceCost ?? 0).toLocaleString()}</strong></div>
+    </div>
+  </div>
+
+  <h2>Scheduled Maintenance Jobs Overview (${(fullReport.schedules ?? []).length})</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Work Order No.</th>
+        <th>Plate Number</th>
+        <th>Maintenance Title</th>
+        <th>Mechanic</th>
+        <th>Status</th>
+        <th>Next Due</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${schedulesRows || '<tr><td colspan="6" style="padding:12px;text-align:center;">No schedules available</td></tr>'}
+    </tbody>
+  </table>
+
+  <h2>Vehicle Risk Assessment Matrix (${(fullReport.vehicles ?? []).length})</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Plate Number</th>
+        <th>Vehicle Model</th>
+        <th>Risk Level & Score</th>
+        <th>Primary Risk Reason</th>
+        <th>Current Odometer</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${vehiclesRows || '<tr><td colspan="5" style="padding:12px;text-align:center;">No vehicle risk data available</td></tr>'}
+    </tbody>
+  </table>
+
+  <h2>Active Fleet Diagnostic Alerts (${(fullReport.alerts ?? []).length})</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Severity</th>
+        <th>Alert Title</th>
+        <th>Plate</th>
+        <th>Diagnostic Details</th>
+        <th>Recommended Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${alertsRows || '<tr><td colspan="5" style="padding:12px;text-align:center;">No active alerts</td></tr>'}
+    </tbody>
+  </table>
+
+  <script>
+    window.onload = function() {
+      window.focus();
+      window.print();
+    };
+  </script>
+</body>
+</html>`;
+
+    printWin.document.open();
+    printWin.document.write(html);
+    printWin.document.close();
   };
 
   return (
@@ -522,84 +675,134 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
           subtitle="Real-time operational analytics, predictive maintenance forecasts, risk assessment, and DuckDB search"
         />
 
-        {/* Microservice Health Status Badge */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-2 text-xs font-semibold shadow-sm">
-            <Server className="h-4 w-4 text-[var(--color-brand-primary)]" />
-            <span>Service: {health?.service ?? "analytics-ai"}</span>
-            <span
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
-                health?.status === "ok" ? "bg-emerald-500/15 text-emerald-500" : "bg-amber-500/15 text-amber-500"
-              }`}
-            >
-              <span className={`h-1.5 w-1.5 rounded-full ${health?.status === "ok" ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
-              {health?.status === "ok" ? "Online" : "Connecting"}
-            </span>
-            <span className="text-[var(--color-text-secondary)]">:{health?.port ?? 3001}</span>
+        {/* Manual Analytics Generation / Re-Generation Button */}
+        {(hasGenerated || loading || error) && (
+          <div className="flex items-center gap-2">
+            <Button variant="primary" size="sm" onClick={handleManualGenerate} disabled={loading}>
+              <Sparkles className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              <span>{loading ? "Generating..." : "Re-Generate Analytics"}</span>
+            </Button>
           </div>
+        )}
+      </div>
 
-          <Button variant="secondary" size="sm" onClick={() => void loadData()} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+      {error && !loading ? (
+        <Card className="p-10 text-center flex flex-col items-center justify-center space-y-4 my-8 border border-rose-500/30 bg-rose-500/5">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-500 border border-rose-500/20 shadow-sm">
+            <AlertTriangle size={36} />
+          </div>
+          <div className="max-w-xl space-y-2">
+            <h2 className="text-xl font-bold text-[var(--color-text-primary)]">Analytics Generation Failed</h2>
+            <p className="text-xs text-rose-500 font-medium leading-relaxed">
+              {error}
+            </p>
+            <p className="text-xs text-[var(--color-text-secondary)]">
+              Please check your backend service connections and try re-generating.
+            </p>
+          </div>
+          <Button
+            variant="primary"
+            size="md"
+            onClick={handleManualGenerate}
+            disabled={loading}
+            className="mt-4 flex items-center gap-2 px-6 py-2.5 text-sm font-semibold shadow-md"
+          >
+            <RefreshCw className="h-4 w-4" />
+            <span>Re-Generate Analytics</span>
           </Button>
-        </div>
-      </div>
-
-      {/* Navigation Tabs */}
-      <div className="flex flex-wrap gap-2 border-b border-[var(--color-border)] pb-2">
-        <button
-          onClick={() => setActiveTab("overview")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-            activeTab === "overview"
-              ? "bg-[var(--color-brand-primary)] text-white shadow-sm"
-              : "bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-          }`}
-        >
-          <Layers className="h-4 w-4" />
-          Overview & Intelligence
-        </button>
-        <button
-          onClick={() => setActiveTab("vehicles")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-            activeTab === "vehicles"
-              ? "bg-[var(--color-brand-primary)] text-white shadow-sm"
-              : "bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-          }`}
-        >
-          <Car className="h-4 w-4" />
-          Vehicle Risk Matrix ({vehicles?.vehicles?.length ?? 0})
-        </button>
-        <button
-          onClick={() => setActiveTab("alerts")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-            activeTab === "alerts"
-              ? "bg-[var(--color-brand-primary)] text-white shadow-sm"
-              : "bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-          }`}
-        >
-          <AlertOctagon className="h-4 w-4" />
-          Priority Alerts ({alerts?.alerts?.length ?? 0})
-        </button>
-        <button
-          onClick={() => setActiveTab("report")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-            activeTab === "report"
-              ? "bg-[var(--color-brand-primary)] text-white shadow-sm"
-              : "bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-          }`}
-        >
-          <FileText className="h-4 w-4" />
-          Full Report & Export
-        </button>
-      </div>
-
-      {loading ? (
-        <Card className="p-8 text-center text-sm text-[var(--color-text-secondary)]">
-          <div className="flex items-center justify-center gap-3">
-            <RefreshCw className="h-5 w-5 animate-spin text-[var(--color-brand-primary)]" />
-            <span>Fetching analytics data from microservice (port 3001)...</span>
+        </Card>
+      ) : !hasGenerated && !loading ? (
+        <Card className="p-10 text-center flex flex-col items-center justify-center space-y-4 my-8">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20 shadow-sm">
+            <BrainCircuit size={36} />
+          </div>
+          <div className="max-w-xl space-y-2">
+            <h2 className="text-xl font-bold text-[var(--color-text-primary)]">Fleet AI & Predictive Analytics</h2>
+            <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
+              Click below to run real-time operational analytics, generate vehicle risk matrix scoring, process maintenance alerts, and aggregate datamart reports on demand.
+            </p>
+          </div>
+          <Button
+            variant="primary"
+            size="md"
+            onClick={handleManualGenerate}
+            disabled={loading}
+            className="mt-4 flex items-center gap-2 px-6 py-2.5 text-sm font-semibold shadow-md"
+          >
+            <Sparkles className="h-4 w-4" />
+            <span>Generate AI Analytics</span>
+          </Button>
+        </Card>
+      ) : !hasGenerated && loading ? (
+        <Card className="p-16 text-center flex flex-col items-center justify-center space-y-4 my-8">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20 shadow-sm">
+            <Sparkles className="h-8 w-8 animate-spin" />
+          </div>
+          <div className="max-w-xl space-y-2">
+            <h2 className="text-xl font-bold text-[var(--color-text-primary)]">Generating AI Analytics...</h2>
+            <p className="text-xs text-[var(--color-text-secondary)]">
+              Fetching datamart reports, scoring vehicle risks, and processing fleet intelligence metrics.
+            </p>
           </div>
         </Card>
-      ) : null}
+      ) : (
+        <>
+          {/* Navigation Tabs */}
+          <div className="flex flex-wrap gap-2 border-b border-[var(--color-border)] pb-2">
+            <button
+              onClick={() => setActiveTab("overview")}
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab === "overview"
+                  ? "bg-[var(--color-brand-primary)] text-white shadow-sm"
+                  : "bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+              }`}
+            >
+              <Layers className="h-4 w-4" />
+              Overview & Intelligence
+            </button>
+            <button
+              onClick={() => setActiveTab("vehicles")}
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab === "vehicles"
+                  ? "bg-[var(--color-brand-primary)] text-white shadow-sm"
+                  : "bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+              }`}
+            >
+              <Car className="h-4 w-4" />
+              Vehicle Risk Matrix ({vehicles?.vehicles?.length ?? 0})
+            </button>
+            <button
+              onClick={() => setActiveTab("alerts")}
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab === "alerts"
+                  ? "bg-[var(--color-brand-primary)] text-white shadow-sm"
+                  : "bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+              }`}
+            >
+              <AlertOctagon className="h-4 w-4" />
+              Priority Alerts ({alerts?.alerts?.length ?? 0})
+            </button>
+            <button
+              onClick={() => setActiveTab("report")}
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab === "report"
+                  ? "bg-[var(--color-brand-primary)] text-white shadow-sm"
+                  : "bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+              }`}
+            >
+              <FileText className="h-4 w-4" />
+              Full Report & Export
+            </button>
+          </div>
+
+          {loading ? (
+            <Card className="p-8 text-center text-sm text-[var(--color-text-secondary)]">
+              <div className="flex items-center justify-center gap-3">
+                <RefreshCw className="h-5 w-5 animate-spin text-[var(--color-brand-primary)]" />
+                <span>Generating analytics data...</span>
+              </div>
+            </Card>
+          ) : null}
 
       {/* OVERVIEW & INTELLIGENCE TAB */}
       {!loading && activeTab === "overview" && (
@@ -614,7 +817,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">AI Operational Report</h3>
-                  <p className="text-xs text-[var(--color-text-secondary)]">Automated fleet intelligence analysis generated from DuckDB analytics mart</p>
+                  <p className="text-xs text-[var(--color-text-secondary)]">Automated fleet intelligence analysis.</p>
                 </div>
               </div>
               <button
@@ -650,7 +853,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
                   <Search className="h-4 w-4 text-[var(--color-brand-primary)]" />
                   Schedule Search
                 </h3>
-                <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">Search maintenance schedules by title, vehicle plate, mechanic, or status via the backend datamart.</p>
+                <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">Search maintenance schedules by title, vehicle plate, mechanic, or status.</p>
               </div>
               <div className="relative w-full max-w-sm flex-shrink-0">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" />
@@ -720,7 +923,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
                 </h3>
                 <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-600">Upcoming Workload</span>
               </div>
-              <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Microservice projected maintenance due windows based on cycle intervals.</p>
+              <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Projected maintenance due windows based on cycle intervals.</p>
               <div className="mt-5 grid grid-cols-3 gap-3 text-center">
                 <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4">
                   <p className="text-2xl font-bold text-rose-500">{forecast?.dueIn7Days ?? 0}</p>
@@ -1025,11 +1228,11 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
               </div>
 
               <div className="flex items-center gap-3">
-                <Button variant="secondary" size="sm" onClick={handleExportJson}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Export JSON Report
+                <Button variant="secondary" size="sm" onClick={() => printCleanAnalyticsReport(true)}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  Export PDF
                 </Button>
-                <Button variant="primary" size="sm" onClick={() => window.print()}>
+                <Button variant="primary" size="sm" onClick={() => printCleanAnalyticsReport(false)}>
                   <FileText className="mr-2 h-4 w-4" />
                   Print Summary
                 </Button>
@@ -1091,6 +1294,8 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
             </div>
           </Card>
         </div>
+      )}
+        </>
       )}
     </div>
   );

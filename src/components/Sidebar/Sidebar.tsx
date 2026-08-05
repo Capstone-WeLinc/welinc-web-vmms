@@ -14,8 +14,6 @@ import {
   ClipboardList,
   ClipboardCheck,
   BrainCircuit,
-  FileBarChart2,
-  Fuel,
 } from "lucide-react";
 
 interface SidebarProps {
