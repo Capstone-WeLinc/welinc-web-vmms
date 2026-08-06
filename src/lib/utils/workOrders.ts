@@ -169,9 +169,15 @@ export const getCalculatedMaintenanceStatus = (
   task: MaintenanceTask,
   currentDate = new Date(),
 ): MaintenanceTask["status"] => {
-  if (task.status === MaintenanceStatus.COMPLETED) return MaintenanceStatus.COMPLETED;
-  if (task.status === MaintenanceStatus.CANCELLED) return MaintenanceStatus.CANCELLED;
-  if (isInProgressStatus(task.status)) return MaintenanceStatus.IN_PROGRESS;
+  if (task.status) {
+    const normalized = normalizeMaintenanceStatus(task.status);
+    if (normalized === "completed") return MaintenanceStatus.COMPLETED;
+    if (normalized === "cancelled") return MaintenanceStatus.CANCELLED;
+    if (normalized === "in-progress" || normalized === "in_progress") return MaintenanceStatus.IN_PROGRESS;
+    if (normalized === "overdue") return MaintenanceStatus.OVERDUE;
+    if (normalized === "due") return MaintenanceStatus.DUE;
+    if (normalized === "pending") return MaintenanceStatus.PENDING;
+  }
 
   if (task.triggerType === MaintenanceTriggerType.ODOMETER) {
     const odometerReading = parseKm(task.odometerReading);
@@ -195,8 +201,6 @@ export const getCalculatedMaintenanceStatus = (
     return MaintenanceStatus.OVERDUE;
   }
 
-  if (isDueStatus(task.status)) return MaintenanceStatus.DUE;
-  if (isOverdueStatus(task.status)) return MaintenanceStatus.OVERDUE;
   return MaintenanceStatus.PENDING;
 };
 
