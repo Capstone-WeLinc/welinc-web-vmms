@@ -63,3 +63,17 @@ export function isOperationsRole(
   const resolvedRole = extractRoleFromUser(roleOrUser);
   return normalizeRoleValue(resolvedRole) === "OPERATIONS";
 }
+
+export function isChiefMechanicRole(
+  roleOrUser?:
+    | string
+    | null
+    | {
+        role?: string | null;
+        roles?: Array<{ role?: string | null } | string | null> | null;
+      },
+): boolean {
+  const resolvedRole = extractRoleFromUser(roleOrUser);
+  return normalizeRoleValue(resolvedRole) === "CHIEF_MECHANIC";
+}
+

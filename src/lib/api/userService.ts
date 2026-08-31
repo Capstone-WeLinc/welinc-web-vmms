@@ -1,6 +1,7 @@
 export {
   createUser,
   deleteUser,
+  getChiefMechanics,
   getManagedUsers,
   getUsers,
   resetUserPassword,

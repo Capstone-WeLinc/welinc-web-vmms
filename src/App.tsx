@@ -20,11 +20,13 @@ import UserManagement from "./pages/UserManagement/UserManagement";
 import LoginPage from "./pages/Login/LoginPage";
 import Profile from "./pages/Profile/Profile";
 import AIAnalyticsPage from "./pages/AIAnalytics/AIAnalytics";
+import Vehicles from "./pages/Vehicles/Vehicles";
+import Garages from "./pages/Garages/Garages";
 import { useBackend } from "./lib/api/httpClient";
 
 import { setLastActivity, msUntilAbsoluteExpiry, msUntilInactivityExpiry, clearSession } from "./lib/utils/session";
 
-import { isMechanicRole, isOperationsRole } from "./lib/utils/permissions";
+import { isMechanicRole, isOperationsRole, isChiefMechanicRole } from "./lib/utils/permissions";
 import { useAuthStore } from "./store/authStore";
 import MaintenanceReports from "./pages/MaintenanceReports/MaintenanceReports";
 
@@ -56,6 +58,7 @@ function App() {
     new URLSearchParams(location.search).has("token");
   const isMechanic = isMechanicRole(currentUser);
   const isOperations = isOperationsRole(currentUser);
+  const isChiefMechanic = isChiefMechanicRole(currentUser);
 
   const handleLogin = () => {
     setAuthenticated(true);
@@ -109,6 +112,23 @@ function App() {
       return;
     }
 
+    if (isChiefMechanic) {
+      const allowedChiefMechanicPaths = [
+        "/dashboard",
+        "/maintenance-scheduling",
+        "/work-orders",
+        "/maintenance-logs",
+        "/maintenance-reports",
+        "/vehicles",
+        "/garages",
+        "/profile",
+      ];
+      if (!allowedChiefMechanicPaths.includes(location.pathname)) {
+        navigate("/dashboard", { replace: true });
+      }
+      return;
+    }
+
     if (isOperations) {
       const allowedOperationsPaths = [
         "/dashboard",
@@ -119,13 +139,15 @@ function App() {
         "/profile",
         "/maintenance-reports",
         "/fuel-management",
+        "/vehicles",
+        "/garages",
       ];
 
       if (!allowedOperationsPaths.includes(location.pathname)) {
         navigate("/dashboard", { replace: true });
       }
     }
-  }, [currentUser, isAuthenticated, isMechanic, isOperations, location.pathname, navigate]);
+  }, [currentUser, isAuthenticated, isMechanic, isChiefMechanic, isOperations, location.pathname, navigate]);
 
   useEffect(() => {
     const handleUnauthorized = () => {
@@ -345,6 +367,28 @@ function App() {
                 location={location}
               >
                 <ExpenseTrackingPage />
+              </RequireAuthWrapper>
+            }
+          />
+          <Route
+            path="/vehicles"
+            element={
+              <RequireAuthWrapper
+                isAuthenticated={isAuthenticated}
+                location={location}
+              >
+                <Vehicles />
+              </RequireAuthWrapper>
+            }
+          />
+          <Route
+            path="/garages"
+            element={
+              <RequireAuthWrapper
+                isAuthenticated={isAuthenticated}
+                location={location}
+              >
+                <Garages />
               </RequireAuthWrapper>
             }
           />

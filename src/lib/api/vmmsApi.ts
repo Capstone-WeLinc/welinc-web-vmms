@@ -183,6 +183,8 @@ function normalizeMaintenanceTask(task: MaintenanceTask): MaintenanceTask {
       task.assignedDriver ??
       (task as MaintenanceTask & { assignedMechanic?: string }).assignedMechanic ??
       "",
+    chiefMechanicId: task.chiefMechanicId,
+    chiefMechanic: task.chiefMechanic,
   };
 
   return {
@@ -423,6 +425,18 @@ export async function getManagedUsers() {
   if (!useBackend) return mockUsers.map((user) => normalizeUserRecord(user));
 
   return fetchJSON<UserRecord[]>("/auth/users?system=VMMS").then((users) =>
+    users.map((user) => normalizeUserRecord(user)),
+  );
+}
+
+export async function getChiefMechanics(): Promise<UserRecord[]> {
+  if (!useBackend) {
+    return mockUsers
+      .filter((u) => u.role === "CHIEF_MECHANIC")
+      .map((user) => normalizeUserRecord(user));
+  }
+
+  return fetchJSON<UserRecord[]>("/users/chief-mechanics").then((users) =>
     users.map((user) => normalizeUserRecord(user)),
   );
 }
@@ -762,6 +776,8 @@ export async function createMaintenanceSchedule(
     vehicleId: schedule.vehicleId,
     title: schedule.title,
     assignedDriver: schedule.assignedDriver,
+    chiefMechanicId: schedule.chiefMechanicId,
+    chiefMechanic: schedule.chiefMechanic,
     status: schedule.status,
     garageId: schedule.garageId,
     accountType: schedule.accountType,
@@ -799,6 +815,8 @@ export async function updateMaintenanceSchedule(schedule: MaintenanceTask) {
     vehicleId: schedule.vehicleId,
     title: schedule.title,
     assignedDriver: schedule.assignedDriver,
+    chiefMechanicId: schedule.chiefMechanicId,
+    chiefMechanic: schedule.chiefMechanic,
     status: schedule.status,
     garageId: schedule.garageId,
     accountType: schedule.accountType,
@@ -933,4 +951,107 @@ export type {
   UserRecord,
   UserRole,
   UserCreateInput,
+  VehicleRecord,
+  GarageFullRecord,
 } from "../mocks/vmmsMocks";
+
+// ─── Vehicle Management CRUD ───────────────────────────────────────────────
+
+import type { VehicleRecord, GarageFullRecord } from "../mocks/vmmsMocks";
+import { mockVehicleRecords, mockGarageRecords } from "../mocks/vmmsMocks";
+
+export async function getVehicleRecords(): Promise<VehicleRecord[]> {
+  if (!useBackend) return [...mockVehicleRecords];
+  const data = await fetchJSON<VehicleRecord[]>("/vehicles");
+  return data;
+}
+
+export async function createVehicleRecord(
+  dto: Omit<VehicleRecord, "id">,
+): Promise<VehicleRecord> {
+  if (!useBackend) {
+    const created: VehicleRecord = { ...dto, id: `vr${Date.now()}` };
+    mockVehicleRecords.unshift(created);
+    return created;
+  }
+  return fetchJSON<VehicleRecord>("/vehicles", {
+    method: "POST",
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function updateVehicleRecord(
+  id: string,
+  dto: Partial<Omit<VehicleRecord, "id">>,
+): Promise<VehicleRecord> {
+  if (!useBackend) {
+    const idx = mockVehicleRecords.findIndex((v) => v.id === id);
+    if (idx < 0) throw new Error("Vehicle not found");
+    mockVehicleRecords[idx] = { ...mockVehicleRecords[idx], ...dto };
+    return { ...mockVehicleRecords[idx] };
+  }
+  return fetchJSON<VehicleRecord>(`/vehicles/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function deleteVehicleRecord(id: string): Promise<void> {
+  if (!useBackend) {
+    const idx = mockVehicleRecords.findIndex((v) => v.id === id);
+    if (idx >= 0) mockVehicleRecords.splice(idx, 1);
+    return;
+  }
+  return fetchJSON<void>(`/vehicles/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+// ─── Garage Management CRUD ────────────────────────────────────────────────
+
+export async function getGarageRecords(): Promise<GarageFullRecord[]> {
+  if (!useBackend) return [...mockGarageRecords];
+  return fetchJSON<GarageFullRecord[]>("/garages");
+}
+
+export async function createGarageRecord(
+  dto: Omit<GarageFullRecord, "id">,
+): Promise<GarageFullRecord> {
+  if (!useBackend) {
+    const created: GarageFullRecord = { ...dto, id: `g${Date.now()}` };
+    mockGarageRecords.unshift(created);
+    return created;
+  }
+  return fetchJSON<GarageFullRecord>("/garages", {
+    method: "POST",
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function updateGarageRecord(
+  id: string,
+  dto: Partial<Omit<GarageFullRecord, "id">>,
+): Promise<GarageFullRecord> {
+  if (!useBackend) {
+    const idx = mockGarageRecords.findIndex((g) => g.id === id);
+    if (idx < 0) throw new Error("Garage not found");
+    mockGarageRecords[idx] = { ...mockGarageRecords[idx], ...dto };
+    return { ...mockGarageRecords[idx] };
+  }
+  return fetchJSON<GarageFullRecord>(`/garages/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function deleteGarageRecord(id: string): Promise<void> {
+  if (!useBackend) {
+    const idx = mockGarageRecords.findIndex((g) => g.id === id);
+    if (idx >= 0) mockGarageRecords.splice(idx, 1);
+    return;
+  }
+  return fetchJSON<void>(`/garages/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+

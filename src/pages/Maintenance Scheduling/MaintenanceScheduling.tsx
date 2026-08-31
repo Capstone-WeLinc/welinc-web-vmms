@@ -1237,6 +1237,10 @@ const MaintenanceSchedulingCombined = () => {
               },
               { label: "Date Created", value: selectedSchedule.date },
               { label: "Mechanic", value: selectedSchedule.assignedDriver },
+              {
+                label: "Chief Mechanic",
+                value: selectedSchedule.chiefMechanic || "Not Assigned",
+              },
               { label: "Status", value: selectedSchedule.status },
               { label: "Garage/Cluster", value: getGarageName(selectedSchedule.garageId) },
               { label: "Account Type", value: selectedSchedule.accountType },

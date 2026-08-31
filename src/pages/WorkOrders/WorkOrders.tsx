@@ -984,11 +984,12 @@ export default function WorkOrders() {
       { label: "Notes", value: selectedTask.notes },
     ].filter((item) => item.value && item.value !== "");
 
-    const signatureHtml = currentExecution.technicianSignature?.trim()
+    const assignedChief = selectedTask.chiefMechanic || currentExecution.technicianSignature;
+    const signatureHtml = assignedChief?.trim()
       ? `
           <div class="section">
             <h2>Chief Mechanic</h2>
-            <p>${currentExecution.technicianSignature}</p>
+            <p>${assignedChief}</p>
           </div>
         `
       : "";
@@ -1108,8 +1109,7 @@ export default function WorkOrders() {
   ).length;
   const canCompleteExecution =
     currentExecution.items.length > 0 &&
-    executionPendingCount === 0 &&
-    !!currentExecution.technicianSignature?.trim();
+    executionPendingCount === 0;
   const parseCostValue = (value?: string) => {
     if (!value) return 0;
     const parsed = Number(value.replace(/[^\d.-]/g, ""));
@@ -1984,24 +1984,13 @@ export default function WorkOrders() {
                     </div>
 
                     <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 px-6 pb-6">
-                      <div>
-                        <label className="block text-xs text-[var(--color-text-secondary)]">
-                          Chief Mechanic
-                        </label>
-                        <input
-                          type="text"
-                          value={currentExecution.technicianSignature || ""}
-                          disabled={!canModifySelectedTask || currentExecution.done || !canMechanicStartTask}
-                          onChange={(e) =>
-                            updateExecutionField(
-                              selectedTask.id,
-                              "technicianSignature",
-                              e.target.value,
-                            )
-                          }
-                          className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] ${!canModifySelectedTask || currentExecution.done || !canMechanicStartTask ? "opacity-70" : ""}`}
-                          placeholder="Chief Mechanic name"
-                        />
+                      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-3">
+                        <span className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                          Assigned Chief Mechanic
+                        </span>
+                        <p className="mt-1 text-sm font-bold text-[var(--color-text-primary)]">
+                          {selectedTask.chiefMechanic || currentExecution.technicianSignature || "Not Assigned"}
+                        </p>
                       </div>
                     </div>
 
@@ -2017,10 +2006,7 @@ export default function WorkOrders() {
                           </h3>
                           <p className="mt-1 text-sm text-rose-700/80">
                             {executionPendingCount > 0
-                              ? `${executionPendingCount} item(s) still need proof of check/change. `
-                              : ""}
-                            {!currentExecution.technicianSignature?.trim()
-                              ? "Chief Mechanic name is required before execution can be completed."
+                              ? `${executionPendingCount} item(s) still need proof of check/change.`
                               : ""}
                           </p>
                         </div>

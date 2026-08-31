@@ -92,6 +92,10 @@ export default function CreateScheduleModal({
   const [startReferenceDate, setStartReferenceDate] = useState("");
   const [assignedMechanic, setAssignedMechanic] = useState("");
   const [mechanics, setMechanics] = useState<UserRecord[]>([]);
+  const [chiefMechanicId, setChiefMechanicId] = useState("");
+  const [chiefMechanic, setChiefMechanic] = useState("");
+  const [chiefMechanics, setChiefMechanics] = useState<UserRecord[]>([]);
+  const [isChiefMechanicsLoading, setIsChiefMechanicsLoading] = useState(true);
   const [garages, setGarages] = useState<{ id: string; name: string }[]>([]);
   const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
   const [garageId, setGarageId] = useState("");
@@ -135,12 +139,13 @@ export default function CreateScheduleModal({
 
     getUsers()
       .then((users) => {
-        const mechanicUsers = users.filter((user) => user.role === "MECHANIC");
-        setMechanics(mechanicUsers);
+        setMechanics(users.filter((u) => u.role === "MECHANIC"));
+        setChiefMechanics(users.filter((u) => u.role === "CHIEF_MECHANIC"));
       })
       .catch(() => {
-        console.error("Failed to load mechanic users");
-      });
+        console.error("Failed to load users");
+      })
+      .finally(() => setIsChiefMechanicsLoading(false));
 
     getGarages()
       .then((g) => setGarages(g))
@@ -158,6 +163,8 @@ export default function CreateScheduleModal({
           setVehicleId(editingTask.vehicleId);
           setChecklistTemplateName(editingTask.title);
           setAssignedMechanic(editingTask.assignedDriver ?? "");
+          setChiefMechanicId(editingTask.chiefMechanicId ?? "");
+          setChiefMechanic(editingTask.chiefMechanic ?? "");
           setNotes(editingTask.notes ?? "");
           setGarageId(editingTask.garageId ?? "");
           setIsOtherGarage(false);
@@ -191,6 +198,8 @@ export default function CreateScheduleModal({
           setVehicleId("");
           setChecklistTemplateName("");
           setAssignedMechanic("");
+          setChiefMechanicId("");
+          setChiefMechanic("");
           setNotes("");
           setGarageId("");
           setIsOtherGarage(false);
@@ -271,6 +280,12 @@ export default function CreateScheduleModal({
       const selectedMechanic = mechanics.find(
         (mechanic) => mechanic.name === assignedMechanic,
       );
+      const selectedChiefMechanic = chiefMechanics.find(
+        (cm) => cm.id === chiefMechanicId || cm.name === chiefMechanic,
+      );
+      const resolvedChiefMechanicId = selectedChiefMechanic?.id || (chiefMechanicId ? chiefMechanicId : undefined);
+      const resolvedChiefMechanicName = selectedChiefMechanic?.name || (chiefMechanic ? chiefMechanic : undefined);
+
       const isTimeBased = triggerType === MaintenanceTriggerType.TIME;
       const submittedStartReferenceDate = isTimeBased ? startReferenceDate : "";
       const submittedIntervalType = isTimeBased
@@ -298,6 +313,8 @@ export default function CreateScheduleModal({
               assignedDriver: assignedMechanic,
               assignedMechanicId: selectedMechanic?.id,
               assignedMechanicEmail: selectedMechanic?.email,
+              chiefMechanicId: resolvedChiefMechanicId,
+              chiefMechanic: resolvedChiefMechanicName,
               notes,
               garageId: savedGarageId,
               accountType: accountType || undefined,
@@ -329,6 +346,8 @@ export default function CreateScheduleModal({
           assignedDriver: assignedMechanic,
           assignedMechanicId: selectedMechanic?.id,
           assignedMechanicEmail: selectedMechanic?.email,
+          chiefMechanicId: resolvedChiefMechanicId,
+          chiefMechanic: resolvedChiefMechanicName,
           notes,
           garageId: savedGarageId,
           accountType: accountType || undefined,
@@ -350,6 +369,8 @@ export default function CreateScheduleModal({
       setVehicleId("");
       setChecklistTemplateName("");
       setAssignedMechanic("");
+      setChiefMechanicId("");
+      setChiefMechanic("");
       setNotes("");
       setGarageId("");
       setIsOtherGarage(false);
@@ -1089,6 +1110,71 @@ export default function CreateScheduleModal({
                   ) : (
                     <option value="" disabled>
                       No mechanics available
+                    </option>
+                  )}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--color-text-secondary)]">
+                  <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
+                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
+                CHIEF MECHANIC
+              </label>
+              <div
+                className="relative"
+                onPointerDownCapture={() => {
+                  if (chiefMechanics.length === 0 && !chiefMechanic) {
+                    notifyDisabledField("Chief mechanic is disabled because no chief mechanic users are available.");
+                  }
+                }}
+              >
+                <select
+                  value={chiefMechanicId || chiefMechanic}
+                  disabled={isChiefMechanicsLoading || (chiefMechanics.length === 0 && !chiefMechanic)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const selected = chiefMechanics.find((cm) => cm.id === val || cm.name === val);
+                    if (selected) {
+                      setChiefMechanicId(selected.id);
+                      setChiefMechanic(selected.name);
+                    } else {
+                      setChiefMechanicId(val);
+                      setChiefMechanic(val);
+                    }
+                  }}
+                  className="select-control w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
+                >
+                  {isChiefMechanicsLoading ? (
+                    <option value="" disabled>
+                      Loading chief mechanics...
+                    </option>
+                  ) : chiefMechanics.length > 0 || chiefMechanic ? (
+                    <>
+                      <option value="" disabled>
+                        Select chief mechanic
+                      </option>
+                      {chiefMechanic &&
+                      !chiefMechanics.some(
+                        (cm) => cm.id === chiefMechanicId || cm.name === chiefMechanic,
+                      ) ? (
+                        <option value={chiefMechanicId || chiefMechanic}>
+                          {chiefMechanic}
+                        </option>
+                      ) : null}
+                      {chiefMechanics.map((cm) => (
+                        <option key={cm.id} value={cm.id}>
+                          {cm.name}
+                        </option>
+                      ))}
+                    </>
+                  ) : (
+                    <option value="" disabled>
+                      No chief mechanics available
                     </option>
                   )}
                 </select>

@@ -76,6 +76,8 @@ export interface MaintenanceTask {
   assignedDriver: string;
   assignedMechanicId?: string;
   assignedMechanicEmail?: string;
+  chiefMechanicId?: string;
+  chiefMechanic?: string;
   notes: string;
   garageId?: string;
   accountType?: AccountType;

@@ -44,7 +44,14 @@ const EMPTY_FORM: UserForm = {
   isActive: true,
 };
 
-const ROLE_OPTIONS: UserRole[] = ["ADMIN", "MECHANIC"];
+const ROLE_OPTIONS: UserRole[] = ["ADMIN", "OPERATIONS", "MECHANIC", "CHIEF_MECHANIC"];
+
+const ROLE_LABELS: Record<UserRole, string> = {
+  ADMIN: "Admin",
+  OPERATIONS: "Operations",
+  MECHANIC: "Mechanic",
+  CHIEF_MECHANIC: "Chief Mechanic",
+};
 
 const normalizeIdentity = (value?: string | null) =>
   (value ?? "").trim().toLowerCase();
@@ -342,7 +349,7 @@ export default function UserManagement() {
                 </div>
               ),
             },
-            { key: "role", header: "Role", width: "18%", render: (user) => user.role },
+            { key: "role", header: "Role", width: "18%", render: (user) => ROLE_LABELS[user.role as UserRole] ?? user.role },
             {
               key: "status",
               header: "Status",
@@ -464,7 +471,11 @@ export default function UserManagement() {
               className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)]"
             >
               <option value="" disabled>Select role</option>
-              {ROLE_OPTIONS.map((role) => <option key={role} value={role}>{role}</option>)}
+              {ROLE_OPTIONS.map((role) => (
+                <option key={role} value={role}>
+                  {ROLE_LABELS[role] ?? role}
+                </option>
+              ))}
             </select>
           </label>
           {!editingUser ? (

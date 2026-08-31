@@ -95,7 +95,7 @@ export type UserRecord = {
   name: string;
   email: string;
   username?: string;
-  role: "ADMIN" | "MECHANIC" | "OPERATIONS";
+  role: "ADMIN" | "MECHANIC" | "OPERATIONS" | "CHIEF_MECHANIC";
   status: UserStatus;
   lastActive: string;
   updatedAt?: string;
@@ -299,6 +299,7 @@ export const mockWorkOrders: MaintenanceTask[] = [
     status: MaintenanceStatus.PENDING,
     date: "2026-05-22",
     assignedDriver: "J. Dela Cruz",
+    chiefMechanic: "Chief Mech One",
     notes: "Standard oil and filter change. Synthetic 5W-30.",
     garageId: "g1",
     accountType: AccountType.IN_HOUSE,
@@ -318,6 +319,7 @@ export const mockWorkOrders: MaintenanceTask[] = [
     status: MaintenanceStatus.IN_PROGRESS,
     date: "2026-05-20",
     assignedDriver: "Sarah Connor",
+    chiefMechanic: "Chief Mech One",
     notes: "Scheduled 10,000-mile tire rotation and alignment check.",
     garageId: "g2",
     accountType: AccountType.IN_HOUSE,
@@ -337,6 +339,7 @@ export const mockWorkOrders: MaintenanceTask[] = [
     status: MaintenanceStatus.PENDING,
     date: "2026-05-22",
     assignedDriver: "David Miller",
+    chiefMechanic: "Chief Mech One",
     notes: "Standard oil and filter change. Synthetic 5W-30.",
   },
   {
@@ -346,6 +349,7 @@ export const mockWorkOrders: MaintenanceTask[] = [
     status: MaintenanceStatus.COMPLETED,
     date: "2026-05-25",
     assignedDriver: "Elena Rostova",
+    chiefMechanic: "Chief Mech One",
     notes: "Spark plug replacement and engine timing calibration completed.",
   },
   {
@@ -355,6 +359,7 @@ export const mockWorkOrders: MaintenanceTask[] = [
     status: MaintenanceStatus.OVERDUE,
     date: "2026-05-27",
     assignedDriver: "James Carter",
+    chiefMechanic: "Chief Mech One",
     notes:
       "Coolant leak reported near radiator intake. Urgently flag for repair inspection.",
   },
@@ -622,6 +627,14 @@ export const mockUsers: UserRecord[] = [
     status: "Active",
     lastActive: "2026-05-29T09:05:00.000Z",
   },
+  {
+    id: "u6",
+    name: "Chief Mech One",
+    email: "vmms.chiefmech@welinc.com",
+    role: "CHIEF_MECHANIC",
+    status: "Active",
+    lastActive: "2026-05-30T07:00:00.000Z",
+  },
 ];
 
 export function getMockChecklistTemplates(): Record<
@@ -662,4 +675,35 @@ export const mockSystems: SystemRecord[] = [
   { id: "s2", name: "Brakes" },
   { id: "s3", name: "Electrical" },
   { id: "s4", name: "Transmission" },
+];
+
+// --- Vehicle Management ---
+export type VehicleRecord = {
+  id: string;
+  plateNumber: string;
+  model: string;
+  odometer: number;
+  status: "AVAILABLE" | "IN_TRANSIT" | "UNDER_MAINTENANCE" | "UNDER_REPAIR";
+  isActive: boolean;
+};
+
+export const mockVehicleRecords: VehicleRecord[] = [
+  { id: "vr1", plateNumber: "ABC-1234", model: "Isuzu Elf",    odometer: 12000, status: "AVAILABLE",         isActive: true  },
+  { id: "vr2", plateNumber: "DEF-5678", model: "Mitsubishi FB", odometer: 45000, status: "UNDER_REPAIR",      isActive: true  },
+  { id: "vr3", plateNumber: "GHI-9012", model: "Fuso Canter",   odometer: 8200,  status: "AVAILABLE",         isActive: true  },
+  { id: "vr4", plateNumber: "JKL-3456", model: "Hino 500",      odometer: 62000, status: "UNDER_MAINTENANCE", isActive: false },
+  { id: "vr5", plateNumber: "MNO-7890", model: "Isuzu NKR",     odometer: 3100,  status: "AVAILABLE",         isActive: true  },
+];
+
+// --- Garage Management ---
+export type GarageFullRecord = {
+  id: string;
+  name: string;
+  isActive: boolean;
+};
+
+export const mockGarageRecords: GarageFullRecord[] = [
+  { id: "g1", name: "Main Garage",    isActive: true  },
+  { id: "g2", name: "North Cluster",  isActive: true  },
+  { id: "g3", name: "South Hub",      isActive: false },
 ];
