@@ -1,6 +1,6 @@
 import type { UserRecord } from "../../lib/api/authService";
-import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import { isMechanicRole, isOperationsRole, isChiefMechanicRole } from "../../lib/utils/permissions";
 import { ConfirmationModal } from "../ui";
 import logo from "../../assets/logo.png";
@@ -19,6 +19,12 @@ import {
   DollarSign,
   Truck,
   Warehouse,
+  ChevronDown,
+  Compass,
+  Building2,
+  FolderKanban,
+  Layers,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -34,12 +40,14 @@ interface NavItem {
 
 interface NavGroup {
   category: string;
+  icon: LucideIcon;
   items: NavItem[];
 }
 
 const navGroups: NavGroup[] = [
   {
     category: "Overview",
+    icon: Compass,
     items: [
       { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
       { label: "Analytics", icon: BrainCircuit, path: "/ai-analytics" },
@@ -47,6 +55,7 @@ const navGroups: NavGroup[] = [
   },
   {
     category: "Fleet & Facilities",
+    icon: Building2,
     items: [
       { label: "Fleet Vehicles", icon: Truck, path: "/vehicles" },
       { label: "Service Garages", icon: Warehouse, path: "/garages" },
@@ -54,6 +63,7 @@ const navGroups: NavGroup[] = [
   },
   {
     category: "Maintenance",
+    icon: FolderKanban,
     items: [
       { label: "Scheduling", icon: CalendarClock, path: "/maintenance-scheduling" },
       { label: "Work Orders", icon: Wrench, path: "/work-orders" },
@@ -63,14 +73,16 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    category: "Operations & Costs",
+    category: "Operations",
+    icon: Layers,
     items: [
-      { label: "Fuel Records", icon: Fuel, path: "/fuel-management" },
-      { label: "Profitability", icon: DollarSign, path: "/expense-profitability" },
+      { label: "Fuel Management", icon: Fuel, path: "/fuel-management" },
+      { label: "Expense & Profitability", icon: DollarSign, path: "/expense-profitability" },
     ],
   },
   {
     category: "Administration",
+    icon: ShieldCheck,
     items: [
       { label: "User Management", icon: Users, path: "/users" },
     ],
@@ -93,64 +105,109 @@ const logoFrameClasses =
 const labelRevealClasses =
   "max-w-0 min-w-0 translate-x-2 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 ease-out group-hover/sidebar:max-w-[190px] group-hover/sidebar:translate-x-0 group-hover/sidebar:opacity-100";
 const navClasses =
-  "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden py-3 px-2 space-y-3.5 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.12)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-white/10 hover:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-thumb]:rounded-full";
+  "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden py-3 px-2 space-y-2.5 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.12)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-white/10 hover:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-thumb]:rounded-full";
 const footerClasses = "border-t border-white/10 px-3 py-3 shrink-0 bg-[#020849]/90 backdrop-blur-sm";
 const baseButtonClasses =
   "mx-auto flex h-9 w-9 items-center justify-center gap-0 rounded-lg text-sm font-semibold transition-all duration-200 group-hover/sidebar:mx-0 group-hover/sidebar:w-full group-hover/sidebar:justify-start group-hover/sidebar:gap-3 group-hover/sidebar:px-3.5";
 
 const getNavLinkClass = (isActive: boolean) => {
   const base =
-    "mx-auto flex h-9 w-9 items-center justify-center gap-0 rounded-lg text-sm font-medium tracking-tight transition-all duration-200 group-hover/sidebar:mx-0 group-hover/sidebar:w-full group-hover/sidebar:justify-start group-hover/sidebar:gap-3 group-hover/sidebar:px-3.5";
+    "mx-auto flex h-9 w-9 items-center justify-center gap-0 rounded-lg text-sm font-medium tracking-tight transition-all duration-200 group-hover/sidebar:mx-0 group-hover/sidebar:w-[calc(100%-0.5rem)] group-hover/sidebar:ml-1.5 group-hover/sidebar:justify-start group-hover/sidebar:gap-3 group-hover/sidebar:px-3";
   if (isActive) {
     return `${base} bg-[#f4c400] text-[#030737] font-bold shadow-[0_4px_16px_rgba(244,196,0,0.25)]`;
   }
   return `${base} text-[#9ba4db] hover:bg-white/10 hover:text-white`;
 };
 
+const isItemActive = (itemPath: string, currentPath: string) => {
+  if (itemPath === "/dashboard") {
+    return currentPath === "/dashboard" || currentPath === "/";
+  }
+  return currentPath === itemPath || (itemPath !== "/" && currentPath.startsWith(itemPath + "/"));
+};
+
 export default function Sidebar({ currentUser }: SidebarProps) {
+  const location = useLocation();
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const isMechanic = isMechanicRole(currentUser);
   const isOperations = isOperationsRole(currentUser);
   const isChiefMechanic = isChiefMechanicRole(currentUser);
 
-  const isPathAllowed = (path: string) => {
-    if (isMechanic) {
-      return ["/dashboard", "/work-orders", "/maintenance-logs"].includes(path);
-    }
-    if (isChiefMechanic) {
-      return [
-        "/dashboard",
-        "/vehicles",
-        "/garages",
-        "/maintenance-scheduling",
-        "/work-orders",
-        "/maintenance-logs",
-        "/maintenance-reports",
-      ].includes(path);
-    }
-    if (isOperations) {
-      return [
-        "/dashboard",
-        "/vehicles",
-        "/garages",
-        "/users",
-        "/maintenance-scheduling",
-        "/work-orders",
-        "/maintenance-logs",
-        "/maintenance-reports",
-        "/fuel-management",
-        "/ai-analytics",
-      ].includes(path);
-    }
-    return true;
-  };
+  const visibleGroups = useMemo(() => {
+    const isPathAllowed = (path: string) => {
+      if (isMechanic) {
+        return ["/dashboard", "/work-orders", "/maintenance-logs"].includes(path);
+      }
+      if (isChiefMechanic) {
+        return [
+          "/dashboard",
+          "/vehicles",
+          "/garages",
+          "/maintenance-scheduling",
+          "/work-orders",
+          "/maintenance-logs",
+          "/maintenance-reports",
+        ].includes(path);
+      }
+      if (isOperations) {
+        return [
+          "/dashboard",
+          "/vehicles",
+          "/garages",
+          "/users",
+          "/maintenance-scheduling",
+          "/work-orders",
+          "/maintenance-logs",
+          "/maintenance-reports",
+          "/fuel-management",
+          "/expense-profitability",
+          "/ai-analytics",
+        ].includes(path);
+      }
+      return true;
+    };
 
-  const visibleGroups = navGroups
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => isPathAllowed(item.path)),
-    }))
-    .filter((group) => group.items.length > 0);
+    return navGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => isPathAllowed(item.path)),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [isMechanic, isChiefMechanic, isOperations]);
+
+  const findActiveGroupCategory = useCallback(
+    (pathname: string): string | null => {
+      for (const group of visibleGroups) {
+        if (group.items.some((item) => isItemActive(item.path, pathname))) {
+          return group.category;
+        }
+      }
+      return null;
+    },
+    [visibleGroups],
+  );
+
+  // Initialize expanded group based on active route
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(() => {
+    return findActiveGroupCategory(location.pathname) ?? visibleGroups[0]?.category ?? null;
+  });
+
+  const lastPathRef = useRef(location.pathname);
+
+  // Automatically expand the group containing the active page ONLY when route changes
+  useEffect(() => {
+    if (lastPathRef.current !== location.pathname) {
+      lastPathRef.current = location.pathname;
+      const activeCategory = findActiveGroupCategory(location.pathname);
+      if (activeCategory) {
+        setExpandedCategory(activeCategory);
+      }
+    }
+  }, [location.pathname, findActiveGroupCategory]);
+
+  const toggleGroup = (category: string) => {
+    setExpandedCategory((prev) => (prev === category ? null : category));
+  };
 
   const getSubsystemCount = () => {
     try {
@@ -228,33 +285,91 @@ export default function Sidebar({ currentUser }: SidebarProps) {
         </div>
 
         <nav className={navClasses}>
-          {visibleGroups.map((group, groupIdx) => (
-            <div key={group.category} className="space-y-1">
-              {/* Group Heading on hover, subtle line when collapsed */}
-              {groupIdx > 0 && (
-                <div className="mx-2 my-1 border-t border-white/5 group-hover/sidebar:border-transparent" />
-              )}
-              <div className="px-3 pt-1 pb-0.5 max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover/sidebar:max-w-[200px] group-hover/sidebar:opacity-100">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#f4c400]/90">
-                  {group.category}
-                </span>
+          {visibleGroups.map((group, groupIdx) => {
+            const isExpanded = expandedCategory === group.category;
+            const hasActiveChild = group.items.some((item) => isItemActive(item.path, location.pathname));
+            const GroupIcon = group.icon;
+            const groupId = `nav-group-${group.category.toLowerCase().replace(/[^a-z0-9]/g, "-")}`;
+
+            return (
+              <div key={group.category} className="space-y-1">
+                {/* Subtle separator between groups */}
+                {groupIdx > 0 && (
+                  <div className="mx-2 my-1 border-t border-white/5" />
+                )}
+
+                {/* Collapsible Group Header Button */}
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.category)}
+                  className={`group/header relative mx-auto flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-left transition-all duration-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#f4c400]/50 group-hover/sidebar:mx-0 group-hover/sidebar:h-auto group-hover/sidebar:w-full group-hover/sidebar:justify-between group-hover/sidebar:px-2.5 group-hover/sidebar:py-1.5 ${
+                    isExpanded || hasActiveChild
+                      ? "bg-white/[0.08] text-[#f4c400]"
+                      : "text-[#9ba4db] hover:bg-white/5 hover:text-white"
+                  }`}
+                  aria-expanded={isExpanded}
+                  aria-controls={groupId}
+                  title={`${group.category} (${isExpanded ? "Expanded - Click to collapse" : "Collapsed - Click to expand"})`}
+                >
+                  <div className="flex items-center gap-0 group-hover/sidebar:gap-2.5 min-w-0">
+                    <GroupIcon
+                      className={`h-4.5 w-4.5 shrink-0 transition-colors ${
+                        isExpanded || hasActiveChild
+                          ? "text-[#f4c400]"
+                          : "text-[#9ba4db] group-hover/header:text-white"
+                      }`}
+                      strokeWidth={2}
+                    />
+                    <span className="hidden select-none text-[10.5px] font-extrabold uppercase tracking-wider text-[#f4c400] transition-all duration-200 group-hover/sidebar:inline truncate">
+                      {group.category}
+                    </span>
+                  </div>
+
+                  {/* Active dot indicator in collapsed rail mode */}
+                  {hasActiveChild && !isExpanded && (
+                    <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-[#f4c400] shadow-[0_0_8px_#f4c400] group-hover/sidebar:hidden" />
+                  )}
+
+                  {/* Chevron Icon in expanded sidebar mode */}
+                  <ChevronDown
+                    className={`hidden h-3.5 w-3.5 shrink-0 transition-transform duration-200 group-hover/sidebar:inline ${
+                      isExpanded
+                        ? "rotate-0 text-[#f4c400]"
+                        : "-rotate-90 text-[#9ba4db]/70 group-hover/header:text-white"
+                    }`}
+                    strokeWidth={2.2}
+                  />
+                </button>
+
+                {/* Animated Collapsible Child Nav Items */}
+                <div
+                  id={groupId}
+                  className={`grid transition-[grid-template-rows,opacity] duration-250 ease-in-out ${
+                    isExpanded
+                      ? "grid-rows-[1fr] opacity-100"
+                      : "grid-rows-[0fr] opacity-0 pointer-events-none"
+                  }`}
+                >
+                  <div className="overflow-hidden">
+                    <ul className="m-0 list-none space-y-0.5 p-0 pt-0.5">
+                      {group.items.map((item) => (
+                        <li key={item.path}>
+                          <NavLink
+                            to={item.path}
+                            title={item.label}
+                            className={({ isActive }) => getNavLinkClass(isActive)}
+                          >
+                            <item.icon className="h-4.5 w-4.5 shrink-0" strokeWidth={1.9} />
+                            <span className={labelRevealClasses}>{item.label}</span>
+                          </NavLink>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
               </div>
-              <ul className="m-0 p-0 list-none space-y-0.5">
-                {group.items.map((item) => (
-                  <li key={item.path}>
-                    <NavLink
-                      to={item.path}
-                      title={item.label}
-                      className={({ isActive }) => getNavLinkClass(isActive)}
-                    >
-                      <item.icon className="h-4.5 w-4.5 shrink-0" strokeWidth={1.9} />
-                      <span className={labelRevealClasses}>{item.label}</span>
-                    </NavLink>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+            );
+          })}
         </nav>
 
         <div className={footerClasses}>
