@@ -45,11 +45,23 @@ const getInitials = (name?: string) =>
     .toUpperCase();
 
 const splitName = (name?: string) => {
-  const parts = (name || "").trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return { firstName: "", lastName: "" };
+  const trimmed = (name || "").trim();
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+
+  if (parts.length === 0) {
+    return { firstName: "", lastName: "" };
+  }
+
+  if (parts.length <= 2) {
+    return {
+      firstName: trimmed,
+      lastName: "",
+    };
+  }
+
   return {
-    firstName: parts[0],
-    lastName: parts.slice(1).join(" "),
+    firstName: parts.slice(0, -1).join(" "),
+    lastName: parts[parts.length - 1],
   };
 };
 
