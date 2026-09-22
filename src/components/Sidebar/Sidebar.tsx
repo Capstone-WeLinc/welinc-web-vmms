@@ -2,7 +2,8 @@ import type { UserRecord } from "../../lib/api/authService";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { isMechanicRole, isOperationsRole, isChiefMechanicRole } from "../../lib/utils/permissions";
-import { ConfirmationModal } from "../ui";
+import { ConfirmationModal, Modal } from "../ui";
+import { fetchJSON } from "../../lib/api/httpClient";
 import logo from "../../assets/logo.png";
 import {
   LayoutDashboard,
@@ -25,6 +26,7 @@ import {
   FolderKanban,
   Layers,
   ShieldCheck,
+  Bell,
   type LucideIcon,
 } from "lucide-react";
 
@@ -42,6 +44,15 @@ interface NavGroup {
   category: string;
   icon: LucideIcon;
   items: NavItem[];
+}
+
+interface NotificationRecord {
+  id: string;
+  title: string;
+  message: string;
+  type: "info" | "success" | "warning" | "error";
+  isRead: boolean;
+  createdAt: string;
 }
 
 const navGroups: NavGroup[] = [
@@ -129,9 +140,52 @@ const isItemActive = (itemPath: string, currentPath: string) => {
 export default function Sidebar({ currentUser }: SidebarProps) {
   const location = useLocation();
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
   const isMechanic = isMechanicRole(currentUser);
   const isOperations = isOperationsRole(currentUser);
   const isChiefMechanic = isChiefMechanicRole(currentUser);
+
+  const loadNotifications = useCallback(async () => {
+    if (!currentUser) {
+      setNotifications([]);
+      return;
+    }
+
+    try {
+      setIsLoadingNotifications(true);
+      const nextNotifications = await fetchJSON<NotificationRecord[]>("/notifications");
+      setNotifications(Array.isArray(nextNotifications) ? nextNotifications : []);
+    } catch {
+      setNotifications([]);
+    } finally {
+      setIsLoadingNotifications(false);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (isNotificationsOpen) {
+      void loadNotifications();
+    }
+  }, [isNotificationsOpen, loadNotifications]);
+
+  const markNotificationAsRead = async (notificationId: string) => {
+    try {
+      const updatedNotification = await fetchJSON<NotificationRecord>(`/notifications/${notificationId}/read`, {
+        method: "PATCH",
+      });
+      setNotifications((current) =>
+        current.map((notification) =>
+          notification.id === notificationId ? { ...notification, isRead: updatedNotification.isRead } : notification,
+        ),
+      );
+    } catch {
+      // Ignore update failures and keep the UI responsive.
+    }
+  };
+
+  const unreadNotificationCount = notifications.filter((notification) => !notification.isRead).length;
 
   const visibleGroups = useMemo(() => {
     const isPathAllowed = (path: string) => {
@@ -373,6 +427,23 @@ export default function Sidebar({ currentUser }: SidebarProps) {
         </nav>
 
         <div className={footerClasses}>
+          <button
+            className={`${baseButtonClasses} relative mb-2 text-[#9ba4db] hover:bg-white/10 hover:text-white`}
+            onClick={() => setIsNotificationsOpen(true)}
+            title="Notifications"
+            type="button"
+          >
+            <div className="relative">
+              <Bell size={18} strokeWidth={1.8} />
+              {unreadNotificationCount > 0 && (
+                <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#f4c400] px-1 text-[9px] font-bold text-[#020849]">
+                  {unreadNotificationCount}
+                </span>
+              )}
+            </div>
+            <span className={labelRevealClasses}>Notifications</span>
+          </button>
+
           <NavLink
             to="/profile"
             title="Profile"
@@ -422,6 +493,64 @@ export default function Sidebar({ currentUser }: SidebarProps) {
         confirmLabel="Sign Out"
         variant="danger"
       />
+
+      <Modal
+        isOpen={isNotificationsOpen}
+        title="Notifications"
+        onClose={() => setIsNotificationsOpen(false)}
+        size="sm"
+        footer={
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setIsNotificationsOpen(false)}
+              className="rounded-lg bg-[#070b45] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#111a62]"
+            >
+              Close
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          {isLoadingNotifications ? (
+            <p className="text-xs text-[#8a98ad]">Loading notifications...</p>
+          ) : notifications.length === 0 ? (
+            <p className="text-xs text-[#8a98ad]">
+              You have no new notifications.
+            </p>
+          ) : (
+            notifications.map((notification) => (
+              <button
+                key={notification.id}
+                type="button"
+                onClick={() => void markNotificationAsRead(notification.id)}
+                className={`w-full rounded-lg border p-3 text-left transition ${
+                  notification.isRead ? "border-[#dce3ed] bg-[#f7f9fc]" : "border-[#f4c400]/60 bg-[#fffaf0]"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-bold text-[#141827]">{notification.title}</p>
+                    <p className="mt-1 text-sm text-[#667085]">{notification.message}</p>
+                  </div>
+                  {!notification.isRead && (
+                    <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-[#f4c400]" />
+                  )}
+                </div>
+                <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-[#8a98ad]">
+                  {new Date(notification.createdAt).toLocaleString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                </p>
+              </button>
+            ))
+          )}
+        </div>
+      </Modal>
     </>
   );
 }

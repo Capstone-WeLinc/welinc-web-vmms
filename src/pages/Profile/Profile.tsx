@@ -7,8 +7,28 @@ import {
   ToastNotification,
 } from "../../components/ui";
 import { getCurrentUser, type UserRecord } from "../../lib/api/authService";
-import { updateUser } from "../../lib/api/userService";
 import { fetchJSON } from "../../lib/api/httpClient";
+
+const strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+const internationalPhonePattern = /^\+\d{7,14}$/;
+const philippineLocalPhonePattern = /^9\d{9}$/;
+
+const countryCallingCodes = [
+  { code: "+1", country: "United States / Canada" },
+  { code: "+44", country: "United Kingdom" },
+  { code: "+61", country: "Australia" },
+  { code: "+63", country: "Philippines" },
+  { code: "+65", country: "Singapore" },
+  { code: "+81", country: "Japan" },
+  { code: "+82", country: "South Korea" },
+  { code: "+852", country: "Hong Kong" },
+  { code: "+971", country: "United Arab Emirates" },
+  { code: "+91", country: "India" },
+  { code: "+49", country: "Germany" },
+  { code: "+33", country: "France" },
+  { code: "+39", country: "Italy" },
+  { code: "+7", country: "Russia / Kazakhstan" },
+];
 
 const roleLabelMap: Record<string, string> = {
   ADMIN: "Administrator",
@@ -39,19 +59,52 @@ const readString = (source: unknown, key: string, fallback = "") => {
   return typeof value === "string" && value.trim() ? value : fallback;
 };
 
+type AccountActivityEntry = {
+  id: string;
+  title: string;
+  detail: string;
+  timestamp: string;
+};
+
+const createSessionLabel = () => {
+  const userAgent = navigator.userAgent;
+  if (/Windows/i.test(userAgent)) return "Windows";
+  if (/Mac/i.test(userAgent)) return "macOS";
+  if (/Linux/i.test(userAgent)) return "Linux";
+  if (/Android/i.test(userAgent)) return "Android";
+  if (/iPhone|iPad|iPod/i.test(userAgent)) return "iOS";
+  return "Current device";
+};
+
+const formatActivityTimestamp = (date: Date) =>
+  date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
 export default function Profile() {
   const [currentUser, setCurrentUser] = useState<UserRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isEditingPassword, setIsEditingPassword] = useState(false);
+  const [phoneVerification, setPhoneVerification] = useState<{
+    phone: string;
+    code: string;
+    developmentCode?: string;
+  } | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
     email: "",
+    phoneCountryCode: "+63",
     phone: "",
-    username: "",
   });
   const [passwordForm, setPasswordForm] = useState({
     current: "",
@@ -62,18 +115,84 @@ export default function Profile() {
     type: "success" | "error" | "warning" | "info";
     message: string;
   } | null>(null);
+  const [activityLog, setActivityLog] = useState<AccountActivityEntry[]>(() => {
+    try {
+      const stored = window.localStorage.getItem("vmms-account-activity");
+      if (!stored) {
+        return [
+          {
+            id: `session-${Date.now()}`,
+            title: `Login - ${createSessionLabel()}`,
+            detail: "Current session started",
+            timestamp: formatActivityTimestamp(new Date()),
+          },
+        ];
+      }
+
+      const parsed = JSON.parse(stored) as AccountActivityEntry[];
+      return Array.isArray(parsed) && parsed.length > 0
+        ? parsed.slice(0, 5)
+        : [
+            {
+              id: `session-${Date.now()}`,
+              title: `Login - ${createSessionLabel()}`,
+              detail: "Current session started",
+              timestamp: formatActivityTimestamp(new Date()),
+            },
+          ];
+    } catch {
+      return [
+        {
+          id: `session-${Date.now()}`,
+          title: `Login - ${createSessionLabel()}`,
+          detail: "Current session started",
+          timestamp: formatActivityTimestamp(new Date()),
+        },
+      ];
+    }
+  });
+
+  const addAccountActivity = (title: string, detail = "Current session") => {
+    const nextEntry: AccountActivityEntry = {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      title,
+      detail,
+      timestamp: formatActivityTimestamp(new Date()),
+    };
+
+    setActivityLog((current) => [nextEntry, ...current].slice(0, 5));
+  };
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("vmms-account-activity", JSON.stringify(activityLog));
+    } catch {
+      // Ignore storage issues in restricted environments.
+    }
+  }, [activityLog]);
 
   const hydrateProfile = (user: UserRecord | null) => {
     if (!user) return;
     const { firstName, lastName } = splitName(user.name);
-    const username = user.username ?? "";
+    const storedPhone = readString(
+      user,
+      "contact",
+      readString(user, "phoneNumber", readString(user, "phone", "")),
+    );
+    const matchingCountry = [...countryCallingCodes]
+      .sort((left, right) => right.code.length - left.code.length)
+      .find(({ code }) => storedPhone.startsWith(code));
+    const phoneCountryCode = matchingCountry?.code ?? "+63";
+    const phone = matchingCountry
+      ? storedPhone.slice(phoneCountryCode.length)
+      : storedPhone.replace(/^\+/, "");
 
     setForm({
       firstName,
       lastName,
       email: readString(user, "email"),
-      phone: readString(user, "phoneNumber", readString(user, "phone", "")),
-      username,
+      phoneCountryCode,
+      phone,
     });
   };
 
@@ -112,10 +231,11 @@ export default function Profile() {
     return {
       initials: getInitials(fullName || currentUser?.name),
       name: fullName || currentUser?.name || "User",
-      username: form.username || currentUser?.username || "username",
       roleLabel,
       email: form.email || "No email on record",
-      phone: form.phone || "No phone on record",
+      phone: form.phone
+        ? `${form.phoneCountryCode}${form.phone}`
+        : "No phone on record",
       joined: readString(currentUser, "createdAt")
         ? `Joined ${new Date(readString(currentUser, "createdAt")).toLocaleDateString(undefined, {
             month: "long",
@@ -139,26 +259,88 @@ export default function Profile() {
     if (!currentUser) return;
 
     const name = `${form.firstName} ${form.lastName}`.trim();
-    if (!name || !form.username.trim()) {
+    if (!name) {
       setToast({
         type: "warning",
-        message: "Name and username are required.",
+        message: "Name is required.",
       });
+      return;
+    }
+
+    let phone = form.phone.replace(/\D/g, "");
+    if (form.phoneCountryCode === "+63" && phone.startsWith("0")) {
+      phone = phone.slice(1);
+    }
+
+    if (form.phoneCountryCode === "+63" && phone && !philippineLocalPhonePattern.test(phone)) {
+      setToast({
+        type: "warning",
+        message: "Philippine numbers must be 9XXXXXXXXX or 09XXXXXXXXX.",
+      });
+      return;
+    }
+
+    const fullPhone = phone ? `${form.phoneCountryCode}${phone}` : "";
+    if (fullPhone && !internationalPhonePattern.test(fullPhone)) {
+      setToast({
+        type: "warning",
+        message: "Enter a valid phone number for the selected country code.",
+      });
+      return;
+    }
+
+    const savedPhone = readString(currentUser, "contact");
+    if (fullPhone && fullPhone !== savedPhone) {
+      try {
+        const result = await fetchJSON<{ message: string; developmentCode?: string }>(
+          "/auth/profile/phone/send-verification",
+          {
+            method: "POST",
+            body: JSON.stringify({ phone: fullPhone }),
+          },
+        );
+        setPhoneVerification({
+          phone: fullPhone,
+          code: "",
+          developmentCode: result.developmentCode,
+        });
+        setToast({
+          type: "info",
+          message: result.developmentCode
+            ? `Verification code sent. Development code: ${result.developmentCode}`
+            : result.message,
+        });
+      } catch (error) {
+        const serverMessage = error instanceof Error ? error.message : "Unable to send verification SMS.";
+        const isMessagingUnavailable = /Semaphore|messaging|not configured|Unable to connect|rejected/i.test(serverMessage);
+        setToast({
+          type: isMessagingUnavailable ? "warning" : "error",
+          message: isMessagingUnavailable
+            ? "Phone verification SMS is unavailable right now. Please add messaging credits or enable the SMS provider to continue."
+            : serverMessage,
+        });
+      }
       return;
     }
 
     setIsSavingProfile(true);
     try {
-      const updatedUser = await updateUser(currentUser.id, {
-        name,
-        username: form.username.trim(),
+      const updatedUser = await fetchJSON<UserRecord>("/auth/profile", {
+        method: "PATCH",
+        body: JSON.stringify({
+          name,
+          email: form.email.trim(),
+          contact: fullPhone,
+        }),
       });
       setCurrentUser(updatedUser);
       hydrateProfile(updatedUser);
+      addAccountActivity("Profile updated", "Changes were saved successfully");
       setToast({
         type: "success",
         message: "Profile changes saved successfully.",
       });
+      setIsEditingProfile(false);
     } catch (error) {
       setToast({
         type: "error",
@@ -172,13 +354,53 @@ export default function Profile() {
     }
   };
 
+  const handleVerifyPhone = async () => {
+    if (!phoneVerification) return;
+
+    try {
+      const verifiedUser = await fetchJSON<UserRecord>("/auth/profile/phone/verify", {
+        method: "POST",
+        body: JSON.stringify({
+          phone: phoneVerification.phone,
+          code: phoneVerification.code,
+        }),
+      });
+      const name = `${form.firstName} ${form.lastName}`.trim();
+      const updatedUser = await fetchJSON<UserRecord>("/auth/profile", {
+        method: "PATCH",
+        body: JSON.stringify({
+          name,
+          email: form.email.trim(),
+          contact: phoneVerification.phone,
+        }),
+      });
+      setCurrentUser(updatedUser ?? verifiedUser);
+      hydrateProfile(updatedUser ?? verifiedUser);
+      addAccountActivity("Phone verified", "Two-factor verification completed successfully");
+      setPhoneVerification(null);
+      setIsEditingProfile(false);
+      setToast({ type: "success", message: "Phone number verified and profile saved." });
+    } catch (error) {
+      setToast({
+        type: "error",
+        message: error instanceof Error ? error.message : "Unable to verify phone number.",
+      });
+    }
+  };
+
   const handleUpdatePassword = async () => {
     if (!currentUser) return;
 
-    if (passwordForm.next.length < 8) {
+    if (!passwordForm.current) {
+      setToast({ type: "warning", message: "Enter your current password." });
+      return;
+    }
+
+    if (!strongPasswordPattern.test(passwordForm.next)) {
       setToast({
         type: "warning",
-        message: "New password must be at least 8 characters.",
+        message:
+          "Password must be at least 8 characters and include uppercase, lowercase, number, and special character.",
       });
       return;
     }
@@ -193,15 +415,21 @@ export default function Profile() {
 
     setIsSavingPassword(true);
     try {
-      await fetchJSON(`/auth/users/${encodeURIComponent(currentUser.id)}/password`, {
+      await fetchJSON("/auth/profile/password", {
         method: "PATCH",
-        body: JSON.stringify({ password: passwordForm.next }),
+        body: JSON.stringify({
+          currentPassword: passwordForm.current,
+          newPassword: passwordForm.next,
+          confirmPassword: passwordForm.confirm,
+        }),
       });
       setPasswordForm({ current: "", next: "", confirm: "" });
+      addAccountActivity("Password changed", "Security credentials were updated successfully");
       setToast({
         type: "success",
         message: "Password updated successfully.",
       });
+      setIsEditingPassword(false);
     } catch (error) {
       setToast({
         type: "error",
@@ -264,18 +492,6 @@ export default function Profile() {
             </div>
           ) : null}
 
-          <button
-            type="button"
-            className="mt-8 h-11 w-full rounded-lg border border-[#ffb4b4] text-sm font-semibold text-[#b50000] transition hover:bg-[#fff1f1]"
-            onClick={() =>
-              setToast({
-                type: "info",
-                message: "Sign out request noted for this session.",
-              })
-            }
-          >
-            Sign out of all devices
-          </button>
         </aside>
 
         <div className="space-y-6">
@@ -290,6 +506,7 @@ export default function Profile() {
                 </span>
                 <input
                   value={form.firstName}
+                  disabled={!isEditingProfile}
                   onChange={(event) => handleFormChange("firstName", event.target.value)}
                   className="mt-2 h-11 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm text-[#344158] outline-none focus:border-[#070b45]"
                 />
@@ -300,6 +517,7 @@ export default function Profile() {
                 </span>
                 <input
                   value={form.lastName}
+                  disabled={!isEditingProfile}
                   onChange={(event) => handleFormChange("lastName", event.target.value)}
                   className="mt-2 h-11 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm text-[#344158] outline-none focus:border-[#070b45]"
                 />
@@ -310,49 +528,91 @@ export default function Profile() {
                 </span>
                 <input
                   value={form.email}
+                  disabled={!isEditingProfile}
                   onChange={(event) => handleFormChange("email", event.target.value)}
                   className="mt-2 h-11 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm text-[#344158] outline-none focus:border-[#070b45]"
                 />
               </label>
-              <label className="block">
+              <label className="block md:col-span-2">
                 <span className="text-xs font-bold uppercase text-[#8a98ad]">
                   Phone Number
                 </span>
-                <input
-                  value={form.phone}
-                  onChange={(event) => handleFormChange("phone", event.target.value)}
-                  className="mt-2 h-11 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm text-[#344158] outline-none focus:border-[#070b45]"
-                />
-              </label>
-              <label className="block">
-                <span className="text-xs font-bold uppercase text-[#8a98ad]">
-                  Username
-                </span>
-                <input
-                  value={form.username}
-                  onChange={(event) => handleFormChange("username", event.target.value)}
-                  className="mt-2 h-11 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm text-[#344158] outline-none focus:border-[#070b45]"
-                />
+                <div className="mt-2 grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-2">
+                  <select
+                    value={form.phoneCountryCode}
+                    disabled={!isEditingProfile}
+                    onChange={(event) => handleFormChange("phoneCountryCode", event.target.value)}
+                    className="h-11 rounded-lg border border-[#dce3ed] bg-white px-3 text-sm text-[#344158] outline-none focus:border-[#070b45]"
+                    aria-label="Country calling code"
+                  >
+                    {countryCallingCodes.map(({ code, country }) => (
+                      <option key={code} value={code}>
+                        {code} ({country})
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    value={form.phone}
+                    disabled={!isEditingProfile}
+                    onChange={(event) => handleFormChange("phone", event.target.value)}
+                    placeholder={form.phoneCountryCode === "+63" ? "9XXXXXXXXX or 09XXXXXXXXX" : "Phone number"}
+                    inputMode="tel"
+                    className="h-11 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm text-[#344158] outline-none focus:border-[#070b45]"
+                  />
+                </div>
               </label>
               <label className="block">
                 <span className="text-xs font-bold uppercase text-[#8a98ad]">
                   Role
                 </span>
-                <input
-                  value={profile.roleLabel}
-                  readOnly
-                  className="mt-2 h-11 w-full rounded-lg border border-[#dce3ed] bg-[#f7f9fc] px-4 text-sm text-[#344158]"
-                />
+                <div
+                  aria-label="Role"
+                  className="mt-2 flex h-11 w-full items-center rounded-lg border border-[#dce3ed] bg-[#f7f9fc] px-4 text-sm text-[#344158]"
+                >
+                  {profile.roleLabel}
+                </div>
               </label>
             </div>
             <div className="mt-7 flex justify-end gap-3">
-              <ActionButton variant="secondary" onClick={loadProfile}>
-                Cancel
-              </ActionButton>
-              <ActionButton onClick={handleSaveProfile} disabled={isSavingProfile}>
-                {isSavingProfile ? "Saving..." : "Save Changes"}
-              </ActionButton>
+              {isEditingProfile ? (
+                <>
+                  <ActionButton variant="secondary" onClick={() => { loadProfile(); setPhoneVerification(null); setIsEditingProfile(false); }}>
+                    Cancel
+                  </ActionButton>
+                  <ActionButton onClick={handleSaveProfile} disabled={isSavingProfile}>
+                    {isSavingProfile ? "Saving..." : "Save Changes"}
+                  </ActionButton>
+                </>
+              ) : (
+                <ActionButton onClick={() => setIsEditingProfile(true)}>Edit Details</ActionButton>
+              )}
             </div>
+            {phoneVerification ? (
+              <div className="mt-5 rounded-lg border border-[#dce3ed] bg-[#f7f9fc] p-4">
+                <p className="text-sm font-semibold text-[#141827]">
+                  Enter the 6-digit code sent to {phoneVerification.phone}.
+                </p>
+                <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                  <input
+                    value={phoneVerification.code}
+                    onChange={(event) =>
+                      setPhoneVerification((current) =>
+                        current
+                          ? { ...current, code: event.target.value.replace(/\D/g, "").slice(0, 6) }
+                          : current,
+                      )
+                    }
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="6-digit code"
+                    className="h-11 flex-1 rounded-lg border border-[#dce3ed] bg-white px-4 text-sm text-[#344158] outline-none focus:border-[#070b45]"
+                  />
+                  <ActionButton onClick={handleVerifyPhone} disabled={phoneVerification.code.length !== 6}>
+                    Verify Phone
+                  </ActionButton>
+                </div>
+              </div>
+            ) : null}
           </section>
 
           <section className="rounded-xl border border-[#dce3ed] bg-white p-6">
@@ -365,6 +625,7 @@ export default function Profile() {
                 <input
                   type="password"
                   value={passwordForm.current}
+                  disabled={!isEditingPassword}
                   onChange={(event) => handlePasswordChange("current", event.target.value)}
                   placeholder="Enter current password"
                   className="mt-2 h-11 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm outline-none focus:border-[#070b45]"
@@ -378,6 +639,7 @@ export default function Profile() {
                   <input
                     type="password"
                     value={passwordForm.next}
+                    disabled={!isEditingPassword}
                     onChange={(event) => handlePasswordChange("next", event.target.value)}
                     placeholder="At least 8 characters"
                     className="mt-2 h-11 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm outline-none focus:border-[#070b45]"
@@ -390,6 +652,7 @@ export default function Profile() {
                   <input
                     type="password"
                     value={passwordForm.confirm}
+                    disabled={!isEditingPassword}
                     onChange={(event) => handlePasswordChange("confirm", event.target.value)}
                     placeholder="Re-enter new password"
                     className="mt-2 h-11 w-full rounded-lg border border-[#dce3ed] bg-white px-4 text-sm outline-none focus:border-[#070b45]"
@@ -397,19 +660,28 @@ export default function Profile() {
                 </label>
               </div>
               <p className="text-sm font-semibold text-[#b50000]">
-                At least 8 characters
+                At least 8 characters, including uppercase, lowercase, number, and special character
               </p>
             </div>
             <div className="mt-7 flex justify-end gap-3">
-              <ActionButton
-                variant="secondary"
-                onClick={() => setPasswordForm({ current: "", next: "", confirm: "" })}
-              >
-                Cancel
-              </ActionButton>
-              <ActionButton onClick={handleUpdatePassword} disabled={isSavingPassword}>
-                {isSavingPassword ? "Updating..." : "Update Password"}
-              </ActionButton>
+              {isEditingPassword ? (
+                <>
+                  <ActionButton
+                    variant="secondary"
+                    onClick={() => {
+                      setPasswordForm({ current: "", next: "", confirm: "" });
+                      setIsEditingPassword(false);
+                    }}
+                  >
+                    Cancel
+                  </ActionButton>
+                  <ActionButton onClick={handleUpdatePassword} disabled={isSavingPassword}>
+                    {isSavingPassword ? "Updating..." : "Update Password"}
+                  </ActionButton>
+                </>
+              ) : (
+                <ActionButton onClick={() => setIsEditingPassword(true)}>Change Password</ActionButton>
+              )}
             </div>
           </section>
 
@@ -441,20 +713,15 @@ export default function Profile() {
               Recent account activity
             </h3>
             <div className="divide-y divide-[#edf1f7]">
-              {[
-                "Login - Chrome on Windows",
-                "Password changed",
-                "Login - Mobile Safari on iOS",
-              ].map((item, index) => (
-                <div key={item} className="flex items-center gap-4 px-6 py-3">
+              {activityLog.map((item, index) => (
+                <div key={item.id} className="flex items-center gap-4 px-6 py-3">
                   <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#eef2ff] text-[#070b45]">
-                    {index === 2 ? <Circle className="h-3 w-3 fill-current" /> : <ArrowRight className="h-4 w-4" />}
+                    {index === 0 ? <Circle className="h-3 w-3 fill-current" /> : <ArrowRight className="h-4 w-4" />}
                   </span>
                   <div>
-                    <p className="text-sm font-semibold text-[#141827]">{item}</p>
-                    <p className="text-xs text-[#8a98ad]">
-                      May 12, 2026 - Quezon City, PH
-                    </p>
+                    <p className="text-sm font-semibold text-[#141827]">{item.title}</p>
+                    <p className="text-xs text-[#8a98ad]">{item.detail}</p>
+                    <p className="text-[11px] text-[#8a98ad]">{item.timestamp}</p>
                   </div>
                 </div>
               ))}
@@ -474,6 +741,7 @@ export default function Profile() {
         onConfirm={() => {
           setShowDeleteConfirm(false);
           setDeletePassword("");
+          addAccountActivity("Account deletion requested", "Administrator review is pending");
           setToast({
             type: "warning",
             message: "Account deletion request submitted.",
