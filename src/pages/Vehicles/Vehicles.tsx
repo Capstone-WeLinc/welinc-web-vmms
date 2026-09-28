@@ -17,6 +17,8 @@ import {
 } from "../../components/ui";
 import type { DataTableColumn } from "../../components/ui";
 import { Modal, FormInput } from "../../components/ui";
+import { useAuthStore } from "../../store/authStore";
+import { canManageVehicles } from "../../lib/utils/permissions";
 
 type VehicleStatus = VehicleRecord["status"];
 
@@ -36,6 +38,8 @@ const emptyForm = (): Omit<VehicleRecord, "id"> => ({
 });
 
 export default function Vehicles() {
+  const currentUser = useAuthStore((state) => state.currentUser);
+  const canManage = canManageVehicles(currentUser);
   const [vehicles, setVehicles] = useState<VehicleRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -80,6 +84,7 @@ export default function Vehicles() {
   }, [openMenuId]);
 
   const openCreate = () => {
+    if (!canManage) return;
     setForm(emptyForm());
     setFormError("");
     setModalMode("create");
@@ -88,6 +93,7 @@ export default function Vehicles() {
   };
 
   const openEdit = (v: VehicleRecord) => {
+    if (!canManage) return;
     setForm({ plateNumber: v.plateNumber, model: v.model, odometer: v.odometer, status: v.status, isActive: v.isActive });
     setFormError("");
     setModalMode("edit");
@@ -96,6 +102,7 @@ export default function Vehicles() {
   };
 
   const handleSave = async () => {
+    if (!canManage) return;
     setFormError("");
     if (!form.plateNumber.trim()) { setFormError("Plate number is required."); return; }
     if (!form.model.trim()) { setFormError("Model is required."); return; }
@@ -118,13 +125,14 @@ export default function Vehicles() {
   };
 
   const confirmDelete = (v: VehicleRecord) => {
+    if (!canManage) return;
     setDeleteId(v.id);
     setDeletePlate(v.plateNumber);
     setOpenMenuId(null);
   };
 
   const handleDelete = async () => {
-    if (!deleteId) return;
+    if (!canManage || !deleteId) return;
     try {
       await deleteVehicleRecord(deleteId);
       showToast("Vehicle deleted.");
@@ -215,14 +223,14 @@ export default function Vehicles() {
             <p className="text-sm text-[#64748b]">Manage company trucks and logistics vehicles.</p>
           </div>
         </div>
-        <button
+        {canManage && <button
           id="create-vehicle-btn"
           onClick={openCreate}
           className="flex items-center gap-2 rounded-xl bg-[#070b45] px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-[#11175f]"
         >
           <Plus className="h-4 w-4" />
           Create Vehicle
-        </button>
+        </button>}
       </div>
 
       {/* Table Card */}
@@ -240,7 +248,7 @@ export default function Vehicles() {
           <div className="flex items-center justify-center py-16 text-sm text-[#64748b]">Loading vehicles…</div>
         ) : (
           <DataTable<VehicleRecord>
-            columns={columns}
+            columns={canManage ? columns : columns.filter((column) => column.key !== "actions")}
             data={filtered}
             getRowKey={(v) => v.id}
             emptyMessage="No vehicles found."
@@ -250,7 +258,7 @@ export default function Vehicles() {
 
       {/* Create / Edit Modal */}
       <Modal
-        isOpen={showModal}
+        isOpen={canManage && showModal}
         title={modalMode === "create" ? "Create New Vehicle" : "Edit Vehicle"}
         onClose={() => setShowModal(false)}
         onConfirm={handleSave}
@@ -321,7 +329,7 @@ export default function Vehicles() {
 
       {/* Delete Confirmation */}
       <ConfirmationModal
-        isOpen={!!deleteId}
+        isOpen={canManage && !!deleteId}
         title="Delete Vehicle"
         message={`Are you sure you want to delete vehicle ${deletePlate}? This action cannot be undone.`}
         confirmLabel="Delete"

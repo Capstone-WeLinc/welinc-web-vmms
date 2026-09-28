@@ -1,5 +1,6 @@
 export {
   createMaintenanceSchedule,
+  cancelMaintenanceSchedule,
   deleteMaintenanceSchedule,
   getChecklistTemplates,
   getMaintenanceSchedules,

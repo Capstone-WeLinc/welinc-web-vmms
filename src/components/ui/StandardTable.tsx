@@ -84,6 +84,8 @@ export const ActionButton = ({
 };
 
 interface ConfirmationModalProps {
+  confirmDisabled?: boolean;
+  busy?: boolean;
   isOpen: boolean;
   title?: string;
   message: ReactNode;
@@ -99,6 +101,8 @@ interface ConfirmationModalProps {
 }
 
 export const ConfirmationModal = ({
+  confirmDisabled = false,
+  busy = false,
   isOpen,
   title = "Confirmation",
   message,
@@ -137,10 +141,11 @@ export const ConfirmationModal = ({
           <ActionButton
             variant={variant === "danger" ? "danger" : "primary"}
             onClick={onConfirm}
+            disabled={confirmDisabled || busy}
           >
             {confirmLabel}
           </ActionButton>
-          <ActionButton variant="secondary" onClick={onCancel}>
+          <ActionButton variant="secondary" onClick={onCancel} disabled={busy}>
             {cancelLabel}
           </ActionButton>
         </div>

@@ -2,6 +2,22 @@ function normalizeRoleValue(value?: string | null) {
   return (value ?? "").trim().toUpperCase();
 }
 
+function hasVmmsOperationsRole(user?: {
+  role?: string | null;
+  roles?: Array<{ role?: string | null; system?: string | null }> | null;
+} | null): boolean {
+  if (!user) return false;
+  if (Array.isArray(user.roles)) {
+    const vmmsRoles = user.roles.filter((entry) => entry?.system === "VMMS");
+    return vmmsRoles.length === 1 && vmmsRoles[0].role === "OPERATIONS";
+  }
+  // Local demo users expose a single role rather than subsystem assignments.
+  return normalizeRoleValue(user.role) === "OPERATIONS";
+}
+
+export const canManageVehicles = hasVmmsOperationsRole;
+export const canManageSchedules = hasVmmsOperationsRole;
+
 function extractRoleFromUser(
   value?:
     | string

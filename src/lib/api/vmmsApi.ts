@@ -838,6 +838,15 @@ export async function updateMaintenanceSchedule(schedule: MaintenanceTask) {
   ).then(normalizeMaintenanceTask);
 }
 
+export async function cancelMaintenanceSchedule(schedule: MaintenanceTask, reason: string): Promise<MaintenanceTask> {
+  if (!useMaintenanceScheduleBackend) throw new Error('Cancellation requires a connected backend to record the Operations audit trail.');
+  const result = await fetchJSON<Pick<MaintenanceTask, 'id' | 'status' | 'cancellations'>>(
+    `/maintenance-schedules/${encodeURIComponent(schedule.id)}/cancel`,
+    { method: 'POST', body: JSON.stringify({ reason: reason.trim() }) },
+  );
+  return { ...schedule, ...result };
+}
+
 export async function deleteMaintenanceSchedule(id: string) {
   if (!useMaintenanceScheduleBackend) {
     const schedules = readLocalMaintenanceSchedules();

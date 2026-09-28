@@ -35,6 +35,8 @@ import {
   ToastNotification,
 } from "../../components/ui";
 import CreateSchedule from "./CreateSchedule";
+import { useAuthStore } from "../../store/authStore";
+import { canManageSchedules } from "../../lib/utils/permissions";
 import {
   MaintenanceStatus,
   MaintenanceTriggerType,
@@ -44,6 +46,7 @@ import {
 } from "../../types/maintenance";
 import {
   getMaintenanceSchedules,
+  cancelMaintenanceSchedule,
   deleteMaintenanceSchedule,
   updateMaintenanceSchedule,
 } from "../../lib/api/maintenanceService";
@@ -269,6 +272,8 @@ const getTaskStyle = (status: MaintenanceStatus) => {
 };
 
 const MaintenanceSchedulingCombined = () => {
+  const currentUser = useAuthStore((state) => state.currentUser);
+  const canSchedule = canManageSchedules(currentUser);
   const location = useLocation();
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
@@ -302,6 +307,10 @@ const MaintenanceSchedulingCombined = () => {
   const [selectedSchedulePage, setSelectedSchedulePage] = useState(0);
   const [pendingAction, setPendingAction] =
     useState<PendingScheduleAction | null>(null);
+  const [cancellationReason, setCancellationReason] = useState('');
+  const [actionSaving, setActionSaving] = useState(false);
+  const [actionError, setActionError] = useState('');
+  useEffect(() => { setCancellationReason(''); setActionError(''); }, [pendingAction]);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
 
@@ -324,11 +333,11 @@ const MaintenanceSchedulingCombined = () => {
   }, []);
 
   useEffect(() => {
-    if (new URLSearchParams(location.search).get("create") !== "true") return;
+    if (!canSchedule || new URLSearchParams(location.search).get("create") !== "true") return;
     setEditingTask(null);
     setIsOdometerUpdateOpen(false);
     setIsModalOpen(true);
-  }, [location.search]);
+  }, [location.search, canSchedule]);
 
   useEffect(() => {
     const closeActionMenu = () => setOpenActionMenuId(null);
@@ -542,6 +551,7 @@ const MaintenanceSchedulingCombined = () => {
     isInProgressStatus(task.status);
 
   const openFullScheduleEdit = (task: MaintenanceTask) => {
+    if (!canSchedule) return;
     if (isInProgressScheduleLocked(task)) {
       setToast({
         type: "warning",
@@ -555,6 +565,7 @@ const MaintenanceSchedulingCombined = () => {
   };
 
   const openOdometerUpdate = (task: MaintenanceTask) => {
+    if (!canSchedule) return;
     if (isInProgressScheduleLocked(task)) {
       setToast({
         type: "warning",
@@ -568,6 +579,7 @@ const MaintenanceSchedulingCombined = () => {
   };
 
   const canShowScheduleUpdate = (task: MaintenanceTask) =>
+    canSchedule &&
     !isInProgressScheduleLocked(task) &&
     task.status !== MaintenanceStatus.COMPLETED &&
     task.status !== MaintenanceStatus.CANCELLED &&
@@ -575,27 +587,27 @@ const MaintenanceSchedulingCombined = () => {
       task.triggerType === MaintenanceTriggerType.MANUAL);
 
   const confirmScheduleAction = async () => {
-    if (!pendingAction) return;
+    if (!pendingAction || actionSaving) return;
     const { action, task } = pendingAction;
+    if (action === 'cancel' && !cancellationReason.trim()) return;
+    if (action !== "deactivate" && !canSchedule) return;
 
     if (action === "cancel" && isInProgressScheduleLocked(task)) {
       setToast({
         type: "warning",
-        message: "In-progress schedules cannot be cancelled.",
+        message: "Schedule cannot be cancelled once work has started. Use ‘Extension’ instead.",
       });
       setPendingAction(null);
       return;
     }
 
+    setActionSaving(true);
+    setActionError('');
     try {
       if (action === "cancel" || action === "activate") {
-        const updatedTask = await updateMaintenanceSchedule({
-          ...task,
-          status:
-            action === "cancel"
-              ? MaintenanceStatus.CANCELLED
-              : MaintenanceStatus.PENDING,
-        });
+        const updatedTask = action === 'cancel'
+          ? await cancelMaintenanceSchedule(task, cancellationReason)
+          : await updateMaintenanceSchedule({ ...task, status: MaintenanceStatus.PENDING });
         setTasks((current) =>
           current.map((currentTask) =>
             currentTask.id === task.id ? updatedTask : currentTask,
@@ -618,14 +630,16 @@ const MaintenanceSchedulingCombined = () => {
           message: "Schedule deactivated. Existing work orders and history were retained.",
         });
       }
+      setPendingAction(null);
     } catch (err) {
       console.error(`Failed to ${action} schedule`, err);
+      setActionError(err instanceof Error ? err.message : 'The schedule could not be updated. Please try again.');
       setToast({
         type: "warning",
-        message: `Schedule was not ${action === "cancel" ? "cancelled" : action === "activate" ? "activated" : "deactivated"} because the server update failed.`,
+        message: err instanceof Error ? err.message : 'The schedule could not be updated. Please try again.',
       });
     } finally {
-      setPendingAction(null);
+      setActionSaving(false);
     }
   };
 
@@ -641,7 +655,7 @@ const MaintenanceSchedulingCombined = () => {
         subtitle="Manage and track fleet maintenance schedules and tasks"
       />
 
-      <div className="flex justify-end mb-4">
+      {canSchedule && <div className="flex justify-end mb-4">
         <ActionButton
           variant="primary"
           className="flex items-center gap-2"
@@ -654,7 +668,7 @@ const MaintenanceSchedulingCombined = () => {
           <Plus className="w-4 h-4" />
           <span>{"Create Schedule"}</span>
         </ActionButton>
-      </div>
+      </div>}
 
       <div className="space-y-6">
         <div className="grid gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
@@ -932,7 +946,7 @@ const MaintenanceSchedulingCombined = () => {
                           );
                         }}
                         items={[
-                          ...(!isInProgressScheduleLocked(task)
+                          ...(canSchedule && !isInProgressScheduleLocked(task)
                             ? [{
                                 label: "Edit",
                                 icon: Edit2,
@@ -952,7 +966,7 @@ const MaintenanceSchedulingCombined = () => {
                                 },
                               }]
                             : []),
-                          ...(!isInProgressScheduleLocked(task) &&
+                          ...(canSchedule && !isInProgressScheduleLocked(task) &&
                           task.status !== MaintenanceStatus.CANCELLED
                             ? [{
                                 label: "Cancel",
@@ -963,7 +977,7 @@ const MaintenanceSchedulingCombined = () => {
                                   setPendingAction({ action: "cancel", task });
                                 },
                               }]
-                            : task.status === MaintenanceStatus.CANCELLED
+                            : canSchedule && task.status === MaintenanceStatus.CANCELLED
                             ? [{
                                 label: "Activate",
                                 icon: Power,
@@ -1191,7 +1205,7 @@ const MaintenanceSchedulingCombined = () => {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {!isInProgressScheduleLocked(selectedSchedule) ? (
+                  {canSchedule && !isInProgressScheduleLocked(selectedSchedule) ? (
                     <Button
                       size="sm"
                       onClick={() => {
@@ -1318,6 +1332,13 @@ const MaintenanceSchedulingCombined = () => {
                 </div>
               ))}
 
+            {selectedSchedule.cancellations?.map((entry) => (
+              <div key={entry.id} className="rounded-xl border border-[var(--color-border)] p-4 sm:col-span-2">
+                <p className="font-semibold">Cancellation history</p>
+                <p className="whitespace-pre-wrap">{entry.reason}</p>
+                <p className="text-sm">{entry.actorName} ({entry.actorEmail}) — {new Date(entry.createdAt).toLocaleString()}</p>
+              </div>
+            ))}
             {selectedSchedule.notes && (
               <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4 sm:col-span-2">
                 <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
@@ -1334,7 +1355,7 @@ const MaintenanceSchedulingCombined = () => {
       </Modal>
 
       <CreateSchedule
-        isOpen={isModalOpen}
+        isOpen={canSchedule && isModalOpen}
         editingTask={editingTask ?? undefined}
         odometerOnly={isOdometerUpdateOpen}
         existingSchedules={tasks}
@@ -1374,6 +1395,8 @@ const MaintenanceSchedulingCombined = () => {
 
       <ConfirmationModal
         isOpen={Boolean(pendingAction)}
+        busy={actionSaving}
+        confirmDisabled={pendingAction?.action === 'cancel' && !cancellationReason.trim()}
         variant="danger"
         message={
           pendingAction ? (
@@ -1393,6 +1416,15 @@ const MaintenanceSchedulingCombined = () => {
               <span className="mt-2 block font-bold">
                 {pendingAction.task.title} - {pendingAction.task.vehicleId}
               </span>
+              {pendingAction.action === 'cancel' && (
+                <label className="mt-4 block text-left text-sm">
+                  Cancellation reason (required)
+                  <textarea required maxLength={2000} value={cancellationReason}
+                    disabled={actionSaving} onChange={(event) => setCancellationReason(event.target.value)}
+                    className="mt-2 block w-full rounded border border-gray-300 p-2" rows={3} />
+                </label>
+              )}
+              {actionError && <p role="alert" className="mt-3 text-sm text-red-700">{actionError}</p>}
             </>
           ) : (
             ""

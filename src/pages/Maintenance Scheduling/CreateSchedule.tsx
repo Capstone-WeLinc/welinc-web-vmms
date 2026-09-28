@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useAuthStore } from "../../store/authStore";
+import { canManageSchedules } from "../../lib/utils/permissions";
 import {
   X,
   ClipboardCheck,
@@ -82,6 +84,8 @@ export default function CreateScheduleModal({
   onClose: () => void;
   onSaved?: (task: MaintenanceTask) => void | Promise<void>;
 }) {
+  const currentUser = useAuthStore((state) => state.currentUser);
+  const canSchedule = canManageSchedules(currentUser);
   const [checklistTemplate, setChecklistTemplateName] =
     useState<ChecklistTemplateName>("");
   const [templates, setTemplates] = useState<
@@ -117,7 +121,7 @@ export default function CreateScheduleModal({
   >(MaintenanceTriggerType.ODOMETER);
   const [notes, setNotes] = useState("");
 
-  useBodyScrollLock(isOpen);
+  useBodyScrollLock(isOpen && canSchedule);
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState<{
     type: "success" | "error" | "warning" | "info";
@@ -271,7 +275,8 @@ export default function CreateScheduleModal({
           : []),
       ].every((value) => NON_NEGATIVE_NUMBER_PATTERN.test(value));
 
-  const saveSchedule = async (scheduleToReplace?: MaintenanceTask) => {
+  const saveSchedule = async () => {
+    if (!canSchedule) return;
     setIsSaving(true);
     try {
       const savedGarageId = garageIsOther
@@ -297,9 +302,8 @@ export default function CreateScheduleModal({
         ? ""
         : startingReferenceReadingKm;
 
-      if (scheduleToReplace || editingTask) {
-        const targetSchedule = scheduleToReplace ?? editingTask;
-        if (!targetSchedule) return;
+      if (editingTask) {
+        const targetSchedule = editingTask;
 
         const updated: MaintenanceTask = isOdometerOnlyUpdate
           ? {
@@ -329,14 +333,8 @@ export default function CreateScheduleModal({
               startingReferenceReadingKm: submittedStartingReferenceReadingKm,
               intervalType: submittedIntervalType,
             };
-        try {
-          const saved = await updateMaintenanceSchedule(updated);
-          await onSaved?.(saved);
-        } catch (err) {
-          console.error("Failed to update schedule", err);
-          // fallback to local update
-          await onSaved?.(updated);
-        }
+        const saved = await updateMaintenanceSchedule(updated);
+        await onSaved?.(saved);
       } else {
         const task = await createMaintenanceSchedule({
           vehicleId,
@@ -390,6 +388,7 @@ export default function CreateScheduleModal({
       onClose();
     } catch (error) {
       console.error("Failed to save schedule", error);
+      setToast({ type: "error", message: error instanceof Error ? error.message : "Schedule was not saved. Refresh and try again." });
     } finally {
       setIsSaving(false);
     }
@@ -398,10 +397,13 @@ export default function CreateScheduleModal({
   const handleSaveSchedule = async () => {
     if (!isFormComplete) return;
 
-    const duplicate = isOdometerOnlyUpdate
+    // The server also checks persisted Pending status (display status may be
+    // calculated as Due Soon/Overdue) and protects against concurrent saves.
+    const duplicate = isOdometerOnlyUpdate || (editingTask && editingTask.status !== MaintenanceStatus.PENDING)
       ? null
       : existingSchedules.find(
       (schedule) =>
+        schedule.status === MaintenanceStatus.PENDING &&
         schedule.id !== editingTask?.id &&
         schedule.vehicleId.trim().toLowerCase() ===
           vehicleId.trim().toLowerCase() &&
@@ -506,7 +508,7 @@ export default function CreateScheduleModal({
   };
 
   */
-  if (!isOpen) return null;
+  if (!isOpen || !canSchedule) return null;
 
   return (
     <div className="modal-overlay p-4 backdrop-blur-sm">
@@ -1258,7 +1260,9 @@ export default function CreateScheduleModal({
               Existing Maintenance Schedule
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)]">
-              A schedule already exists for{" "}
+              A pending schedule of this type already exists for this truck
+            </p>
+            <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
               <span className="font-semibold text-[var(--color-text-primary)]">
                 {duplicateSchedule.vehicleId}
               </span>{" "}
@@ -1291,14 +1295,6 @@ export default function CreateScheduleModal({
                 className="rounded-xl px-4 py-2 text-sm font-medium border border-[var(--color-border)] text-[var(--color-text-primary)] transition hover:bg-[var(--color-card-bg-hover)] disabled:opacity-50"
               >
                 Continue Editing
-              </button>
-              <button
-                type="button"
-                onClick={() => void saveSchedule(duplicateSchedule)}
-                disabled={isSaving}
-                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-50"
-              >
-                {isSaving ? "Replacing..." : "Replace"}
               </button>
             </div>
           </div>
