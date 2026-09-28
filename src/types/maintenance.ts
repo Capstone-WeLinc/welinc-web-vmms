@@ -68,6 +68,10 @@ export const maintenanceIntervalTypeLabels: Record<MaintenanceIntervalType, stri
 };
 
 export interface MaintenanceTask {
+  startDate?: string | null;
+  checklistTemplateId?: string | null;
+  dueDate?: string | null;
+  dueOdometer?: number | null;
   cancellations?: { id: string; actorId: string; actorName: string; actorEmail: string; reason: string; previousStatus: string; createdAt: string }[];
   id: string;
   vehicleId: string;

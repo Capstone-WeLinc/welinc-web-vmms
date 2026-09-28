@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuthStore } from "../../store/authStore";
 import { canManageSchedules } from "../../lib/utils/permissions";
+import { philippineToday, scheduleStartDateError } from "../../lib/utils/scheduleStartDate";
 import {
   X,
   ClipboardCheck,
@@ -13,6 +14,7 @@ import {
   createMaintenanceSchedule,
   updateMaintenanceSchedule,
   getChecklistTemplates,
+  getChecklistTemplateId,
 } from "../../lib/api/maintenanceService";
 import {
   getUsers,
@@ -94,6 +96,7 @@ export default function CreateScheduleModal({
   const [isTemplatesLoading, setIsTemplatesLoading] = useState(true);
   const [vehicleId, setVehicleId] = useState("");
   const [startReferenceDate, setStartReferenceDate] = useState("");
+  const [startDate, setStartDate] = useState('');
   const [assignedMechanic, setAssignedMechanic] = useState("");
   const [mechanics, setMechanics] = useState<UserRecord[]>([]);
   const [chiefMechanicId, setChiefMechanicId] = useState("");
@@ -165,6 +168,7 @@ export default function CreateScheduleModal({
       requestAnimationFrame(() => {
         if (editingTask) {
           setVehicleId(editingTask.vehicleId);
+          setStartDate(editingTask.startDate ?? '');
           setChecklistTemplateName(editingTask.title);
           setAssignedMechanic(editingTask.assignedDriver ?? "");
           setChiefMechanicId(editingTask.chiefMechanicId ?? "");
@@ -199,6 +203,7 @@ export default function CreateScheduleModal({
 
         } else {
           // Reset all fields for new schedule
+          setStartDate('');
           setVehicleId("");
           setChecklistTemplateName("");
           setAssignedMechanic("");
@@ -263,7 +268,8 @@ export default function CreateScheduleModal({
       ? [intervalTypeState, startReferenceDate]
       : []),
   ];
-  const isFormComplete = isOdometerOnlyUpdate
+  const startDateError = scheduleStartDateError(startDate, editingTask?.startDate);
+  const isFormComplete = !startDateError && (isOdometerOnlyUpdate
     ? odometerReading.trim().length > 0 &&
       NON_NEGATIVE_NUMBER_PATTERN.test(odometerReading)
     : requiredFieldValues.every((value) => value.trim().length > 0) &&
@@ -273,12 +279,17 @@ export default function CreateScheduleModal({
         ...(triggerType !== MaintenanceTriggerType.TIME
           ? [intervalKm, bufferDistanceKm, startingReferenceReadingKm]
           : []),
-      ].every((value) => NON_NEGATIVE_NUMBER_PATTERN.test(value));
+      ].every((value) => NON_NEGATIVE_NUMBER_PATTERN.test(value)));
 
   const saveSchedule = async () => {
     if (!canSchedule) return;
+    const dateError = scheduleStartDateError(startDate, editingTask?.startDate);
+    if (dateError) { setToast({ type: 'error', message: dateError }); return; }
     setIsSaving(true);
     try {
+      const checklistTemplateId = isOdometerOnlyUpdate && editingTask?.checklistTemplateId
+        ? editingTask.checklistTemplateId
+        : await getChecklistTemplateId(checklistTemplate);
       const savedGarageId = garageIsOther
         ? otherGarageValue.trim()
         : garageId;
@@ -308,12 +319,16 @@ export default function CreateScheduleModal({
         const updated: MaintenanceTask = isOdometerOnlyUpdate
           ? {
               ...targetSchedule,
+              startDate,
               odometerReading,
+              checklistTemplateId,
             }
           : {
               ...targetSchedule,
               vehicleId,
+              startDate,
               title: checklistTemplate,
+              checklistTemplateId,
               assignedDriver: assignedMechanic,
               assignedMechanicId: selectedMechanic?.id,
               assignedMechanicEmail: selectedMechanic?.email,
@@ -337,8 +352,10 @@ export default function CreateScheduleModal({
         await onSaved?.(saved);
       } else {
         const task = await createMaintenanceSchedule({
+          startDate,
           vehicleId,
           title: checklistTemplate,
+          checklistTemplateId,
           status: MaintenanceStatus.PENDING,
           date: getTodayDateText(),
           assignedDriver: assignedMechanic,
@@ -364,6 +381,7 @@ export default function CreateScheduleModal({
       }
 
       // Reset form state
+      setStartDate('');
       setVehicleId("");
       setChecklistTemplateName("");
       setAssignedMechanic("");
@@ -538,6 +556,15 @@ export default function CreateScheduleModal({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
+          <section>
+            <label htmlFor="schedule-start-date" className="mb-1.5 block text-sm font-medium">Start date (required)</label>
+            <input id="schedule-start-date" type="date" required value={startDate}
+              min={startDate === editingTask?.startDate ? undefined : philippineToday()}
+              onChange={(event) => setStartDate(event.target.value)}
+              aria-invalid={Boolean(startDateError)} aria-describedby="schedule-start-date-error"
+              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-3" />
+            {startDateError && <p id="schedule-start-date-error" role="alert" className="mt-1 text-sm text-red-600">{startDateError}</p>}
+          </section>
           {isOdometerOnlyUpdate ? (
             <section className="space-y-4 border-b border-[var(--color-border)] pb-6">
               <div className="mb-4 flex items-center gap-3">

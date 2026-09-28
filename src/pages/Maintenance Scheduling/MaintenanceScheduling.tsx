@@ -450,10 +450,10 @@ const MaintenanceSchedulingCombined = () => {
       const templateMatches =
         checklistTemplateFilter === "All" ||
         task.title === checklistTemplateFilter;
-      const dateMatches =
-        dateFilter(new Date(task.date)) &&
-        (!dateFromFilter || task.date >= dateFromFilter) &&
-        (!dateToFilter || task.date <= dateToFilter);
+      const candidateDates = viewMode === 'calendar' ? [task.startDate, task.dueDate] : [task.startDate];
+      const dateMatches = (dateRangeFilter === 'All' && !dateFromFilter && !dateToFilter) ||
+        candidateDates.some((date) => date && dateFilter(new Date(`${date}T00:00:00`)) &&
+          (!dateFromFilter || date >= dateFromFilter) && (!dateToFilter || date <= dateToFilter));
       const searchMatches =
         task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         task.vehicleId.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -471,7 +471,7 @@ const MaintenanceSchedulingCombined = () => {
       );
     })
     .sort((left, right) => {
-      const dateComparison = left.date.localeCompare(right.date);
+      const dateComparison = (left.startDate ?? '').localeCompare(right.startDate ?? '');
       if (dateComparison !== 0) {
         return dateSortDirection === "asc" ? dateComparison : -dateComparison;
       }
@@ -908,7 +908,7 @@ const MaintenanceSchedulingCombined = () => {
                         }}
                         className="inline-flex items-center gap-2 uppercase tracking-wide hover:text-white/80"
                       >
-                        <span>Date Created</span>
+                        <span>Start Date</span>
                         {dateSortDirection === "asc" ? (
                           <ArrowUp className="h-3.5 w-3.5" />
                         ) : (
@@ -917,7 +917,7 @@ const MaintenanceSchedulingCombined = () => {
                       </button>
                     ),
                     width: "12%",
-                    render: (task) => task.date,
+                    render: (task) => task.startDate || 'Not recorded',
                   },
                   {
                     key: "mechanic",
@@ -1059,7 +1059,7 @@ const MaintenanceSchedulingCombined = () => {
               <div className="grid grid-cols-7 gap-1 sm:gap-2">
                 {calendarCells.map((cell, idx) => {
                   const schedulesForDay = filteredTasks.filter(
-                    (task) => task.date === cell.dateStr,
+                    (task) => Boolean(cell.dateStr) && (task.startDate === cell.dateStr || task.dueDate === cell.dateStr),
                   );
                   const isToday = Boolean(cell.dateStr) && cell.dateStr === formatLocalDate(today);
                   const visibleSchedules = schedulesForDay.slice(0, 2);
@@ -1114,6 +1114,7 @@ const MaintenanceSchedulingCombined = () => {
                                 className={`block w-full rounded-md px-2 py-1.5 text-left transition hover:brightness-105 ${getTaskStyle(task.status)}`}
                               >
                                 <span className="block truncate text-[11px] font-bold">
+                                  {task.startDate === cell.dateStr ? 'Start' : 'Due'}{task.startDate === cell.dateStr && task.dueDate === cell.dateStr ? ' / Due' : ''}: {' '}
                                   {formatWorkOrderNumber(task.id)}
                                 </span>
                                 <span className="block truncate text-[11px]">
@@ -1250,6 +1251,9 @@ const MaintenanceSchedulingCombined = () => {
                     : "Not specified",
               },
               { label: "Date Created", value: selectedSchedule.date },
+              { label: "Start Date", value: selectedSchedule.startDate || 'Not recorded' },
+              { label: "Due Date", value: selectedSchedule.dueDate },
+              { label: "Due Odometer", value: selectedSchedule.dueOdometer != null ? `${selectedSchedule.dueOdometer} km` : undefined },
               { label: "Mechanic", value: selectedSchedule.assignedDriver },
               {
                 label: "Chief Mechanic",

@@ -689,6 +689,15 @@ export async function getChecklistTemplates() {
   );
 }
 
+export async function getChecklistTemplateId(type: string): Promise<string | undefined> {
+  if (!useBackend) return undefined;
+  const template = await fetchJSON<{ id: string; items: ChecklistItemTemplate[] } | null>(
+    `/checklists/type/${encodeURIComponent(type)}`,
+  );
+  if (!template?.id || !template.items?.length) throw new Error('The selected checklist is unavailable or empty. Refresh the templates and try again.');
+  return template.id;
+}
+
 export async function saveChecklistTemplates(
   templates: Record<ChecklistTemplateName, ChecklistItemTemplate[]>,
 ) {
@@ -773,6 +782,8 @@ export async function createMaintenanceSchedule(
 
   // Backend expects a narrower DTO — only send supported fields
   const payload = {
+    startDate: schedule.startDate,
+    checklistTemplateId: schedule.checklistTemplateId,
     vehicleId: schedule.vehicleId,
     title: schedule.title,
     assignedDriver: schedule.assignedDriver,
@@ -812,6 +823,8 @@ export async function updateMaintenanceSchedule(schedule: MaintenanceTask) {
   }
 
   const payload = {
+    startDate: schedule.startDate,
+    checklistTemplateId: schedule.checklistTemplateId,
     vehicleId: schedule.vehicleId,
     title: schedule.title,
     assignedDriver: schedule.assignedDriver,

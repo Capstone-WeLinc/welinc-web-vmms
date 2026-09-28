@@ -3,6 +3,7 @@ export {
   cancelMaintenanceSchedule,
   deleteMaintenanceSchedule,
   getChecklistTemplates,
+  getChecklistTemplateId,
   getMaintenanceSchedules,
   getWorkOrders,
   saveChecklistTemplates,
