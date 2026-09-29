@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useAuthStore } from "../../store/authStore";
 import { canManageSchedules } from "../../lib/utils/permissions";
 import { philippineToday, scheduleStartDateError } from "../../lib/utils/scheduleStartDate";
+import { scheduleMileageError } from "../../lib/utils/scheduleMileage";
+import { timeIntervalFields, timeIntervalError } from "../../lib/utils/timeInterval";
 import {
   X,
   ClipboardCheck,
@@ -32,10 +34,8 @@ import { getOdometerActivationRange } from "../../lib/utils/workOrders";
 import {
   AccountType,
   accountTypeLabels,
-  MaintenanceIntervalType,
   MaintenanceStatus,
   MaintenanceTriggerType,
-  maintenanceIntervalTypeLabels,
   maintenanceTriggerTypeLabels,
   type MaintenanceTask,
 } from "../../types/maintenance";
@@ -48,20 +48,11 @@ interface ChecklistItemTemplate {
 }
 
 const OTHER_GARAGE_VALUE = "__other__";
-const NON_NEGATIVE_NUMBER_PATTERN = /^\d+(?:\.\d+)?$/;
+const NON_NEGATIVE_NUMBER_PATTERN = /^\d+$/;
 const ACCOUNT_TYPE_OPTIONS = [
   AccountType.IN_HOUSE,
   AccountType.OUTSOURCED,
 ] as const;
-
-const sanitizeNonNegativeNumber = (value: string) => {
-  const sanitized = value.replace(/[^\d.]/g, "");
-  const [wholeNumber, ...decimalParts] = sanitized.split(".");
-
-  return decimalParts.length > 0
-    ? `${wholeNumber}.${decimalParts.join("")}`
-    : wholeNumber;
-};
 
 const getTodayDateText = () => {
   const today = new Date();
@@ -116,9 +107,8 @@ export default function CreateScheduleModal({
   const [bufferDistanceKm, setBufferDistanceKm] = useState("");
   const [startingReferenceReadingKm, setStartingReferenceReadingKm] =
     useState("");
-  const [intervalTypeState, setIntervalTypeState] = useState<
-    MaintenanceIntervalType | ""
-  >("");
+  const [timeIntervalValue, setTimeIntervalValue] = useState('3');
+  const [timeIntervalUnit, setTimeIntervalUnit] = useState<'DAYS' | 'MONTHS'>('MONTHS');
   const [triggerType, setTriggerType] = useState<
     MaintenanceTriggerType
   >(MaintenanceTriggerType.ODOMETER);
@@ -194,12 +184,9 @@ export default function CreateScheduleModal({
             editingTask.startingReferenceReadingKm ?? "",
           );
 
-          const it = editingTask.intervalType;
-          if (it && Object.values(MaintenanceIntervalType).includes(it)) {
-            setIntervalTypeState(it);
-          } else {
-            setIntervalTypeState("");
-          }
+          const interval = timeIntervalFields(editingTask);
+          setTimeIntervalValue(String(interval.value));
+          setTimeIntervalUnit(interval.unit);
 
         } else {
           // Reset all fields for new schedule
@@ -222,7 +209,8 @@ export default function CreateScheduleModal({
           setIntervalKm("");
           setBufferDistanceKm("");
           setStartingReferenceReadingKm("");
-          setIntervalTypeState("");
+          setTimeIntervalValue('3');
+          setTimeIntervalUnit('MONTHS');
         }
       });
     }
@@ -265,13 +253,20 @@ export default function CreateScheduleModal({
       ? [intervalKm, bufferDistanceKm, startingReferenceReadingKm]
       : []),
     ...(triggerType !== MaintenanceTriggerType.ODOMETER
-      ? [intervalTypeState, startReferenceDate]
+      ? [timeIntervalValue, timeIntervalUnit, startReferenceDate]
       : []),
   ];
   const startDateError = scheduleStartDateError(startDate, editingTask?.startDate);
-  const isFormComplete = !startDateError && (isOdometerOnlyUpdate
+  const mileageError = scheduleMileageError({
+    vehicleId, title: checklistTemplate, triggerType, odometerReading,
+    intervalKm: triggerType === MaintenanceTriggerType.TIME ? '' : intervalKm,
+    bufferDistanceKm: triggerType === MaintenanceTriggerType.TIME ? '' : bufferDistanceKm,
+    startingReferenceReadingKm: triggerType === MaintenanceTriggerType.TIME ? '' : startingReferenceReadingKm,
+  }, vehicles.find((vehicle) => vehicle.value === vehicleId)?.odometer, editingTask);
+  const intervalError = triggerType === MaintenanceTriggerType.TIME ? timeIntervalError(timeIntervalValue, timeIntervalUnit) : '';
+  const isFormComplete = !startDateError && !mileageError && !intervalError && (isOdometerOnlyUpdate
     ? odometerReading.trim().length > 0 &&
-      NON_NEGATIVE_NUMBER_PATTERN.test(odometerReading)
+      NON_NEGATIVE_NUMBER_PATTERN.test(odometerReading.trim())
     : requiredFieldValues.every((value) => value.trim().length > 0) &&
       isSelectedTemplateUsable &&
       [
@@ -279,12 +274,14 @@ export default function CreateScheduleModal({
         ...(triggerType !== MaintenanceTriggerType.TIME
           ? [intervalKm, bufferDistanceKm, startingReferenceReadingKm]
           : []),
-      ].every((value) => NON_NEGATIVE_NUMBER_PATTERN.test(value)));
+      ].every((value) => NON_NEGATIVE_NUMBER_PATTERN.test(value.trim())));
 
   const saveSchedule = async () => {
     if (!canSchedule) return;
     const dateError = scheduleStartDateError(startDate, editingTask?.startDate);
     if (dateError) { setToast({ type: 'error', message: dateError }); return; }
+    if (mileageError) { setToast({ type: 'error', message: mileageError }); return; }
+    if (intervalError) { setToast({ type: 'error', message: intervalError }); return; }
     setIsSaving(true);
     try {
       const checklistTemplateId = isOdometerOnlyUpdate && editingTask?.checklistTemplateId
@@ -304,9 +301,7 @@ export default function CreateScheduleModal({
 
       const isTimeBased = triggerType === MaintenanceTriggerType.TIME;
       const submittedStartReferenceDate = isTimeBased ? startReferenceDate : "";
-      const submittedIntervalType = isTimeBased
-        ? intervalTypeState || undefined
-        : undefined;
+      const timeConfig = isTimeBased ? { timeIntervalValue: Number(timeIntervalValue), timeIntervalUnit } : {};
       const submittedIntervalKm = isTimeBased ? "" : intervalKm;
       const submittedBufferDistanceKm = isTimeBased ? "" : bufferDistanceKm;
       const submittedStartingReferenceReadingKm = isTimeBased
@@ -346,7 +341,7 @@ export default function CreateScheduleModal({
               intervalKm: submittedIntervalKm,
               bufferDistanceKm: submittedBufferDistanceKm,
               startingReferenceReadingKm: submittedStartingReferenceReadingKm,
-              intervalType: submittedIntervalType,
+              ...timeConfig,
             };
         const saved = await updateMaintenanceSchedule(updated);
         await onSaved?.(saved);
@@ -375,7 +370,7 @@ export default function CreateScheduleModal({
           intervalKm: submittedIntervalKm,
           bufferDistanceKm: submittedBufferDistanceKm,
           startingReferenceReadingKm: submittedStartingReferenceReadingKm,
-          intervalType: submittedIntervalType,
+          ...timeConfig,
         });
         await onSaved?.(task);
       }
@@ -400,7 +395,8 @@ export default function CreateScheduleModal({
       setIntervalKm("");
       setBufferDistanceKm("");
       setStartingReferenceReadingKm("");
-      setIntervalTypeState("");
+      setTimeIntervalValue('3');
+      setTimeIntervalUnit('MONTHS');
       setDuplicateSchedule(null);
 
       onClose();
@@ -565,6 +561,8 @@ export default function CreateScheduleModal({
               className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-3" />
             {startDateError && <p id="schedule-start-date-error" role="alert" className="mt-1 text-sm text-red-600">{startDateError}</p>}
           </section>
+          {mileageError && <p role="alert" className="text-sm text-red-600">{mileageError}</p>}
+          {intervalError && <p role="alert" className="text-sm text-red-600">{intervalError}</p>}
           {isOdometerOnlyUpdate ? (
             <section className="space-y-4 border-b border-[var(--color-border)] pb-6">
               <div className="mb-4 flex items-center gap-3">
@@ -615,12 +613,12 @@ export default function CreateScheduleModal({
                   </label>
                   <input
                     type="text"
-                    inputMode="decimal"
+                    inputMode="numeric"
                     placeholder="e.g., 12000"
                     value={odometerReading}
                     onChange={(e) =>
                       setOdometerReading(
-                        sanitizeNonNegativeNumber(e.target.value),
+                        e.target.value,
                       )
                     }
                     className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
@@ -693,12 +691,12 @@ export default function CreateScheduleModal({
                   </label>
                   <input
                     type="text"
-                    inputMode="decimal"
+                    inputMode="numeric"
                     placeholder="e.g., 12000"
                     value={odometerReading}
                     onChange={(e) =>
                       setOdometerReading(
-                        sanitizeNonNegativeNumber(e.target.value),
+                        e.target.value,
                       )
                     }
                     className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
@@ -867,11 +865,11 @@ export default function CreateScheduleModal({
                 </label>
                 <input
                   type="text"
-                  inputMode="decimal"
+                  inputMode="numeric"
                   placeholder="e.g., 5000"
                   value={intervalKm}
                   onChange={(e) =>
-                    setIntervalKm(sanitizeNonNegativeNumber(e.target.value))
+                    setIntervalKm(e.target.value)
                   }
                   disabled={triggerType === MaintenanceTriggerType.TIME}
                   className={`w-full rounded-md border px-3 py-2 text-sm placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 ${
@@ -894,12 +892,12 @@ export default function CreateScheduleModal({
                 </label>
                 <input
                   type="text"
-                  inputMode="decimal"
+                  inputMode="numeric"
                   placeholder="e.g., 500"
                   value={bufferDistanceKm}
                   onChange={(e) =>
                     setBufferDistanceKm(
-                      sanitizeNonNegativeNumber(e.target.value),
+                      e.target.value,
                     )
                   }
                   disabled={triggerType === MaintenanceTriggerType.TIME}
@@ -923,12 +921,12 @@ export default function CreateScheduleModal({
                 </label>
                 <input
                   type="text"
-                  inputMode="decimal"
+                  inputMode="numeric"
                   placeholder="e.g., 12000"
                   value={startingReferenceReadingKm}
                   onChange={(e) =>
                     setStartingReferenceReadingKm(
-                      sanitizeNonNegativeNumber(e.target.value),
+                      e.target.value,
                     )
                   }
                   disabled={triggerType === MaintenanceTriggerType.TIME}
@@ -950,7 +948,7 @@ export default function CreateScheduleModal({
                 }}
               >
                 <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-                  INTERVAL TYPE
+                  TIME INTERVAL
                 </label>
                 <div
                   className="relative"
@@ -960,12 +958,16 @@ export default function CreateScheduleModal({
                     }
                   }}
                 >
+                  <input aria-label="Time interval value" type="text" inputMode="numeric"
+                    value={timeIntervalValue} onChange={(event) => setTimeIntervalValue(event.target.value)}
+                    disabled={triggerType !== MaintenanceTriggerType.TIME} className="mb-2 w-full rounded border border-[var(--color-border)] bg-[var(--color-input-bg)] p-2" />
                   <select
                     disabled={triggerType === MaintenanceTriggerType.ODOMETER}
-                    value={intervalTypeState}
+                    aria-label="Time interval unit"
+                    value={timeIntervalUnit}
                     onChange={(e) =>
-                      setIntervalTypeState(
-                        e.target.value as MaintenanceIntervalType | "",
+                      setTimeIntervalUnit(
+                        e.target.value as 'DAYS' | 'MONTHS',
                       )
                     }
                     className={`select-control w-full appearance-none rounded-md border px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 ${
@@ -974,27 +976,8 @@ export default function CreateScheduleModal({
                         : "border-[var(--color-border)] bg-[var(--color-input-bg)]"
                     }`}
                   >
-                    <option value="" disabled>
-                      Select type
-                    </option>
-                    <option value={MaintenanceIntervalType.DAILY}>
-                      {maintenanceIntervalTypeLabels[MaintenanceIntervalType.DAILY]}
-                    </option>
-                    <option value={MaintenanceIntervalType.WEEKLY}>
-                      {maintenanceIntervalTypeLabels[MaintenanceIntervalType.WEEKLY]}
-                    </option>
-                    <option value={MaintenanceIntervalType.MONTHLY}>
-                      {maintenanceIntervalTypeLabels[MaintenanceIntervalType.MONTHLY]}
-                    </option>
-                    <option value={MaintenanceIntervalType.QUARTERLY}>
-                      {maintenanceIntervalTypeLabels[MaintenanceIntervalType.QUARTERLY]}
-                    </option>
-                    <option value={MaintenanceIntervalType.SEMI_ANNUALLY}>
-                      {maintenanceIntervalTypeLabels[MaintenanceIntervalType.SEMI_ANNUALLY]}
-                    </option>
-                    <option value={MaintenanceIntervalType.ANNUALLY}>
-                      {maintenanceIntervalTypeLabels[MaintenanceIntervalType.ANNUALLY]}
-                    </option>
+                    <option value="DAYS">Days</option>
+                    <option value="MONTHS">Months</option>
                   </select>
                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--color-text-secondary)]">
                     <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">

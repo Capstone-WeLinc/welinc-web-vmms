@@ -37,6 +37,7 @@ import {
 import CreateSchedule from "./CreateSchedule";
 import { useAuthStore } from "../../store/authStore";
 import { canManageSchedules } from "../../lib/utils/permissions";
+import { timeIntervalFields } from '../../lib/utils/timeInterval';
 import {
   MaintenanceStatus,
   MaintenanceTriggerType,
@@ -1282,7 +1283,7 @@ const MaintenanceSchedulingCombined = () => {
                 label: "Interval Type",
                 value:
                   selectedSchedule.triggerType === MaintenanceTriggerType.TIME
-                    ? selectedSchedule.intervalType
+                    ? `${timeIntervalFields(selectedSchedule).value} ${timeIntervalFields(selectedSchedule).unit.toLowerCase()}`
                     : undefined,
               },
               {

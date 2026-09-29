@@ -52,6 +52,7 @@ import {
   getCalculatedMaintenanceStatus,
   getOdometerActivationRange,
   getTimeBasedActivationDate,
+  isDoneStatus,
   isDueStatus,
   isInProgressStatus,
   isOverdueStatus,
@@ -392,6 +393,7 @@ export default function WorkOrders() {
       (isPendingStatus(task.status) ||
         isDueStatus(task.status) ||
         isInProgressStatus(task.status) ||
+        isDoneStatus(task.status) ||
         isOverdueStatus(task.status)) &&
       isAssignedToCurrentMechanic(task),
   );
@@ -404,6 +406,7 @@ export default function WorkOrders() {
           (status === MaintenanceStatus.PENDING && isPendingStatus(t.status)) ||
           (status === MaintenanceStatus.DUE && isDueStatus(t.status)) ||
           (status === MaintenanceStatus.IN_PROGRESS && isInProgressStatus(t.status)) ||
+          (status === MaintenanceStatus.DONE && isDoneStatus(t.status)) ||
           (status === MaintenanceStatus.OVERDUE && isOverdueStatus(t.status)),
       ),
     );
@@ -539,6 +542,7 @@ export default function WorkOrders() {
   const canModifySelectedTask =
     isMechanic &&
     Boolean(selectedTask) &&
+    selectedTask?.status !== MaintenanceStatus.DONE &&
     selectedTask?.status !== MaintenanceStatus.COMPLETED &&
     canMechanicStartTask;
 
@@ -1130,6 +1134,7 @@ export default function WorkOrders() {
     MaintenanceStatus.PENDING,
     MaintenanceStatus.DUE,
     MaintenanceStatus.IN_PROGRESS,
+    MaintenanceStatus.DONE,
     MaintenanceStatus.OVERDUE,
   ];
 

@@ -77,6 +77,7 @@ function parseAiSummary(raw: string): AiBlock[] {
   // Normalise line endings and strip markdown heading hashes
   const text = raw
     .replace(/\r\n?/g, "\n")
+    .replace(/\$/g, "₱")
     .replace(/^#{1,6}\s+/gm, "")
     .trim();
 

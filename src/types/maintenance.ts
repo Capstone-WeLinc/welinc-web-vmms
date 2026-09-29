@@ -9,6 +9,7 @@ export const MaintenanceStatus = {
   PENDING: "PENDING",
   DUE: "DUE",
   IN_PROGRESS: "IN_PROGRESS",
+  DONE: "DONE",
   COMPLETED: "COMPLETED",
   OVERDUE: "OVERDUE",
   CANCELLED: "CANCELLED",
@@ -42,6 +43,7 @@ export const maintenanceStatusLabels: Record<MaintenanceStatus, string> = {
   [MaintenanceStatus.PENDING]: "Pending",
   [MaintenanceStatus.DUE]: "Due",
   [MaintenanceStatus.IN_PROGRESS]: "In Progress",
+  [MaintenanceStatus.DONE]: "Awaiting Review",
   [MaintenanceStatus.COMPLETED]: "Completed",
   [MaintenanceStatus.OVERDUE]: "Overdue",
   [MaintenanceStatus.CANCELLED]: "Cancelled",
@@ -68,6 +70,8 @@ export const maintenanceIntervalTypeLabels: Record<MaintenanceIntervalType, stri
 };
 
 export interface MaintenanceTask {
+  timeIntervalValue?: number | null;
+  timeIntervalUnit?: 'DAYS' | 'MONTHS' | null;
   startDate?: string | null;
   checklistTemplateId?: string | null;
   dueDate?: string | null;

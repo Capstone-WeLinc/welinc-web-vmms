@@ -782,6 +782,8 @@ export async function createMaintenanceSchedule(
 
   // Backend expects a narrower DTO — only send supported fields
   const payload = {
+    timeIntervalValue: schedule.timeIntervalValue,
+    timeIntervalUnit: schedule.timeIntervalUnit,
     startDate: schedule.startDate,
     checklistTemplateId: schedule.checklistTemplateId,
     vehicleId: schedule.vehicleId,
@@ -823,6 +825,8 @@ export async function updateMaintenanceSchedule(schedule: MaintenanceTask) {
   }
 
   const payload = {
+    timeIntervalValue: schedule.timeIntervalValue,
+    timeIntervalUnit: schedule.timeIntervalUnit,
     startDate: schedule.startDate,
     checklistTemplateId: schedule.checklistTemplateId,
     vehicleId: schedule.vehicleId,
