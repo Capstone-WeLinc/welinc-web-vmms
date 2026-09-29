@@ -263,6 +263,13 @@ export default function CreateScheduleModal({
     bufferDistanceKm: triggerType === MaintenanceTriggerType.TIME ? '' : bufferDistanceKm,
     startingReferenceReadingKm: triggerType === MaintenanceTriggerType.TIME ? '' : startingReferenceReadingKm,
   }, vehicles.find((vehicle) => vehicle.value === vehicleId)?.odometer, editingTask);
+  const startingReferenceReadingError = mileageError ===
+    'A non-negative starting reference reading is required for odometer scheduling.'
+    ? mileageError
+    : '';
+  const maintenanceIntervalError = mileageError === 'Maintenance interval must be greater than zero.'
+    ? mileageError
+    : '';
   const intervalError = triggerType === MaintenanceTriggerType.TIME ? timeIntervalError(timeIntervalValue, timeIntervalUnit) : '';
   const isFormComplete = !startDateError && !mileageError && !intervalError && (isOdometerOnlyUpdate
     ? odometerReading.trim().length > 0 &&
@@ -561,7 +568,7 @@ export default function CreateScheduleModal({
               className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-3" />
             {startDateError && <p id="schedule-start-date-error" role="alert" className="mt-1 text-sm text-red-600">{startDateError}</p>}
           </section>
-          {mileageError && <p role="alert" className="text-sm text-red-600">{mileageError}</p>}
+          {mileageError && !startingReferenceReadingError && !maintenanceIntervalError && <p role="alert" className="text-sm text-red-600">{mileageError}</p>}
           {intervalError && <p role="alert" className="text-sm text-red-600">{intervalError}</p>}
           {isOdometerOnlyUpdate ? (
             <section className="space-y-4 border-b border-[var(--color-border)] pb-6">
@@ -864,10 +871,13 @@ export default function CreateScheduleModal({
                   INTERVAL (km)
                 </label>
                 <input
+                  id="schedule-interval-km"
                   type="text"
                   inputMode="numeric"
                   placeholder="e.g., 5000"
                   value={intervalKm}
+                  aria-invalid={Boolean(maintenanceIntervalError)}
+                  aria-describedby={maintenanceIntervalError ? "schedule-interval-km-error" : undefined}
                   onChange={(e) =>
                     setIntervalKm(e.target.value)
                   }
@@ -878,6 +888,11 @@ export default function CreateScheduleModal({
                       : "border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-primary)]"
                   }`}
                 />
+                {maintenanceIntervalError && (
+                  <p id="schedule-interval-km-error" role="alert" className="mt-1 text-sm text-red-600">
+                    {maintenanceIntervalError}
+                  </p>
+                )}
               </div>
               <div
                 className="flex h-full flex-col"
@@ -920,10 +935,13 @@ export default function CreateScheduleModal({
                   STARTING REFERENCE READING(km)
                 </label>
                 <input
+                  id="schedule-starting-reference-reading"
                   type="text"
                   inputMode="numeric"
                   placeholder="e.g., 12000"
                   value={startingReferenceReadingKm}
+                  aria-invalid={Boolean(startingReferenceReadingError)}
+                  aria-describedby={startingReferenceReadingError ? "schedule-starting-reference-reading-error" : undefined}
                   onChange={(e) =>
                     setStartingReferenceReadingKm(
                       e.target.value,
@@ -936,6 +954,11 @@ export default function CreateScheduleModal({
                       : "border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-primary)]"
                   }`}
                 />
+                {startingReferenceReadingError && (
+                  <p id="schedule-starting-reference-reading-error" role="alert" className="mt-1 text-sm text-red-600">
+                    {startingReferenceReadingError}
+                  </p>
+                )}
               </div>
             </div>
 

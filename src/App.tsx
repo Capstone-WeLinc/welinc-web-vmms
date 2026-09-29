@@ -138,6 +138,7 @@ function App() {
         "/maintenance-logs",
         "/profile",
         "/maintenance-reports",
+        "/ai-analytics",
         "/fuel-management",
         "/vehicles",
         "/garages",

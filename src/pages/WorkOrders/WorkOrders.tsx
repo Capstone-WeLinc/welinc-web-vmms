@@ -510,7 +510,7 @@ export default function WorkOrders() {
     : { done: false, items: [] };
 
   useEffect(() => {
-    if (!selectedTask || !isMechanic) return;
+    if (!selectedTask || !isMechanic || !isInProgressStatus(selectedTask.status)) return;
 
     const checklist = checklists.get(selectedTask.id);
     const execution = executions.get(selectedTask.id);
@@ -604,9 +604,11 @@ export default function WorkOrders() {
     if (selectedTask?.id === taskId) {
       setSelectedTask(updatedTask);
     }
-    updateWorkOrder(updatedTask).catch(() => {
-      // ignore service failure, keep local state
-    });
+    if (!isMechanic) {
+      updateWorkOrder(updatedTask).catch(() => {
+        // ignore service failure, keep local state
+      });
+    }
   };
 
   const detailRef = useRef<HTMLDivElement | null>(null);
@@ -1146,13 +1148,29 @@ export default function WorkOrders() {
     change();
   };
 
-  const confirmStartWorkOrder = () => {
+  const confirmStartWorkOrder = async () => {
     if (!selectedTask || !pendingStartChange) return;
 
-    persistTaskStatus(selectedTask.id, MaintenanceStatus.IN_PROGRESS);
-    pendingStartChange();
-    setPendingStartChange(null);
-    setToast({ type: "success", message: "Work order started successfully." });
+    try {
+      await updateWorkOrderProgress(selectedTask.id, { action: "START" });
+      const startedTask = {
+        ...selectedTask,
+        status: MaintenanceStatus.IN_PROGRESS,
+      };
+      setTasks((prev) =>
+        prev.map((task) => (task.id === startedTask.id ? startedTask : task)),
+      );
+      setSelectedTask(startedTask);
+      pendingStartChange();
+      setPendingStartChange(null);
+      setToast({ type: "success", message: "Work order started successfully." });
+    } catch (error) {
+      console.error("Failed to start work order", error);
+      setToast({
+        type: "error",
+        message: error instanceof Error ? error.message : "Failed to start work order.",
+      });
+    }
   };
 
   const updateExecutionItemStatus = (

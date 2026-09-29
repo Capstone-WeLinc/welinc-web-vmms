@@ -214,7 +214,6 @@ export default function Sidebar({ currentUser }: SidebarProps) {
           "/maintenance-logs",
           "/maintenance-reports",
           "/fuel-management",
-          "/expense-profitability",
           "/ai-analytics",
         ].includes(path);
       }
