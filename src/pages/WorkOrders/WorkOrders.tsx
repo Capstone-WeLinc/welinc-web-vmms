@@ -510,7 +510,7 @@ export default function WorkOrders() {
     : { done: false, items: [] };
 
   useEffect(() => {
-    if (!selectedTask) return;
+    if (!selectedTask || !isMechanic) return;
 
     const checklist = checklists.get(selectedTask.id);
     const execution = executions.get(selectedTask.id);
@@ -532,7 +532,7 @@ export default function WorkOrders() {
     }, 400);
 
     return () => window.clearTimeout(timeout);
-  }, [selectedTask, checklists, executions]);
+  }, [selectedTask, checklists, executions, isMechanic]);
 
   const canMechanicStartTask =
     !selectedTask ||
