@@ -171,6 +171,10 @@ export async function apiRequest<T>(
     return response.json();
   }
 
+  if (/^(image\/|video\/|application\/pdf|application\/octet-stream|text\/plain)/i.test(contentType)) {
+    return response.blob() as Promise<T>;
+  }
+
   const responseText = await response.text();
   return responseText as T;
 }

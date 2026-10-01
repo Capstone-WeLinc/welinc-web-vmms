@@ -37,6 +37,10 @@ import {
   getWorkOrders,
   updateWorkOrder,
   updateWorkOrderProgress,
+  uploadWorkOrderAttachment,
+  deleteWorkOrderAttachment,
+  openWorkOrderAttachment,
+  type WorkOrderAttachment,
 } from "../../lib/api/maintenanceService";
 import { getVehicles, type VehicleOption } from "../../lib/api/vehicleService";
 import { getCurrentUser, type UserRecord } from "../../lib/api/authService";
@@ -48,7 +52,6 @@ import {
 } from "../../lib/api/analyticsService";
 
 import {
-  formatWorkOrderNumber,
   getCalculatedMaintenanceStatus,
   getOdometerActivationRange,
   getTimeBasedActivationDate,
@@ -62,6 +65,7 @@ import {
 } from "../../lib/utils/workOrders";
 import {
   buildBackendWorkOrderProgress,
+  mergeUploadedWorkOrderAttachments,
   mapWorkOrderProgress,
 } from "../../lib/utils/workOrderProgress";
 
@@ -89,7 +93,7 @@ interface ExecutionItem {
   note: string;
   partsUsed?: string;
   partsCost?: string;
-  attachments?: string[];
+  attachments?: WorkOrderAttachment[];
 }
 
 interface ExecutionRecord {
@@ -634,7 +638,7 @@ export default function WorkOrders() {
 
   const renderScheduleDetails = (task: MaintenanceTask) => {
     const details = [
-      { label: "Work Order No.", value: formatWorkOrderNumber(task.id) },
+      { label: "Work Order No.", value: task.workOrderNumber ?? "N/A" },
       { label: "Vehicle", value: getVehiclePlateNumber(task.vehicleId) },
       { label: "Checklist Template", value: task.title },
       { label: "Assigned Mechanic", value: task.assignedDriver },
@@ -940,7 +944,7 @@ export default function WorkOrders() {
             <td style="padding:8px;border:1px solid #e2e8f0">${(it.note || "").replace(/</g, "&lt;")}</td>
             <td style="padding:8px;border:1px solid #e2e8f0">${it.partsUsed || ""}</td>
             <td style="padding:8px;border:1px solid #e2e8f0;text-align:right">${it.partsCost || ""}</td>
-            <td style="padding:8px;border:1px solid #e2e8f0">${it.attachments?.join(", ") || ""}</td>
+            <td style="padding:8px;border:1px solid #e2e8f0">${it.attachments?.map((file) => file.name).join(", ") || ""}</td>
           </tr>`;
       })
       .join("");
@@ -1254,20 +1258,55 @@ export default function WorkOrders() {
     files: FileList | null,
   ) => {
     if (!canModifySelectedTask) return;
+    if (!files?.length) return;
+    void (async () => {
+      const uploaded: WorkOrderAttachment[] = [];
+      const failures: string[] = [];
+      for (const file of Array.from(files)) {
+        try {
+          uploaded.push(await uploadWorkOrderAttachment(taskId, itemId, file));
+        } catch (error) {
+          failures.push(error instanceof Error ? error.message : `Could not upload ${file.name}.`);
+        }
+      }
+      if (uploaded.length) {
+        applyChangeOrConfirmStart(() => setExecutions((prev) => {
+          const next = new Map(prev);
+          const cur = next.get(taskId) || { done: false, items: [] as ExecutionItem[] };
+          const items = cur.items.map((item) => item.id === itemId
+            ? {
+                ...item,
+                attachments: mergeUploadedWorkOrderAttachments(item.attachments ?? [], uploaded),
+              }
+            : item);
+          next.set(taskId, { ...cur, items });
+          return next;
+        }));
+      }
+      if (failures.length) setToast({ type: "error", message: failures.join(" ") });
+      else if (uploaded.length) setToast({ type: "success", message: "Attachment uploaded." });
+    })();
+  };
 
-    const names = files ? Array.from(files).map((file) => file.name) : [];
-    applyChangeOrConfirmStart(() => setExecutions((prev) => {
-      const next = new Map(prev);
-      const cur = next.get(taskId) || {
-        done: false,
-        items: [] as ExecutionItem[],
-      };
-      const items = cur.items.map((item) =>
-        item.id === itemId ? { ...item, attachments: names } : item,
-      );
-      next.set(taskId, { ...cur, items });
-      return next;
-    }));
+  const removeExecutionItemAttachment = async (taskId: string, itemId: string, attachment: WorkOrderAttachment) => {
+    try {
+      await deleteWorkOrderAttachment(taskId, attachment.id);
+      setExecutions((prev) => {
+        const next = new Map(prev);
+        const current = next.get(taskId);
+        if (!current) return next;
+        next.set(taskId, {
+          ...current,
+          items: current.items.map((item) => item.id === itemId
+            ? { ...item, attachments: (item.attachments ?? []).filter((file) => file.id !== attachment.id) }
+            : item),
+        });
+        return next;
+      });
+      setToast({ type: "success", message: "Attachment deleted." });
+    } catch (error) {
+      setToast({ type: "error", message: error instanceof Error ? error.message : "Could not delete attachment." });
+    }
   };
 
   const handleStatusChange = (id: string, newStatus: ItemStatus) => {
@@ -1664,7 +1703,7 @@ export default function WorkOrders() {
                 key: "workOrder",
                 header: "Work Order NO.",
                 width: "11%",
-                render: (task) => formatWorkOrderNumber(task.id),
+                render: (task) => task.workOrderNumber ?? "N/A",
               },
               {
                 key: "plate no",
@@ -2061,7 +2100,7 @@ export default function WorkOrders() {
             </>
           )}
 
-          {selectedTask && (!isMechanic || workOrderStep === 2) && (
+          {selectedTask && currentExecution.items.some((item) => item.status === "changed") && (!isMechanic || workOrderStep === 2) && (
             <div className="mb-6 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card">
               <div className="border-b border-[var(--color-divider)] px-6 py-4">
                 <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
@@ -2073,7 +2112,7 @@ export default function WorkOrders() {
               </div>
 
               <div className="divide-y divide-[var(--color-divider)]">
-                {currentExecution.items.map((item) => (
+                {currentExecution.items.filter((item) => item.status === "changed").map((item) => (
                   <div key={item.id} className="grid gap-4 px-6 py-4 lg:grid-cols-[1.2fr_1fr_160px_1.2fr]">
                     <div>
                       <p className="text-sm font-semibold text-[var(--color-text-primary)]">
@@ -2090,7 +2129,7 @@ export default function WorkOrders() {
                       <input
                         type="text"
                         value={item.partsUsed || ""}
-                        disabled={!canModifySelectedTask || item.status !== "changed"}
+                        disabled={!canModifySelectedTask}
                         onChange={(event) =>
                           updateExecutionItemField(
                             selectedTask.id,
@@ -2099,8 +2138,8 @@ export default function WorkOrders() {
                             event.target.value,
                           )
                         }
-                        placeholder={item.status === "changed" ? "Part(s) used" : "Not applicable"}
-                        className={`mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)] ${!canModifySelectedTask || item.status !== "changed" ? "cursor-not-allowed opacity-70" : ""}`}
+                        placeholder="Part(s) used"
+                        className={`mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)] ${!canModifySelectedTask ? "cursor-not-allowed opacity-70" : ""}`}
                       />
                     </div>
                     <div>
@@ -2110,7 +2149,7 @@ export default function WorkOrders() {
                       <input
                         type="text"
                         value={item.partsCost || ""}
-                        disabled={!canModifySelectedTask || item.status !== "changed"}
+                        disabled={!canModifySelectedTask}
                         onChange={(event) =>
                           updateExecutionItemField(
                             selectedTask.id,
@@ -2120,7 +2159,7 @@ export default function WorkOrders() {
                           )
                         }
                         placeholder="0.00"
-                        className={`mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)] ${!canModifySelectedTask || item.status !== "changed" ? "cursor-not-allowed opacity-70" : ""}`}
+                        className={`mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)] ${!canModifySelectedTask ? "cursor-not-allowed opacity-70" : ""}`}
                       />
                     </div>
                     <div>
@@ -2129,9 +2168,9 @@ export default function WorkOrders() {
                       </label>
                       <input
                         type="file"
-                        accept="image/*"
+                        accept="image/*,video/mp4,application/pdf,text/plain"
                         multiple
-                        disabled={!canModifySelectedTask || item.status !== "changed"}
+                        disabled={!canModifySelectedTask}
                         onChange={(event) =>
                           updateExecutionItemAttachments(
                             selectedTask.id,
@@ -2139,11 +2178,42 @@ export default function WorkOrders() {
                             event.target.files,
                           )
                         }
-                        className={`mt-1 w-full text-xs text-[var(--color-text-secondary)] ${!canModifySelectedTask || item.status !== "changed" ? "cursor-not-allowed opacity-60" : ""}`}
+                        className={`mt-1 w-full text-xs text-[var(--color-text-secondary)] ${!canModifySelectedTask ? "cursor-not-allowed opacity-60" : ""}`}
                       />
+                      {item.attachments?.some((attachment) => !attachment.storageName) ? (
+                        <p className="mt-2 text-xs text-amber-800">
+                          Older records saved only the filename. The assigned mechanic can select the original file again with the same filename to restore viewing.
+                        </p>
+                      ) : null}
                       {item.attachments && item.attachments.length > 0 ? (
-                        <div className="mt-2 text-xs text-[var(--color-text-secondary)]">
-                          {item.attachments.join(", ")}
+                        <div className="mt-2 space-y-1">
+                          {item.attachments.map((attachment) => (
+                            <div key={attachment.id || attachment.name} className="flex items-center gap-2 text-xs">
+                              {attachment.storageName ? (
+                                <button
+                                  type="button"
+                                  className="text-[var(--color-brand-primary)] underline"
+                                  onClick={() => void openWorkOrderAttachment(selectedTask.id, attachment).catch((error) => setToast({
+                                    type: "error",
+                                    message: error instanceof Error ? error.message : "Could not open attachment.",
+                                  }))}
+                                >
+                                  View {attachment.name}
+                                </button>
+                              ) : (
+                                <span className="text-amber-800">Re-upload “{attachment.name}” to make it viewable.</span>
+                              )}
+                              {isMechanic && currentUser?.id === selectedTask.assignedMechanicId && attachment.storageName ? (
+                                <button
+                                  type="button"
+                                  className="text-red-700 underline"
+                                  onClick={() => void removeExecutionItemAttachment(selectedTask.id, item.id, attachment)}
+                                >
+                                  Delete
+                                </button>
+                              ) : null}
+                            </div>
+                          ))}
                         </div>
                       ) : (
                         <p className="mt-2 text-xs text-[var(--color-text-secondary)]">

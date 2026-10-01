@@ -5,8 +5,28 @@ export type WebExecutionItem = {
   note: string;
   partsUsed?: string;
   partsCost?: string;
-  attachments?: string[];
+  attachments?: WebWorkOrderAttachment[];
 };
+
+export type WebWorkOrderAttachment = {
+  id: string;
+  name: string;
+  sizeMb: number;
+  contentType?: string;
+  storageName?: string;
+};
+
+export function mergeUploadedWorkOrderAttachments(
+  existing: WebWorkOrderAttachment[],
+  uploaded: WebWorkOrderAttachment[],
+): WebWorkOrderAttachment[] {
+  return [
+    ...existing.filter((attachment) => attachment.storageName || !uploaded.some(
+      (file) => file.name.toLowerCase() === attachment.name.toLowerCase(),
+    )),
+    ...uploaded,
+  ];
+}
 
 export type WebChecklistItem = {
   id: string;
@@ -73,11 +93,21 @@ export function mapWorkOrderProgress(value: unknown): {
             note: asText(item.note),
             partsUsed: asText(part.partsUsed) || asText(item.partsUsed),
             partsCost: asText(part.materialCost) || asText(item.partsCost),
-            attachments: attachmentsValue.map((attachment) =>
-              typeof attachment === "string"
-                ? attachment
-                : asText(asRecord(attachment)?.name),
-            ).filter(Boolean),
+            attachments: attachmentsValue.flatMap((attachment, index) => {
+              if (typeof attachment === "string") {
+                return [{ id: "", name: attachment, sizeMb: 0 }];
+              }
+              const record = asRecord(attachment);
+              const name = asText(record?.name);
+              if (!record || !name) return [];
+              return [{
+                id: asText(record.id) || `legacy-${item.id}-${index}`,
+                name,
+                sizeMb: Number.isFinite(Number(record.sizeMb)) ? Number(record.sizeMb) : 0,
+                ...(typeof record.contentType === "string" ? { contentType: record.contentType } : {}),
+                ...(typeof record.storageName === "string" ? { storageName: record.storageName } : {}),
+              }];
+            }),
           }];
         }),
         attachments: Array.isArray(legacyExecution?.attachments)
@@ -122,12 +152,8 @@ export function buildBackendWorkOrderProgress(
   const partDetails: Record<string, Record<string, unknown>> = {};
   const executionItems = execution.items.map((item) => {
     const oldParts = asRecord(previousParts[item.id]) ?? {};
-    const attachments = item.attachments?.length
-      ? item.attachments.map((attachment, index) => ({
-          id: `${item.id}-web-${index}`,
-          name: attachment,
-          sizeMb: 0,
-        }))
+    const attachments = item.attachments !== undefined
+      ? item.attachments
       : Array.isArray(oldParts.attachments)
         ? oldParts.attachments
         : [];

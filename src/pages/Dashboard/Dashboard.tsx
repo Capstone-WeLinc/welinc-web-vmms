@@ -20,7 +20,6 @@ import {
 } from "../../types/maintenance";
 import { getTaskTotalCost } from "../../lib/utils/maintenanceCosts";
 import { isMechanicRole } from "../../lib/utils/permissions";
-import { formatWorkOrderNumber } from "../../lib/utils/workOrders";
 
 type DashboardFilter = "all" | "month";
 
@@ -348,7 +347,7 @@ export default function Dashboard() {
           <table className="w-full text-left text-sm">
             <thead className="bg-[#070b45] text-xs uppercase text-white"><tr>{["Work Order No.", "Vehicle", "Assigned Mechanic", "Status"].map((heading) => <th key={heading} className="px-4 py-3">{heading}</th>)}</tr></thead>
             <tbody className="divide-y divide-[var(--color-divider)]">
-              {recent.map((task) => <tr key={task.id} className="hover:bg-[var(--color-input-bg)]"><td className="px-4 py-3 font-bold">{formatWorkOrderNumber(task.id)}</td><td className="px-4 py-3">{plateNumber(task)}</td><td className="px-4 py-3">{task.assignedDriver || "Unassigned"}</td><td className="px-4 py-3"><StatusPill status={task.status} /></td></tr>)}
+              {recent.map((task) => <tr key={task.id} className="hover:bg-[var(--color-input-bg)]"><td className="px-4 py-3 font-bold">{task.workOrderNumber ?? "N/A"}</td><td className="px-4 py-3">{plateNumber(task)}</td><td className="px-4 py-3">{task.assignedDriver || "Unassigned"}</td><td className="px-4 py-3"><StatusPill status={task.status} /></td></tr>)}
               {!loading && recent.length === 0 ? <tr><td colSpan={4} className="px-4 py-10 text-center text-[var(--color-text-secondary)]">No work orders found.</td></tr> : null}
             </tbody>
           </table>

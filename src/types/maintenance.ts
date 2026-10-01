@@ -78,6 +78,7 @@ export interface MaintenanceTask {
   dueOdometer?: number | null;
   cancellations?: { id: string; actorId: string; actorName: string; actorEmail: string; reason: string; previousStatus: string; createdAt: string }[];
   id: string;
+  workOrderNumber?: string;
   vehicleId: string;
   title: string;
   status: MaintenanceStatus;

@@ -10,7 +10,12 @@ export {
   updateMaintenanceSchedule,
   updateWorkOrder,
   updateWorkOrderProgress,
+  uploadWorkOrderAttachment,
+  deleteWorkOrderAttachment,
+  openWorkOrderAttachment,
 } from "./vmmsApi";
+
+export type { WorkOrderAttachment } from "./vmmsApi";
 
 export type {
   ChecklistItemTemplate,

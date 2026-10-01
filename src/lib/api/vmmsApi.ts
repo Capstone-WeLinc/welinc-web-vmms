@@ -1,4 +1,4 @@
-import { ApiError, fetchJSON, useBackend } from "./httpClient";
+import { ApiError, apiRequest, fetchJSON, useBackend } from "./httpClient";
 import {
   mockDashboardStats,
   mockRecentActivity,
@@ -174,6 +174,9 @@ function normalizeMaintenanceTask(task: MaintenanceTask): MaintenanceTask {
     formatLocalDateText();
   const normalizedTask = {
     ...task,
+    workOrderNumber:
+      task.workOrderNumber ??
+      (task as MaintenanceTask & { work_order_number?: string }).work_order_number,
     date,
     status: normalizeMaintenanceStatusValue(task.status),
     accountType: normalizeAccountTypeValue(task.accountType),
@@ -678,6 +681,44 @@ export async function updateWorkOrderProgress(
       body: JSON.stringify(progress),
     },
   );
+}
+
+export type WorkOrderAttachment = {
+  id: string;
+  name: string;
+  sizeMb: number;
+  contentType?: string;
+  storageName?: string;
+};
+
+export async function uploadWorkOrderAttachment(taskId: string, itemId: string, file: File): Promise<WorkOrderAttachment> {
+  const body = new FormData();
+  body.append("itemId", itemId);
+  body.append("file", file);
+  return apiRequest<WorkOrderAttachment>(`/maintenance-schedules/${encodeURIComponent(taskId)}/attachments`, {
+    method: "POST",
+    body,
+  });
+}
+
+export async function deleteWorkOrderAttachment(taskId: string, attachmentId: string): Promise<void> {
+  await apiRequest<void>(`/maintenance-schedules/${encodeURIComponent(taskId)}/attachments/${encodeURIComponent(attachmentId)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function openWorkOrderAttachment(taskId: string, attachment: WorkOrderAttachment): Promise<void> {
+  const preview = window.open("about:blank", "_blank");
+  if (!preview) throw new Error("Allow pop-ups to open this attachment.");
+  try {
+    const blob = await apiRequest<Blob>(`/maintenance-schedules/${encodeURIComponent(taskId)}/attachments/${encodeURIComponent(attachment.id)}`);
+    const objectUrl = URL.createObjectURL(blob);
+    preview.location.href = objectUrl;
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  } catch (error) {
+    preview.close();
+    throw error;
+  }
 }
 
 export async function getChecklistTemplates() {

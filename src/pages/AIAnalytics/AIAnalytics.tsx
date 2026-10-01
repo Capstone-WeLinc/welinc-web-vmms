@@ -33,7 +33,7 @@ import {
   type AnalyticsReportResponse,
   type ScheduleSearchResult,
 } from "../../lib/api/analyticsService";
-import { formatWorkOrderNumber } from "../../lib/utils/workOrders";
+import { getMaintenanceSchedules } from "../../lib/api/vmmsApi";
 
 const formatValue = (value: unknown) => {
   if (typeof value === "number") {
@@ -381,6 +381,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
   const [alerts, setAlerts] = useState<AnalyticsAlertResponse | null>(null);
   const [aiInsights, setAiInsights] = useState<AnalyticsInsightsResponse | null>(null);
   const [fullReport, setFullReport] = useState<AnalyticsReportResponse | null>(null);
+  const [workOrderNumbers, setWorkOrderNumbers] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<ScheduleSearchResult[]>([]);
   const [hasGenerated, setHasGenerated] = useState(false);
@@ -395,14 +396,20 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
     setLoading(true);
     setError(null);
     try {
-      const [, overviewData, vehicleData, alertsData, aiInsightsData, reportData] = await Promise.all([
+      const [, overviewData, vehicleData, alertsData, aiInsightsData, reportData, schedules] = await Promise.all([
         getAnalyticsHealth(),
         getAnalyticsOverview(),
         getAnalyticsVehicles(),
         getAnalyticsAlerts(),
         getAnalyticsInsights(),
         getAnalyticsReport(),
+        getMaintenanceSchedules().catch(() => []),
       ]);
+      setWorkOrderNumbers(Object.fromEntries(
+        schedules.flatMap((schedule) => schedule.workOrderNumber
+          ? [[schedule.id, schedule.workOrderNumber]]
+          : []),
+      ));
       setOverview(overviewData);
       setVehicles(vehicleData);
       setAlerts(alertsData);
@@ -417,6 +424,9 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
       setLoading(false);
     }
   };
+
+  const persistedWorkOrderNumber = (scheduleId: string | number) =>
+    workOrderNumbers[String(scheduleId)] ?? "N/A";
 
   const handleManualGenerate = () => {
     void loadData();
@@ -524,7 +534,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
       .map(
         (s) => `
       <tr>
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-family: monospace; font-weight: bold;">${formatWorkOrderNumber(String(s.scheduleId))}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-family: monospace; font-weight: bold;">${persistedWorkOrderNumber(s.scheduleId)}</td>
         <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${s.vehiclePlate || "—"}</td>
         <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${s.maintenanceTitle || "—"}</td>
         <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${s.assignedMechanic || "Unassigned"}</td>
@@ -970,7 +980,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
                       <div key={i} className="flex items-center justify-between rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs">
                         <div>
                           <p className="font-semibold text-rose-600">Missing Next Due Date: {m.vehiclePlate}</p>
-                          <p className="text-[var(--color-text-secondary)]">{formatWorkOrderNumber(String(m.scheduleId))} ({m.maintenanceTitle})</p>
+                          <p className="text-[var(--color-text-secondary)]">{persistedWorkOrderNumber(m.scheduleId)} ({m.maintenanceTitle})</p>
                         </div>
                         <Badge variant="danger">Date Missing</Badge>
                       </div>
@@ -1277,7 +1287,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
                   <tbody className="divide-y divide-[var(--color-border)]">
                     {(fullReport?.schedules ?? []).slice(0, 10).map((s) => (
                       <tr key={String(s.scheduleId)} className="hover:bg-[var(--color-input-bg)]/40">
-                        <td className="p-3 font-mono font-semibold">{formatWorkOrderNumber(String(s.scheduleId))}</td>
+                        <td className="p-3 font-mono font-semibold">{persistedWorkOrderNumber(s.scheduleId)}</td>
                         <td className="p-3 font-semibold">{s.vehiclePlate}</td>
                         <td className="p-3">{s.maintenanceTitle}</td>
                         <td className="p-3">{s.assignedMechanic ?? "Unassigned"}</td>

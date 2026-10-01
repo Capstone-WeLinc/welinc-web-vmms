@@ -55,7 +55,6 @@ import { getVehicles, type VehicleOption } from "../../lib/api/vehicleService";
 import { getGarages } from "../../lib/api/locationService";
 import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
 import {
-  formatWorkOrderNumber,
   getCalculatedMaintenanceStatus,
   isInProgressStatus,
   isDueStatus,
@@ -866,7 +865,7 @@ const MaintenanceSchedulingCombined = () => {
                     key: "workOrderNo",
                     header: "Work Order No.",
                     width: "11%",
-                    render: (task) => formatWorkOrderNumber(task.id),
+                    render: (task) => task.workOrderNumber ?? "N/A",
                   },
                   {
                     key: "plateNo",
@@ -1116,7 +1115,7 @@ const MaintenanceSchedulingCombined = () => {
                               >
                                 <span className="block truncate text-[11px] font-bold">
                                   {task.startDate === cell.dateStr ? 'Start' : 'Due'}{task.startDate === cell.dateStr && task.dueDate === cell.dateStr ? ' / Due' : ''}: {' '}
-                                  {formatWorkOrderNumber(task.id)}
+                                  {task.workOrderNumber ?? "N/A"}
                                 </span>
                                 <span className="block truncate text-[11px]">
                                   {getVehiclePlateNumber(task.vehicleId)}
@@ -1237,7 +1236,7 @@ const MaintenanceSchedulingCombined = () => {
                 {[
               {
                 label: "Work Order No.",
-                value: formatWorkOrderNumber(selectedSchedule.id),
+                value: selectedSchedule.workOrderNumber ?? "N/A",
               },
               {
                 label: "Plate No.",
