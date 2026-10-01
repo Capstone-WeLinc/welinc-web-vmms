@@ -35,10 +35,26 @@ const readExecutionItems = (task: MaintenanceTask) => {
   return Array.isArray(items) ? items : [];
 };
 
+const readPartDetails = (task: MaintenanceTask) => {
+  const progress = task.workOrderProgress as unknown;
+  if (!progress || typeof progress !== "object" || Array.isArray(progress)) return [];
+  const partDetails = (progress as { partDetails?: unknown }).partDetails;
+  if (!partDetails || typeof partDetails !== "object" || Array.isArray(partDetails)) return [];
+  return Object.values(partDetails as Record<string, unknown>);
+};
+
 export const getTaskExecutionCost = (task: MaintenanceTask) => {
-  return readExecutionItems(task).reduce((total, item) => {
+  const legacyCost = readExecutionItems(task).reduce((total, item) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) return total;
     return total + parseCostValue((item as Record<string, unknown>).partsCost);
+  }, 0);
+  if (legacyCost > 0) return legacyCost;
+
+  return readPartDetails(task).reduce<number>((total, item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return total;
+    const details = item as Record<string, unknown>;
+    if (typeof details.partsUsed !== "string" || !details.partsUsed.trim()) return total;
+    return total + parseCostValue(details.materialCost);
   }, 0);
 };
 

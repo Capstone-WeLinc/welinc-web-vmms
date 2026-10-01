@@ -60,6 +60,10 @@ import {
   isPendingOdometerScheduleReadyForMechanic,
   isPendingTimeScheduleReadyForMechanic,
 } from "../../lib/utils/workOrders";
+import {
+  buildBackendWorkOrderProgress,
+  mapWorkOrderProgress,
+} from "../../lib/utils/workOrderProgress";
 
 type ItemStatus = "pass" | "fail" | "pending";
 
@@ -129,12 +133,6 @@ const saveWorkOrderProgress = (progress: WorkOrderProgress) => {
   } catch {
     // ignore storage failure
   }
-};
-
-const isBackendWorkOrderProgress = (
-  value: unknown,
-): value is { checklist?: ChecklistItem[]; execution?: ExecutionRecord } => {
-  return typeof value === "object" && value !== null;
 };
 
 const normalizeTemplateName = (value?: string | null) =>
@@ -222,8 +220,16 @@ export default function WorkOrders() {
       defaultChecklistTemplates,
     );
 
-  const initialProgress = loadWorkOrderProgress();
+  const [initialProgress] = useState<WorkOrderProgress>(loadWorkOrderProgress);
   const isMechanic = isMechanicRole(currentUser);
+  // These state setters are used by the work-order loader below, so declare
+  // both maps before registering that effect.
+  const [checklists, setChecklists] = useState<Map<string, ChecklistItem[]>>(
+    () => new Map(Object.entries(initialProgress.checklists || {})),
+  );
+  const [executions, setExecutions] = useState<Map<string, ExecutionRecord>>(
+    () => new Map(Object.entries(initialProgress.executions || {})),
+  );
 
   useEffect(() => {
     const loadWorkOrders = () => {
@@ -233,26 +239,16 @@ export default function WorkOrders() {
           setChecklists((current) => {
             const next = new Map(current);
             loadedTasks.forEach((task) => {
-              const progress = task.workOrderProgress;
-              if (
-                isBackendWorkOrderProgress(progress) &&
-                Array.isArray(progress.checklist)
-              ) {
-                next.set(task.id, progress.checklist);
-              }
+              const progress = mapWorkOrderProgress(task.workOrderProgress);
+              if (progress?.checklist) next.set(task.id, progress.checklist);
             });
             return next;
           });
           setExecutions((current) => {
             const next = new Map(current);
             loadedTasks.forEach((task) => {
-              const progress = task.workOrderProgress;
-              if (
-                isBackendWorkOrderProgress(progress) &&
-                progress.execution
-              ) {
-                next.set(task.id, progress.execution);
-              }
+              const progress = mapWorkOrderProgress(task.workOrderProgress);
+              if (progress?.execution) next.set(task.id, progress.execution);
             });
             return next;
           });
@@ -279,11 +275,6 @@ export default function WorkOrders() {
     return () => window.removeEventListener("focus", loadWorkOrders);
   }, []);
 
-  // State for checklists could be a Map keyed by task ID to prevent prototype pollution.
-  const [checklists, setChecklists] = useState<Map<string, ChecklistItem[]>>(
-    () => new Map(Object.entries(initialProgress.checklists || {})),
-  );
-
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [selectedStatusFilters, setSelectedStatusFilters] = useState<string[]>([]);
@@ -300,14 +291,20 @@ export default function WorkOrders() {
     useState<PendingWorkOrderAction>(null);
   const [pendingStartChange, setPendingStartChange] = useState<(() => void) | null>(null);
 
-  const [aiRec, setAiRec] = useState<WorkOrderAiRecommendation | null>(null);
-  const [loadingAiRec, setLoadingAiRec] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiState, setAiState] = useState<{
+    taskId: string;
+    recommendation: WorkOrderAiRecommendation | null;
+    loading: boolean;
+    error: string | null;
+  } | null>(null);
+  const selectedAiState = aiState?.taskId === selectedTask?.id ? aiState : null;
+  const aiRec = selectedAiState?.recommendation ?? null;
+  const loadingAiRec = selectedAiState?.loading ?? false;
+  const aiError = selectedAiState?.error ?? null;
 
   const handleGenerateWorkOrderAi = (task: MaintenanceTask) => {
     if (!task) return;
-    setLoadingAiRec(true);
-    setAiError(null);
+    setAiState({ taskId: task.id, recommendation: null, loading: true, error: null });
     const currentItems = checklists.get(task.id) || [];
     getWorkOrderRecommendations(task.id, {
       title: task.title,
@@ -318,21 +315,24 @@ export default function WorkOrders() {
       triggerType: task.triggerType,
       checklistItems: currentItems.map((it) => ({ text: it.text })),
     })
-      .then((data) => setAiRec(data))
+      .then((data) => setAiState((current) =>
+        current?.taskId === task.id
+          ? { ...current, recommendation: data }
+          : current,
+      ))
       .catch((err: unknown) => {
         console.warn("Failed to fetch AI recommendation for selected task:", err);
         const msg = err instanceof Error ? err.message : "Failed to generate AI recommendations for this work order.";
-        setAiError(msg);
-        setAiRec(null);
+        setAiState((current) =>
+          current?.taskId === task.id
+            ? { ...current, error: msg, recommendation: null }
+            : current,
+        );
       })
-      .finally(() => setLoadingAiRec(false));
+      .finally(() => setAiState((current) =>
+        current?.taskId === task.id ? { ...current, loading: false } : current,
+      ));
   };
-
-  useEffect(() => {
-    setAiRec(null);
-    setAiError(null);
-    setLoadingAiRec(false);
-  }, [selectedTask?.id]);
 
 
 
@@ -458,6 +458,7 @@ export default function WorkOrders() {
 
   const handleSelectTask = (task: MaintenanceTask) => {
     setSelectedTask(task);
+    setAiState(null);
     setWorkOrderStep(1);
     const templateItems = findTemplateItems(templates, task.title);
 
@@ -488,10 +489,6 @@ export default function WorkOrders() {
     ? checklists.get(selectedTask.id) || []
     : [];
 
-  const [executions, setExecutions] = useState<Map<string, ExecutionRecord>>(
-    () => new Map(Object.entries(initialProgress.executions || {})),
-  );
-
   useEffect(() => {
     saveWorkOrderProgress({
       checklists: Object.fromEntries([...checklists.entries()]),
@@ -517,16 +514,20 @@ export default function WorkOrders() {
     if (!checklist && !execution) return;
 
     const timeout = window.setTimeout(() => {
-      updateWorkOrderProgress(selectedTask.id, {
-        checklist: checklist ?? [],
-        execution: execution ?? {
+      updateWorkOrderProgress(
+        selectedTask.id,
+        buildBackendWorkOrderProgress(
+          checklist ?? [],
+          execution ?? {
           done: false,
           items: [],
           attachments: [],
           remarks: "",
           technicianSignature: "",
-        },
-      }).catch((error) => {
+          },
+          selectedTask.workOrderProgress,
+        ),
+      ).catch((error) => {
         console.error("Failed to save work order progress", error);
       });
     }, 400);
@@ -707,7 +708,7 @@ export default function WorkOrders() {
       if (!line) continue;
 
       const isHeading =
-        /^(?:\#+\s*|\*\*\d+[\.\)]|\d+[\.\)])\s*/.test(line) ||
+        /^(?:#+\s*|\*\*\d+[.)]|\d+[.)])\s*/.test(line) ||
         (line.endsWith(":") && line.length < 80 && !line.includes("•"));
 
       if (isHeading) {
@@ -715,7 +716,7 @@ export default function WorkOrders() {
           result.push(current);
         }
         const cleanTitle = line
-          .replace(/^[#*\d\.\)\s]+/, "")
+          .replace(/^[#*\d.)\s]+/, "")
           .replace(/[:*]+$/, "")
           .trim();
         current = { title: cleanTitle || line, items: [] };
