@@ -1,7 +1,9 @@
 import type { UserRecord } from "../../lib/api/authService";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { isMechanicRole, isOperationsRole, isChiefMechanicRole } from "../../lib/utils/permissions";
+import {
+  canSeeVmmsNavigationPath,
+} from "../../lib/utils/permissions";
 import { ConfirmationModal, Modal } from "../ui";
 import { fetchJSON } from "../../lib/api/httpClient";
 import logo from "../../assets/logo.png";
@@ -26,6 +28,7 @@ import {
   FolderKanban,
   Layers,
   ShieldCheck,
+  ScrollText,
   Bell,
   type LucideIcon,
 } from "lucide-react";
@@ -96,6 +99,7 @@ const navGroups: NavGroup[] = [
     icon: ShieldCheck,
     items: [
       { label: "User Management", icon: Users, path: "/users" },
+      { label: "Audit Logs", icon: ScrollText, path: "/audit-logs" },
     ],
   },
 ];
@@ -143,10 +147,6 @@ export default function Sidebar({ currentUser }: SidebarProps) {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
-  const isMechanic = isMechanicRole(currentUser);
-  const isOperations = isOperationsRole(currentUser);
-  const isChiefMechanic = isChiefMechanicRole(currentUser);
-
   const loadNotifications = useCallback(async () => {
     if (!currentUser) {
       setNotifications([]);
@@ -188,45 +188,15 @@ export default function Sidebar({ currentUser }: SidebarProps) {
   const unreadNotificationCount = notifications.filter((notification) => !notification.isRead).length;
 
   const visibleGroups = useMemo(() => {
-    const isPathAllowed = (path: string) => {
-      if (isMechanic) {
-        return ["/dashboard", "/work-orders", "/maintenance-logs"].includes(path);
-      }
-      if (isChiefMechanic) {
-        return [
-          "/dashboard",
-          "/vehicles",
-          "/garages",
-          "/maintenance-scheduling",
-          "/work-orders",
-          "/maintenance-logs",
-          "/maintenance-reports",
-        ].includes(path);
-      }
-      if (isOperations) {
-        return [
-          "/dashboard",
-          "/vehicles",
-          "/garages",
-          "/users",
-          "/maintenance-scheduling",
-          "/work-orders",
-          "/maintenance-logs",
-          "/maintenance-reports",
-          "/fuel-management",
-          "/ai-analytics",
-        ].includes(path);
-      }
-      return true;
-    };
-
     return navGroups
       .map((group) => ({
         ...group,
-        items: group.items.filter((item) => isPathAllowed(item.path)),
+        items: group.items.filter((item) =>
+          canSeeVmmsNavigationPath(item.path, currentUser),
+        ),
       }))
       .filter((group) => group.items.length > 0);
-  }, [isMechanic, isChiefMechanic, isOperations]);
+  }, [currentUser]);
 
   const findActiveGroupCategory = useCallback(
     (pathname: string): string | null => {

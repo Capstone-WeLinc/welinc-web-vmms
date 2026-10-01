@@ -285,6 +285,7 @@ export async function login(
 }
 
 export function logout() {
+  void recordLogout();
   window.localStorage.removeItem("accessToken");
   if (!useBackend) {
     window.localStorage.removeItem("mockCurrentUserId");
@@ -698,6 +699,31 @@ export async function getChecklistTemplateId(type: string): Promise<string | und
   return template.id;
 }
 
+export async function recordLogout() {
+  if (!useBackend || !window.localStorage.getItem("accessToken")) return;
+  try {
+    await fetchJSON<{ message: string }>("/auth/logout", { method: "POST" });
+  } catch (error) {
+    console.warn("Unable to record logout activity", error);
+  }
+}
+
+export type LoginActivityRecord = {
+  id: string;
+  event: "SUCCESSFUL_LOGIN" | "FAILED_LOGIN" | "ACCOUNT_LOCKOUT" | "LOGOUT" | "PLATFORM_ACCESS_DENIED";
+  email: string;
+  ipAddress: string | null;
+  deviceType: string;
+  createdAt: string;
+};
+
+export async function getLoginActivity(userId: string) {
+  if (!useBackend) return [] as LoginActivityRecord[];
+  return fetchJSON<LoginActivityRecord[]>(
+    `/auth/users/${encodeURIComponent(userId)}/login-activity`,
+  );
+}
+
 export async function saveChecklistTemplates(
   templates: Record<ChecklistTemplateName, ChecklistItemTemplate[]>,
 ) {
@@ -978,13 +1004,42 @@ export type {
   UserRole,
   UserCreateInput,
   VehicleRecord,
+  VehicleRecordInput,
   GarageFullRecord,
 } from "../mocks/vmmsMocks";
 
 // ─── Vehicle Management CRUD ───────────────────────────────────────────────
 
-import type { VehicleRecord, GarageFullRecord } from "../mocks/vmmsMocks";
+import type { VehicleRecord, VehicleRecordInput, GarageFullRecord } from "../mocks/vmmsMocks";
 import { mockVehicleRecords, mockGarageRecords } from "../mocks/vmmsMocks";
+
+export type VehicleAuditEntry = {
+  id: string;
+  email: string;
+  action: string;
+  fieldName: string;
+  previousValue: string | null;
+  newValue: string | null;
+  createdAt: string;
+};
+
+export type AuditLogSource = "all" | "login" | "vehicle" | "work-order" | "schedule";
+export type AuditLogRecord = {
+  id: string;
+  source: Exclude<AuditLogSource, "all">;
+  actor: string;
+  action: string;
+  entity: string;
+  details: string | null;
+  previousValue: string | null;
+  newValue: string | null;
+  createdAt: string;
+};
+
+export async function getAuditLogs(source: AuditLogSource = "all"): Promise<AuditLogRecord[]> {
+  if (!useBackend) return [];
+  return fetchJSON<AuditLogRecord[]>(`/auth/audit-logs?source=${encodeURIComponent(source)}`);
+}
 
 export async function getVehicleRecords(): Promise<VehicleRecord[]> {
   if (!useBackend) return [...mockVehicleRecords];
@@ -992,11 +1047,22 @@ export async function getVehicleRecords(): Promise<VehicleRecord[]> {
   return data;
 }
 
+export async function getVehicleAuditHistory(vehicleId: string): Promise<VehicleAuditEntry[]> {
+  if (!useBackend) return [];
+  return fetchJSON<VehicleAuditEntry[]>(`/vehicles/${encodeURIComponent(vehicleId)}/audit`);
+}
+
 export async function createVehicleRecord(
-  dto: Omit<VehicleRecord, "id">,
+  dto: VehicleRecordInput,
 ): Promise<VehicleRecord> {
   if (!useBackend) {
-    const created: VehicleRecord = { ...dto, id: `vr${Date.now()}` };
+    const created: VehicleRecord = {
+      ...dto,
+      id: `vr${Date.now()}`,
+      lastMaintenanceDate: null,
+      status: "AVAILABLE",
+      isActive: true,
+    };
     mockVehicleRecords.unshift(created);
     return created;
   }
@@ -1008,7 +1074,7 @@ export async function createVehicleRecord(
 
 export async function updateVehicleRecord(
   id: string,
-  dto: Partial<Omit<VehicleRecord, "id">>,
+  dto: Partial<Omit<VehicleRecord, "id" | "garageId" | "garageName">> & { garageId?: string },
 ): Promise<VehicleRecord> {
   if (!useBackend) {
     const idx = mockVehicleRecords.findIndex((v) => v.id === id);

@@ -1,6 +1,7 @@
 const API_BASE = resolveApiBaseUrl();
 const ANALYTICS_API_BASE = resolveAnalyticsApiBaseUrl();
 export const useBackend = API_BASE !== "" && API_BASE !== "undefined";
+let refreshInFlight: Promise<string | null> | null = null;
 
 function resolveApiBaseUrl(): string {
   const raw = import.meta.env.VITE_API_BASE_URL;
@@ -55,6 +56,7 @@ const buildUrl = (path: string) => {
 
 const defaultHeaders = {
   Accept: "application/json",
+  "X-VMMS-Client": "web",
 };
 
 export class ApiError extends Error {
@@ -76,9 +78,30 @@ function dispatchUnauthorizedEvent(status: number) {
   );
 }
 
+async function refreshAccessToken(): Promise<string | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = fetch(buildUrl("/auth/refresh"), {
+      method: "POST",
+      credentials: "include",
+      headers: { ...defaultHeaders },
+    })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        const session = (await response.json()) as { accessToken?: unknown };
+        if (typeof session.accessToken !== "string" || !session.accessToken) return null;
+        window.localStorage.setItem("accessToken", session.accessToken);
+        return session.accessToken;
+      })
+      .catch(() => null)
+      .finally(() => { refreshInFlight = null; });
+  }
+  return refreshInFlight;
+}
+
 export async function apiRequest<T>(
   path: string,
   init: RequestInit = {},
+  allowRefresh = true,
 ): Promise<T> {
   const headers = new Headers(init.headers ?? {});
   const token = window.localStorage.getItem("accessToken");
@@ -93,7 +116,12 @@ export async function apiRequest<T>(
     delete (restInit as RequestInit)['headers'];
   }
 
-  const response = await fetch(buildUrl(path), {
+  const requestUrl = buildUrl(path);
+  const credentials = useBackend && new URL(requestUrl).origin === new URL(API_BASE).origin
+    ? "include"
+    : "same-origin";
+  const response = await fetch(requestUrl, {
+    credentials,
     headers: {
       ...defaultHeaders,
       ...Object.fromEntries(headers.entries()),
@@ -102,6 +130,14 @@ export async function apiRequest<T>(
   });
 
   if (!response.ok) {
+    const resolvedPath = path.startsWith("/") ? path : `/${path}`;
+    if (
+      response.status === 401 && allowRefresh &&
+      resolvedPath !== "/auth/login" && resolvedPath !== "/auth/refresh"
+    ) {
+      const refreshedToken = await refreshAccessToken();
+      if (refreshedToken) return apiRequest<T>(path, init, false);
+    }
     if (response.status === 401 || response.status === 403) {
       dispatchUnauthorizedEvent(response.status);
     }

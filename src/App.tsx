@@ -23,12 +23,14 @@ import AIAnalyticsPage from "./pages/AIAnalytics/AIAnalytics";
 import Vehicles from "./pages/Vehicles/Vehicles";
 import Garages from "./pages/Garages/Garages";
 import { useBackend } from "./lib/api/httpClient";
+import { recordLogout } from "./lib/api/vmmsApi";
 
 import { setLastActivity, msUntilAbsoluteExpiry, msUntilInactivityExpiry, clearSession } from "./lib/utils/session";
 
 import { isMechanicRole, isOperationsRole, isChiefMechanicRole } from "./lib/utils/permissions";
 import { useAuthStore } from "./store/authStore";
 import MaintenanceReports from "./pages/MaintenanceReports/MaintenanceReports";
+import AuditLogs from "./pages/AuditLogs/AuditLogs";
 
 function RequireAuthWrapper({
   children,
@@ -68,12 +70,16 @@ function App() {
         navigate("/dashboard", { replace: true });
       })
       .catch(() => {
+        window.localStorage.removeItem("accessToken");
+        clearSession();
+        setAuthenticated(false);
         setCurrentUser(null);
-        navigate("/dashboard", { replace: true });
+        navigate("/login", { replace: true });
       });
   };
 
   const handleLogout = useCallback(() => {
+    void recordLogout();
     window.localStorage.removeItem("accessToken");
     clearSession();
     clearAuth();
@@ -265,6 +271,14 @@ function App() {
                 location={location}
               >
                 <UserManagement />
+              </RequireAuthWrapper>
+            }
+          />
+          <Route
+            path="/audit-logs"
+            element={
+              <RequireAuthWrapper isAuthenticated={isAuthenticated} location={location}>
+                <AuditLogs />
               </RequireAuthWrapper>
             }
           />

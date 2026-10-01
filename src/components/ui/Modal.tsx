@@ -80,7 +80,7 @@ const Modal: React.FC<ModalProps> = ({
       >
         {/* Header */}
         {title && (
-          <div className="border-b border-[var(--color-divider)] px-6 py-4">
+          <div className="shrink-0 border-b border-[var(--color-divider)] px-6 py-4">
             <h2
               id="modal-title"
               className="text-lg font-bold text-[var(--color-text-primary)]"
@@ -92,7 +92,7 @@ const Modal: React.FC<ModalProps> = ({
 
         {/* Content */}
         {(message !== undefined || children !== undefined) && (
-          <div className="flex-1 overflow-y-auto px-6 py-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
             {message !== undefined && (
               <p className="text-sm text-[var(--color-text-secondary)]">
                 {message}
@@ -104,7 +104,7 @@ const Modal: React.FC<ModalProps> = ({
 
         {/* Footer */}
         {(footer !== undefined || onConfirm) && (
-          <div className="border-t border-[var(--color-divider)] px-6 py-4">
+          <div className="shrink-0 border-t border-[var(--color-divider)] px-6 py-4">
             {footer !== undefined ? (
               footer
             ) : (

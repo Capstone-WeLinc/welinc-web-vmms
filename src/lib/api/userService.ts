@@ -3,6 +3,7 @@ export {
   deleteUser,
   getChiefMechanics,
   getManagedUsers,
+  getLoginActivity,
   getUsers,
   resetUserPassword,
   unlockUser,
@@ -13,6 +14,7 @@ export {
 
 export type {
   UserCreateInput,
+  LoginActivityRecord,
   UserRecord,
   UserRole,
   UserStatus,

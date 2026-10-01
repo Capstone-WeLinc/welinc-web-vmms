@@ -664,9 +664,9 @@ export function saveMockChecklistTemplates(
 
 export type GarageRecord = { id: string; name: string };
 export const mockGarages: GarageRecord[] = [
-  { id: "g1", name: "Main Garage" },
-  { id: "g2", name: "North Cluster" },
-  { id: "g3", name: "South Hub" },
+  { id: "g1", name: "Marikina" },
+  { id: "g2", name: "Sta. Rosa" },
+  { id: "g3", name: "Pulilan" },
 ];
 
 export type SystemRecord = { id: string; name: string };
@@ -681,18 +681,36 @@ export const mockSystems: SystemRecord[] = [
 export type VehicleRecord = {
   id: string;
   plateNumber: string;
+  make: string | null;
   model: string;
+  year: number | null;
+  engineType: string | null;
+  truckSizeCategory: string | null;
   odometer: number;
+  lastMaintenanceDate: string | null;
+  garageId: string | null;
+  garageName?: string | null;
   status: "AVAILABLE" | "IN_TRANSIT" | "UNDER_MAINTENANCE" | "UNDER_REPAIR";
   isActive: boolean;
 };
 
+export type VehicleRecordInput = Omit<
+  VehicleRecord,
+  "id" | "garageId" | "garageName" | "make" | "year" | "engineType" | "truckSizeCategory" | "lastMaintenanceDate" | "status" | "isActive"
+> & {
+  garageId: string;
+  make: string;
+  year: number;
+  engineType: string;
+  truckSizeCategory: string;
+};
+
 export const mockVehicleRecords: VehicleRecord[] = [
-  { id: "vr1", plateNumber: "ABC-1234", model: "Isuzu Elf",    odometer: 12000, status: "AVAILABLE",         isActive: true  },
-  { id: "vr2", plateNumber: "DEF-5678", model: "Mitsubishi FB", odometer: 45000, status: "UNDER_REPAIR",      isActive: true  },
-  { id: "vr3", plateNumber: "GHI-9012", model: "Fuso Canter",   odometer: 8200,  status: "AVAILABLE",         isActive: true  },
-  { id: "vr4", plateNumber: "JKL-3456", model: "Hino 500",      odometer: 62000, status: "UNDER_MAINTENANCE", isActive: false },
-  { id: "vr5", plateNumber: "MNO-7890", model: "Isuzu NKR",     odometer: 3100,  status: "AVAILABLE",         isActive: true  },
+  { id: "vr1", plateNumber: "ABC-1234", make: "Isuzu", model: "Elf", year: 2020, engineType: "Diesel", truckSizeCategory: "Light Duty", odometer: 12000, lastMaintenanceDate: "2026-09-12T08:30:00.000Z", garageId: "g1", garageName: "Marikina", status: "AVAILABLE", isActive: true },
+  { id: "vr2", plateNumber: "DEF-5678", make: "Mitsubishi", model: "Fuso FB", year: 2019, engineType: "Diesel", truckSizeCategory: "Medium Duty", odometer: 45000, lastMaintenanceDate: "2026-08-18T08:30:00.000Z", garageId: "g2", garageName: "Sta. Rosa", status: "UNDER_REPAIR", isActive: true },
+  { id: "vr3", plateNumber: "GHI-9012", make: "Fuso", model: "Canter", year: 2021, engineType: "Diesel", truckSizeCategory: "Light Duty", odometer: 8200, lastMaintenanceDate: null, garageId: "g3", garageName: "Pulilan", status: "AVAILABLE", isActive: true },
+  { id: "vr4", plateNumber: "JKL-3456", make: null, model: "Hino 500", year: null, engineType: null, truckSizeCategory: null, odometer: 62000, lastMaintenanceDate: null, garageId: null, garageName: null, status: "UNDER_MAINTENANCE", isActive: false },
+  { id: "vr5", plateNumber: "MNO-7890", make: "Isuzu", model: "NKR", year: 2018, engineType: "Diesel", truckSizeCategory: "Light Duty", odometer: 3100, lastMaintenanceDate: "2026-07-01T08:30:00.000Z", garageId: "g1", garageName: "Marikina", status: "AVAILABLE", isActive: true },
 ];
 
 // --- Garage Management ---
@@ -703,7 +721,7 @@ export type GarageFullRecord = {
 };
 
 export const mockGarageRecords: GarageFullRecord[] = [
-  { id: "g1", name: "Main Garage",    isActive: true  },
-  { id: "g2", name: "North Cluster",  isActive: true  },
-  { id: "g3", name: "South Hub",      isActive: false },
+  { id: "g1", name: "Marikina", isActive: true },
+  { id: "g2", name: "Sta. Rosa", isActive: true },
+  { id: "g3", name: "Pulilan", isActive: true },
 ];

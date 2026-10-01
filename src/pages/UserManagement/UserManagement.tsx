@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Edit2, KeyRound, Plus, Unlock, UserRoundCheck, Users } from "lucide-react";
+import { Activity, Edit2, KeyRound, Plus, Unlock, UserRoundCheck, Users } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import {
   ActionButton,
@@ -14,6 +14,7 @@ import {
 } from "../../components/ui";
 import {
   createUser,
+  getLoginActivity,
   getManagedUsers,
   resetUserPassword,
   unlockUser,
@@ -23,6 +24,7 @@ import {
   type UserCreateInput,
   type UserRecord,
   type UserRole,
+  type LoginActivityRecord,
 } from "../../lib/api/userService";
 
 type ToastState = {
@@ -43,6 +45,8 @@ const EMPTY_FORM: UserForm = {
   role: "",
   isActive: true,
 };
+
+const INVALID_NAME_MESSAGE = "Name must contain alphanumeric characters only.";
 
 const ROLE_OPTIONS: UserRole[] = ["ADMIN", "OPERATIONS", "MECHANIC", "CHIEF_MECHANIC"];
 
@@ -72,6 +76,9 @@ export default function UserManagement() {
   const [deactivateTarget, setDeactivateTarget] = useState<UserRecord | null>(null);
   const [editConfirmationOpen, setEditConfirmationOpen] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [activityUser, setActivityUser] = useState<UserRecord | null>(null);
+  const [loginActivity, setLoginActivity] = useState<LoginActivityRecord[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
 
   const loadData = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
@@ -202,7 +209,13 @@ export default function UserManagement() {
       setForm(EMPTY_FORM);
     } catch (error) {
       console.error("Failed to save user", error);
-      setToast({ type: "error", message: "Unable to save the user." });
+      setToast({
+        type: "error",
+        message:
+          error instanceof Error && error.message.includes(INVALID_NAME_MESSAGE)
+            ? INVALID_NAME_MESSAGE
+            : "Unable to save the user.",
+      });
       if (editingUser) setFormOpen(true);
     } finally {
       setProcessing(false);
@@ -216,6 +229,10 @@ export default function UserManagement() {
 
     if (!name || !email || !form.role) {
       setToast({ type: "warning", message: "Name, email, and role are required." });
+      return;
+    }
+    if (!/^(?=.*[A-Za-z0-9])[A-Za-z0-9 -]+$/.test(name)) {
+      setToast({ type: "error", message: INVALID_NAME_MESSAGE });
       return;
     }
     const duplicate = users.find(
@@ -295,6 +312,20 @@ export default function UserManagement() {
       setToast({ type: "error", message: "Unable to reset the user's password." });
     } finally {
       setResetPasswordTarget(null);
+    }
+  };
+
+  const openLoginActivity = async (user: UserRecord) => {
+    setActivityUser(user);
+    setLoginActivity([]);
+    setActivityLoading(true);
+    try {
+      setLoginActivity(await getLoginActivity(user.id));
+    } catch (error) {
+      console.error("Failed to load login activity", error);
+      setToast({ type: "error", message: "Unable to load login activity." });
+    } finally {
+      setActivityLoading(false);
     }
   };
 
@@ -378,6 +409,14 @@ export default function UserManagement() {
                     setOpenMenuId((current) => (current === user.id ? null : user.id));
                   }}
                   items={[
+                    {
+                      label: "Login Activity",
+                      icon: Activity,
+                      onClick: () => {
+                        setOpenMenuId(null);
+                        void openLoginActivity(user);
+                      },
+                    },
                     { label: "Edit", icon: Edit2, onClick: () => openEdit(user) },
                     {
                       label: "Reset Password",
@@ -428,6 +467,33 @@ export default function UserManagement() {
           }}
         />
       </section>
+
+      <Modal
+        isOpen={Boolean(activityUser)}
+        title={activityUser ? `Recent Login Activity - ${activityUser.name}` : "Recent Login Activity"}
+        size="lg"
+        onClose={() => setActivityUser(null)}
+      >
+        {activityLoading ? (
+          <p className="py-6 text-center text-sm text-[var(--color-text-secondary)]">Loading activity...</p>
+        ) : loginActivity.length === 0 ? (
+          <p className="py-6 text-center text-sm text-[var(--color-text-secondary)]">No login activity recorded.</p>
+        ) : (
+          <div className="max-h-[60vh] overflow-y-auto">
+            <DataTable
+              data={loginActivity}
+              getRowKey={(event) => event.id}
+              minWidth="620px"
+              columns={[
+                { key: "event", header: "Event", render: (event) => event.event.replaceAll("_", " ").toLowerCase().replace(/^./, (letter) => letter.toUpperCase()) },
+                { key: "createdAt", header: "Timestamp", render: (event) => new Date(event.createdAt).toLocaleString() },
+                { key: "ipAddress", header: "IP Address", render: (event) => event.ipAddress || "Unavailable" },
+                { key: "deviceType", header: "Device", render: (event) => event.deviceType },
+              ]}
+            />
+          </div>
+        )}
+      </Modal>
 
       <Modal
         isOpen={formOpen}
