@@ -40,6 +40,7 @@ export type WebExecutionRecord = {
   items: WebExecutionItem[];
   attachments?: string[];
   remarks?: string;
+  maintenanceRemarks?: string;
   technicianSignature?: string;
 };
 
@@ -114,6 +115,7 @@ export function mapWorkOrderProgress(value: unknown): {
           ? legacyExecution.attachments.filter((item): item is string => typeof item === "string")
           : [],
         remarks: asText(progress.inspectorRemarks) || asText(legacyExecution?.remarks),
+        maintenanceRemarks: asText(progress.maintenanceRemarks) || asText(legacyExecution?.maintenanceRemarks),
         technicianSignature: asText(progress.chiefMechanic) || asText(legacyExecution?.technicianSignature),
       }
     : undefined;
@@ -186,5 +188,10 @@ export function buildBackendWorkOrderProgress(
       typeof previous.inspectorRemarks === "string"
         ? previous.inspectorRemarks
         : execution.remarks ?? "",
+    maintenanceRemarks:
+      typeof previous.maintenanceRemarks === "string"
+        ? previous.maintenanceRemarks
+        : execution.maintenanceRemarks ?? "",
+    rejectionRemarks: asText(previous.rejectionRemarks),
   };
 }

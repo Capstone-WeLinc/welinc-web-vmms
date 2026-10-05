@@ -102,6 +102,7 @@ const readProgress = (task: MaintenanceTask) => {
   if (!progress || typeof progress !== "object") return null;
   return progress as {
     checklist?: Array<{ status?: string }>;
+    maintenanceRemarks?: string;
     executionItems?: Array<{
       id?: string;
       label?: string;
@@ -118,6 +119,7 @@ const readProgress = (task: MaintenanceTask) => {
     execution?: {
       done?: boolean;
       remarks?: string;
+      maintenanceRemarks?: string;
       technicianSignature?: string;
       items?: Array<{
         id?: string;
@@ -220,7 +222,7 @@ const mapScheduleToLog = (
     materialCost,
     costBreakdown,
     cost: materialCost,
-    remarks: execution?.remarks || "N/A",
+    remarks: progress?.maintenanceRemarks || execution?.maintenanceRemarks || execution?.remarks || "N/A",
     technicianSignature: execution?.technicianSignature || "N/A",
   };
 };

@@ -54,6 +54,27 @@ test('web progress saves use the canonical format and preserve mobile part quant
   assert.equal(payload.partDetails.brakes.attachments[0].storageName, 'photo-1.jpg');
 });
 
+test('keeps mechanic maintenance remarks separate from chief mechanic review remarks', () => {
+  const mapped = mapWorkOrderProgress({
+    workflowStatus: 'Rejected',
+    executionItems: [{ id: 'oil', label: 'Oil service', status: 'checked', note: '' }],
+    maintenanceRemarks: 'Replaced the leaking hose and tested the cooling system.',
+    inspectorRemarks: 'Recheck for leaks after a road test.',
+    rejectionRemarks: 'Recheck for leaks after a road test.',
+  });
+  assert.equal(mapped.execution.maintenanceRemarks, 'Replaced the leaking hose and tested the cooling system.');
+  assert.equal(mapped.execution.remarks, 'Recheck for leaks after a road test.');
+
+  const payload = buildBackendWorkOrderProgress([], { done: false, items: [] }, {
+    maintenanceRemarks: mapped.execution.maintenanceRemarks,
+    inspectorRemarks: mapped.execution.remarks,
+    rejectionRemarks: 'Recheck for leaks after a road test.',
+  });
+  assert.equal(payload.maintenanceRemarks, mapped.execution.maintenanceRemarks);
+  assert.equal(payload.inspectorRemarks, mapped.execution.remarks);
+  assert.equal(payload.rejectionRemarks, 'Recheck for leaks after a road test.');
+});
+
 test('continues to read the older web progress shape', () => {
   const mapped = mapWorkOrderProgress({
     checklist: [{ id: 'oil', text: 'Oil level', status: 'pass', note: '' }],

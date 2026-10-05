@@ -15,6 +15,7 @@ interface MaintenanceLog {
   odometerReading: number;
   status: MaintenanceStatus;
   mechanic: string;
+  remarks: string;
   cost: number;
   costBreakdown: Array<{
     item: string;
@@ -189,6 +190,11 @@ export default function ViewModal({ isOpen, log, onClose }: ViewModalProps) {
               </tbody>
             </table>
           </div>
+        </div>
+
+        <div className="mt-5">
+          <span className={labelClasses}>Maintenance Remarks</span>
+          <p className={`${valueClasses} whitespace-pre-wrap break-words`}>{log.remarks}</p>
         </div>
 
         <div className="mt-7 flex justify-end border-t border-[var(--color-divider)] pt-4">
