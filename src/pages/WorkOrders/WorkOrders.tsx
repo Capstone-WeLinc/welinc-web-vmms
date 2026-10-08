@@ -23,8 +23,10 @@ import {
 } from "../../components/ui";
 import {
   MaintenanceIntervalType,
+  MaintenancePriority,
   MaintenanceStatus,
   MaintenanceTriggerType,
+  maintenancePriorityLabels,
   type MaintenanceTask,
 } from "../../types/maintenance";
 import {
@@ -36,6 +38,7 @@ import {
   getChecklistTemplates,
   getWorkOrders,
   updateWorkOrder,
+  updateWorkOrderPriority,
   updateWorkOrderProgress,
   uploadWorkOrderAttachment,
   deleteWorkOrderAttachment,
@@ -45,7 +48,7 @@ import {
 import { getVehicles, type VehicleOption } from "../../lib/api/vehicleService";
 import { getCurrentUser, type UserRecord } from "../../lib/api/authService";
 import { getGarages } from "../../lib/api/locationService";
-import { isMechanicRole } from "../../lib/utils/permissions";
+import { canEditWorkOrderPriority, isMechanicRole } from "../../lib/utils/permissions";
 import {
   getWorkOrderRecommendations,
   type WorkOrderAiRecommendation,
@@ -226,6 +229,7 @@ export default function WorkOrders() {
 
   const [initialProgress] = useState<WorkOrderProgress>(loadWorkOrderProgress);
   const isMechanic = isMechanicRole(currentUser);
+  const canEditPriority = canEditWorkOrderPriority(currentUser);
   // These state setters are used by the work-order loader below, so declare
   // both maps before registering that effect.
   const [checklists, setChecklists] = useState<Map<string, ChecklistItem[]>>(
@@ -282,15 +286,17 @@ export default function WorkOrders() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [selectedStatusFilters, setSelectedStatusFilters] = useState<string[]>([]);
+  const [priorityFilter, setPriorityFilter] = useState<MaintenancePriority | "All">("All");
   const [dateFromFilter, setDateFromFilter] = useState("");
   const [dateToFilter, setDateToFilter] = useState("");
-  const [sortField, setSortField] = useState<"date" | "workOrderId">("date");
+  const [sortField, setSortField] = useState<"date" | "workOrderId" | "priority">("date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const [workOrdersPerPage, setWorkOrdersPerPage] = useState(8);
   const [workOrderStep, setWorkOrderStep] = useState(1);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [savingPriorityId, setSavingPriorityId] = useState<string | null>(null);
   const [pendingWorkOrderAction, setPendingWorkOrderAction] =
     useState<PendingWorkOrderAction>(null);
   const [pendingStartChange, setPendingStartChange] = useState<(() => void) | null>(null);
@@ -416,6 +422,10 @@ export default function WorkOrders() {
     );
   }
 
+  if (priorityFilter !== "All") {
+    activeTasks = activeTasks.filter((task) => (task.priority ?? MaintenancePriority.MEDIUM) === priorityFilter);
+  }
+
   if (dateFromFilter) {
     activeTasks = activeTasks.filter((task) => task.date >= dateFromFilter);
   }
@@ -436,6 +446,15 @@ export default function WorkOrders() {
   }
 
   activeTasks = activeTasks.sort((a, b) => {
+    if (sortField === "priority") {
+      const rank: Record<MaintenancePriority, number> = {
+        [MaintenancePriority.HIGH]: 3,
+        [MaintenancePriority.MEDIUM]: 2,
+        [MaintenancePriority.LOW]: 1,
+      };
+      const difference = rank[a.priority ?? MaintenancePriority.MEDIUM] - rank[b.priority ?? MaintenancePriority.MEDIUM];
+      return sortDirection === "asc" ? difference : -difference;
+    }
     if (sortField === "workOrderId") {
       const getIdNumber = (id: string) => {
         const match = id.match(/(\d+)$/);
@@ -487,6 +506,21 @@ export default function WorkOrders() {
       });
       return next;
     });
+  };
+
+  const handlePriorityChange = async (task: MaintenanceTask, priority: MaintenancePriority) => {
+    if (!canEditPriority || priority === (task.priority ?? MaintenancePriority.MEDIUM)) return;
+    setSavingPriorityId(task.id);
+    try {
+      const updated = await updateWorkOrderPriority(task.id, priority);
+      setTasks((current) => current.map((entry) => entry.id === task.id ? { ...entry, ...updated } : entry));
+      setSelectedTask((current) => current?.id === task.id ? { ...current, ...updated } : current);
+      setToast({ type: "success", message: "Work-order priority updated." });
+    } catch (error) {
+      setToast({ type: "error", message: error instanceof Error ? error.message : "Could not update work-order priority." });
+    } finally {
+      setSavingPriorityId(null);
+    }
   };
 
   const currentChecklist = selectedTask
@@ -641,6 +675,7 @@ export default function WorkOrders() {
       { label: "Work Order No.", value: task.workOrderNumber ?? "N/A" },
       { label: "Vehicle", value: getVehiclePlateNumber(task.vehicleId) },
       { label: "Checklist Template", value: task.title },
+      { label: "Priority", value: task.priority ?? MaintenancePriority.MEDIUM },
       { label: "Assigned Mechanic", value: task.assignedDriver },
       { label: "Date Created", value: task.date },
       { label: "Garage / Cluster", value: getGarageName(task.garageId) },
@@ -689,7 +724,11 @@ export default function WorkOrders() {
                       {detail.label}
                     </th>
                     <td className="px-6 py-4 text-sm text-[var(--color-text-primary)]">
-                      {detail.value}
+                      {detail.label === "Priority" ? (
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${detail.value === MaintenancePriority.HIGH ? "bg-rose-100 text-rose-800" : detail.value === MaintenancePriority.LOW ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                          {maintenancePriorityLabels[detail.value as MaintenancePriority]}
+                        </span>
+                      ) : detail.value}
                     </td>
                   </tr>
                 ))}
@@ -697,6 +736,22 @@ export default function WorkOrders() {
             </table>
           ))}
         </div>
+        {canEditPriority && task.status !== MaintenanceStatus.COMPLETED && task.status !== MaintenanceStatus.CANCELLED && (
+          <div className="border-t border-[var(--color-divider)] px-6 py-4">
+            <label htmlFor="work-order-priority" className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Change priority</label>
+            <select
+              id="work-order-priority"
+              value={task.priority ?? MaintenancePriority.MEDIUM}
+              disabled={savingPriorityId === task.id}
+              onChange={(event) => void handlePriorityChange(task, event.target.value as MaintenancePriority)}
+              className="w-full max-w-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-2.5 text-sm text-[var(--color-text-primary)] disabled:opacity-60"
+            >
+              {Object.values(MaintenancePriority).map((priority) => (
+                <option key={priority} value={priority}>{maintenancePriorityLabels[priority]}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
     );
   };
@@ -1649,6 +1704,7 @@ export default function WorkOrders() {
                 onApply={() => setShowFilters(false)}
                 onClear={() => {
                   setSelectedStatusFilters([]);
+                  setPriorityFilter("All");
                   setDateFromFilter("");
                   setDateToFilter("");
                   setSortField("date");
@@ -1664,7 +1720,7 @@ export default function WorkOrders() {
                     value={`${sortField}-${sortDirection}`}
                     onChange={(e) => {
                       const [field, direction] = e.target.value.split("-") as [
-                        "date" | "workOrderId",
+                        "date" | "workOrderId" | "priority",
                         "asc" | "desc",
                       ];
                       setSortField(field);
@@ -1685,6 +1741,24 @@ export default function WorkOrders() {
                     <option value="workOrderId-desc">
                       {"Work Order ID - Descending"}
                     </option>
+                    <option value="priority-desc">{"Priority - High to Low"}</option>
+                    <option value="priority-asc">{"Priority - Low to High"}</option>
+                  </select>
+                </label>
+                <label className="mt-4 block">
+                  <span className="text-sm font-semibold uppercase text-black">Priority</span>
+                  <select
+                    value={priorityFilter}
+                    onChange={(event) => {
+                      setPriorityFilter(event.target.value as MaintenancePriority | "All");
+                      setCurrentPage(1);
+                    }}
+                    className="mt-2 h-10 w-full rounded-lg border border-[#cbd3df] bg-white px-3 text-sm font-semibold text-[#141827] outline-none transition focus:border-[#070b45] focus:ring-2 focus:ring-[#070b45]/10"
+                  >
+                    <option value="All">All Priorities</option>
+                    {Object.values(MaintenancePriority).map((priority) => (
+                      <option key={priority} value={priority}>{maintenancePriorityLabels[priority]}</option>
+                    ))}
                   </select>
                 </label>
               </FilterDropdown>
@@ -1716,6 +1790,20 @@ export default function WorkOrders() {
                 header: "Maintenance Type",
                 width: "18%",
                 render: (task) => task.title,
+              },
+              {
+                key: "priority",
+                header: "Priority",
+                width: "9%",
+                render: (task) => {
+                  const priority = task.priority ?? MaintenancePriority.MEDIUM;
+                  const color = priority === MaintenancePriority.HIGH
+                    ? "bg-rose-100 text-rose-800"
+                    : priority === MaintenancePriority.LOW
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-amber-100 text-amber-800";
+                  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${color}`}>{maintenancePriorityLabels[priority]}</span>;
+                },
               },
               {
                 key: "mechanic",

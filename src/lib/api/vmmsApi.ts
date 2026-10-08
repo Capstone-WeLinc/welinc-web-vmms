@@ -39,6 +39,7 @@ const fallbackVehicleOptions: VehicleOption[] = [
 import {
   AccountType,
   MaintenanceIntervalType,
+  MaintenancePriority,
   MaintenanceStatus,
   MaintenanceTriggerType,
   type MaintenanceTask,
@@ -179,6 +180,9 @@ function normalizeMaintenanceTask(task: MaintenanceTask): MaintenanceTask {
       (task as MaintenanceTask & { work_order_number?: string }).work_order_number,
     date,
     status: normalizeMaintenanceStatusValue(task.status),
+    priority: Object.values(MaintenancePriority).includes(task.priority as MaintenancePriority)
+      ? task.priority
+      : MaintenancePriority.MEDIUM,
     accountType: normalizeAccountTypeValue(task.accountType),
     triggerType: normalizeTriggerTypeValue(task.triggerType),
     intervalType: normalizeIntervalTypeValue(task.intervalType),
@@ -859,6 +863,7 @@ export async function createMaintenanceSchedule(
     chiefMechanicId: schedule.chiefMechanicId,
     chiefMechanic: schedule.chiefMechanic,
     status: schedule.status,
+    priority: schedule.priority ?? MaintenancePriority.MEDIUM,
     garageId: schedule.garageId,
     accountType: schedule.accountType,
     odometerReading: schedule.odometerReading,
@@ -902,6 +907,7 @@ export async function updateMaintenanceSchedule(schedule: MaintenanceTask) {
     chiefMechanicId: schedule.chiefMechanicId,
     chiefMechanic: schedule.chiefMechanic,
     status: schedule.status,
+    priority: schedule.priority ?? MaintenancePriority.MEDIUM,
     garageId: schedule.garageId,
     accountType: schedule.accountType,
     odometerReading: schedule.odometerReading,
@@ -920,6 +926,28 @@ export async function updateMaintenanceSchedule(schedule: MaintenanceTask) {
       body: JSON.stringify(payload),
     },
   ).then(normalizeMaintenanceTask);
+}
+
+export async function updateWorkOrderPriority(
+  id: string,
+  priority: MaintenancePriority,
+): Promise<Pick<MaintenanceTask, "id" | "priority">> {
+  if (!useMaintenanceScheduleBackend) {
+    const schedules = readLocalMaintenanceSchedules();
+    const current = schedules.find((schedule) => schedule.id === id);
+    if (!current) throw new Error("Work order not found.");
+    const updated = normalizeMaintenanceTask({ ...current, priority });
+    writeLocalMaintenanceSchedules(
+      schedules.map((schedule) => schedule.id === id ? updated : schedule),
+    );
+    return { id: updated.id, priority: updated.priority };
+  }
+
+  const result = await fetchJSON<{ id: string; priority: MaintenancePriority }>(
+    `/maintenance-schedules/${encodeURIComponent(id)}/priority`,
+    { method: "PATCH", body: JSON.stringify({ priority }) },
+  );
+  return result;
 }
 
 export async function cancelMaintenanceSchedule(schedule: MaintenanceTask, reason: string): Promise<MaintenanceTask> {

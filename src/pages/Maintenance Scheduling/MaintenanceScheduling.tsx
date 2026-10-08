@@ -36,11 +36,13 @@ import {
 } from "../../components/ui";
 import CreateSchedule from "./CreateSchedule";
 import { useAuthStore } from "../../store/authStore";
-import { canManageSchedules } from "../../lib/utils/permissions";
+import { canEditWorkOrderPriority, canManageSchedules } from "../../lib/utils/permissions";
 import { timeIntervalFields } from '../../lib/utils/timeInterval';
 import {
   MaintenanceStatus,
+  MaintenancePriority,
   MaintenanceTriggerType,
+  maintenancePriorityLabels,
   maintenanceStatusLabels,
   maintenanceTriggerTypeLabels,
   type MaintenanceTask,
@@ -50,6 +52,7 @@ import {
   cancelMaintenanceSchedule,
   deleteMaintenanceSchedule,
   updateMaintenanceSchedule,
+  updateWorkOrderPriority,
 } from "../../lib/api/maintenanceService";
 import { getVehicles, type VehicleOption } from "../../lib/api/vehicleService";
 import { getGarages } from "../../lib/api/locationService";
@@ -274,6 +277,7 @@ const getTaskStyle = (status: MaintenanceStatus) => {
 const MaintenanceSchedulingCombined = () => {
   const currentUser = useAuthStore((state) => state.currentUser);
   const canSchedule = canManageSchedules(currentUser);
+  const canEditPriority = canEditWorkOrderPriority(currentUser);
   const location = useLocation();
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
@@ -283,6 +287,8 @@ const MaintenanceSchedulingCombined = () => {
   const [viewMode, setViewMode] = useState<"calendar" | "list">("list");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatusFilters, setSelectedStatusFilters] = useState<string[]>([]);
+  const [priorityFilter, setPriorityFilter] = useState<MaintenancePriority | "All">("All");
+  const [priorityOrder, setPriorityOrder] = useState<"NONE" | "HIGH_TO_LOW" | "LOW_TO_HIGH">("NONE");
   const [vehicleFilter, setVehicleFilter] = useState<string>("All");
   const [checklistTemplateFilter, setChecklistTemplateNameFilter] =
     useState<string>("All");
@@ -313,6 +319,7 @@ const MaintenanceSchedulingCombined = () => {
   useEffect(() => { setCancellationReason(''); setActionError(''); }, [pendingAction]);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [savingPriorityId, setSavingPriorityId] = useState<string | null>(null);
 
   useBodyScrollLock(Boolean(pendingAction));
 
@@ -440,6 +447,8 @@ const MaintenanceSchedulingCombined = () => {
             (status === MaintenanceStatus.OVERDUE && isOverdueStatus(task.status)) ||
             status === task.status,
         );
+      const priorityMatches = priorityFilter === "All" ||
+        (task.priority ?? MaintenancePriority.MEDIUM) === priorityFilter;
       const taskVehicle = getVehicleOption(task.vehicleId);
       const vehicleMatches =
         vehicleFilter === "All" ||
@@ -464,6 +473,7 @@ const MaintenanceSchedulingCombined = () => {
       return (
         isVisibleSchedule &&
         statusMatches &&
+        priorityMatches &&
         vehicleMatches &&
         templateMatches &&
         dateMatches &&
@@ -471,6 +481,17 @@ const MaintenanceSchedulingCombined = () => {
       );
     })
     .sort((left, right) => {
+      if (priorityOrder !== "NONE") {
+        const rank: Record<MaintenancePriority, number> = {
+          [MaintenancePriority.HIGH]: 3,
+          [MaintenancePriority.MEDIUM]: 2,
+          [MaintenancePriority.LOW]: 1,
+        };
+        const priorityDifference = rank[left.priority ?? MaintenancePriority.MEDIUM] - rank[right.priority ?? MaintenancePriority.MEDIUM];
+        if (priorityDifference !== 0) {
+          return priorityOrder === "HIGH_TO_LOW" ? -priorityDifference : priorityDifference;
+        }
+      }
       const dateComparison = (left.startDate ?? '').localeCompare(right.startDate ?? '');
       if (dateComparison !== 0) {
         return dateSortDirection === "asc" ? dateComparison : -dateComparison;
@@ -541,6 +562,21 @@ const MaintenanceSchedulingCombined = () => {
 
   const selectedSchedule =
     selectedSchedules[selectedSchedulePage] ?? selectedSchedules[0] ?? null;
+
+  const handlePriorityChange = async (task: MaintenanceTask, priority: MaintenancePriority) => {
+    if (!canEditPriority || priority === (task.priority ?? MaintenancePriority.MEDIUM)) return;
+    setSavingPriorityId(task.id);
+    try {
+      const updated = await updateWorkOrderPriority(task.id, priority);
+      setTasks((current) => current.map((entry) => entry.id === task.id ? { ...entry, ...updated } : entry));
+      setSelectedSchedules((current) => current.map((entry) => entry.id === task.id ? { ...entry, ...updated } : entry));
+      setToast({ type: "success", message: "Work-order priority updated." });
+    } catch (error) {
+      setToast({ type: "error", message: error instanceof Error ? error.message : "Could not update work-order priority." });
+    } finally {
+      setSavingPriorityId(null);
+    }
+  };
 
   const getGarageName = (garageId?: string) => {
     if (!garageId) return undefined;
@@ -798,6 +834,8 @@ const MaintenanceSchedulingCombined = () => {
                 onApply={() => setShowFilters(false)}
                 onClear={() => {
                   setSelectedStatusFilters([]);
+                  setPriorityFilter("All");
+                  setPriorityOrder("NONE");
                   setDateFromFilter("");
                   setDateToFilter("");
                   setVehicleFilter("All");
@@ -824,6 +862,36 @@ const MaintenanceSchedulingCombined = () => {
                     value={checklistTemplateFilter}
                     onChange={(e) => {
                       setChecklistTemplateNameFilter(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                  />
+                  <SelectField
+                    label="Priority"
+                    id="priorityF"
+                    options={[
+                      { value: "All", label: "All Priorities" },
+                      ...Object.values(MaintenancePriority).map((priority) => ({
+                        value: priority,
+                        label: maintenancePriorityLabels[priority],
+                      })),
+                    ]}
+                    value={priorityFilter}
+                    onChange={(e) => {
+                      setPriorityFilter(e.target.value as MaintenancePriority | "All");
+                      setCurrentPage(1);
+                    }}
+                  />
+                  <SelectField
+                    label="Priority Order"
+                    id="priorityOrderF"
+                    options={[
+                      { value: "NONE", label: "Use Start Date" },
+                      { value: "HIGH_TO_LOW", label: "High to Low" },
+                      { value: "LOW_TO_HIGH", label: "Low to High" },
+                    ]}
+                    value={priorityOrder}
+                    onChange={(e) => {
+                      setPriorityOrder(e.target.value as typeof priorityOrder);
                       setCurrentPage(1);
                     }}
                   />
@@ -882,6 +950,20 @@ const MaintenanceSchedulingCombined = () => {
                     header: "Work Order",
                     width: "17%",
                     render: (task) => task.title,
+                  },
+                  {
+                    key: "priority",
+                    header: "Priority",
+                    width: "9%",
+                    render: (task) => {
+                      const priority = task.priority ?? MaintenancePriority.MEDIUM;
+                      const color = priority === MaintenancePriority.HIGH
+                        ? "bg-rose-100 text-rose-800"
+                        : priority === MaintenancePriority.LOW
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-amber-100 text-amber-800";
+                      return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${color}`}>{maintenancePriorityLabels[priority]}</span>;
+                    },
                   },
                   {
                     key: "trigger",
@@ -1243,6 +1325,7 @@ const MaintenanceSchedulingCombined = () => {
                 value: getVehiclePlateNumber(selectedSchedule.vehicleId),
               },
               { label: "Checklist Template", value: selectedSchedule.title },
+              { label: "Priority", value: selectedSchedule.priority ?? MaintenancePriority.MEDIUM },
               {
                 label: "Trigger",
                 value:
@@ -1329,12 +1412,33 @@ const MaintenanceSchedulingCombined = () => {
                   <p className="mt-1 text-sm font-medium text-[var(--color-text-primary)]">
                     {detail.label === "Status" ? (
                       <StatusBadge status={selectedSchedule.status} />
+                    ) : detail.label === "Priority" ? (
+                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${detail.value === MaintenancePriority.HIGH ? "bg-rose-100 text-rose-800" : detail.value === MaintenancePriority.LOW ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                        {maintenancePriorityLabels[detail.value as MaintenancePriority]}
+                      </span>
                     ) : (
                       detail.value
                     )}
                   </p>
                 </div>
               ))}
+
+            {canEditPriority && selectedSchedule.status !== MaintenanceStatus.COMPLETED && selectedSchedule.status !== MaintenanceStatus.CANCELLED && (
+              <div className="border-t border-[var(--color-divider)] p-4">
+                <label htmlFor="schedule-detail-priority" className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Change priority</label>
+                <select
+                  id="schedule-detail-priority"
+                  value={selectedSchedule.priority ?? MaintenancePriority.MEDIUM}
+                  disabled={savingPriorityId === selectedSchedule.id}
+                  onChange={(event) => void handlePriorityChange(selectedSchedule, event.target.value as MaintenancePriority)}
+                  className="w-full max-w-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-2.5 text-sm text-[var(--color-text-primary)] disabled:opacity-60"
+                >
+                  {Object.values(MaintenancePriority).map((priority) => (
+                    <option key={priority} value={priority}>{maintenancePriorityLabels[priority]}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {selectedSchedule.cancellations?.map((entry) => (
               <div key={entry.id} className="rounded-xl border border-[var(--color-border)] p-4 sm:col-span-2">

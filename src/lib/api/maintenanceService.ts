@@ -8,6 +8,7 @@ export {
   getWorkOrders,
   saveChecklistTemplates,
   updateMaintenanceSchedule,
+  updateWorkOrderPriority,
   updateWorkOrder,
   updateWorkOrderProgress,
   uploadWorkOrderAttachment,

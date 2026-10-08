@@ -18,6 +18,20 @@ function hasVmmsOperationsRole(user?: {
 export const canManageVehicles = hasVmmsOperationsRole;
 export const canManageSchedules = hasVmmsOperationsRole;
 
+export function canEditWorkOrderPriority(user?: {
+  role?: string | null;
+  roles?: Array<{ role?: string | null; system?: string | null }> | null;
+} | null): boolean {
+  if (!user) return false;
+  if (Array.isArray(user.roles)) {
+    const vmmsRoles = user.roles.filter((entry) => entry?.system === "VMMS");
+    if (vmmsRoles.length) {
+      return vmmsRoles.some((entry) => ["ADMIN", "OPERATIONS"].includes(normalizeRoleValue(entry.role)));
+    }
+  }
+  return ["ADMIN", "OPERATIONS"].includes(normalizeRoleValue(user.role));
+}
+
 export function canSeeVmmsWebNavigation(user?: {
   role?: string | null;
   roles?: Array<{ role?: string | null; system?: string | null }> | null;
@@ -68,6 +82,7 @@ export function canSeeVmmsNavigationPath(
         : ""
       : normalizeRoleValue(user.role);
   if (role === "OPERATIONS") return OPERATIONS_NAV_PATHS.has(path);
+  if (role === "CHIEF_MECHANIC") return path === "/work-orders";
   return role === "ADMIN";
 }
 

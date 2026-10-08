@@ -34,6 +34,8 @@ import { getOdometerActivationRange } from "../../lib/utils/workOrders";
 import {
   AccountType,
   accountTypeLabels,
+  MaintenancePriority,
+  maintenancePriorityLabels,
   MaintenanceStatus,
   MaintenanceTriggerType,
   maintenanceTriggerTypeLabels,
@@ -100,6 +102,7 @@ export default function CreateScheduleModal({
   const [isOtherGarage, setIsOtherGarage] = useState(false);
   const [otherGarage, setOtherGarage] = useState("");
   const [accountType, setAccountType] = useState<AccountType | "">("");
+  const [priority, setPriority] = useState<MaintenancePriority>(MaintenancePriority.MEDIUM);
   const [outsourcedProvider, setOutsourcedProvider] = useState("");
   const [systemAffected, setSystemAffected] = useState("");
   const [odometerReading, setOdometerReading] = useState("");
@@ -173,6 +176,7 @@ export default function CreateScheduleModal({
               ? (editingTask.accountType ?? "")
               : "",
           );
+          setPriority(editingTask.priority ?? MaintenancePriority.MEDIUM);
           setOutsourcedProvider(editingTask.outsourcedProvider ?? "");
           setSystemAffected(editingTask.systemAffected ?? "");
           setOdometerReading(editingTask.odometerReading ?? "");
@@ -201,6 +205,7 @@ export default function CreateScheduleModal({
           setIsOtherGarage(false);
           setOtherGarage("");
           setAccountType("");
+          setPriority(MaintenancePriority.MEDIUM);
           setOutsourcedProvider("");
           setSystemAffected("");
           setOdometerReading("");
@@ -339,6 +344,7 @@ export default function CreateScheduleModal({
               notes,
               garageId: savedGarageId,
               accountType: accountType || undefined,
+              priority,
               outsourcedProvider:
                 accountType === AccountType.OUTSOURCED ? outsourcedProvider.trim() : "",
               systemAffected,
@@ -368,6 +374,7 @@ export default function CreateScheduleModal({
           notes,
           garageId: savedGarageId,
           accountType: accountType || undefined,
+          priority,
           outsourcedProvider:
             accountType === AccountType.OUTSOURCED ? outsourcedProvider.trim() : "",
           systemAffected,
@@ -394,6 +401,7 @@ export default function CreateScheduleModal({
       setIsOtherGarage(false);
       setOtherGarage("");
       setAccountType("");
+      setPriority(MaintenancePriority.MEDIUM);
       setOutsourcedProvider("");
       setSystemAffected("");
       setOdometerReading("");
@@ -568,6 +576,21 @@ export default function CreateScheduleModal({
               className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-3" />
             {startDateError && <p id="schedule-start-date-error" role="alert" className="mt-1 text-sm text-red-600">{startDateError}</p>}
           </section>
+          {!isOdometerOnlyUpdate && (
+            <section>
+              <label htmlFor="schedule-priority" className="mb-1.5 block text-sm font-medium">Work-order priority</label>
+              <select
+                id="schedule-priority"
+                value={priority}
+                onChange={(event) => setPriority(event.target.value as MaintenancePriority)}
+                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-3"
+              >
+                {Object.values(MaintenancePriority).map((value) => (
+                  <option key={value} value={value}>{maintenancePriorityLabels[value]}</option>
+                ))}
+              </select>
+            </section>
+          )}
           {mileageError && !startingReferenceReadingError && !maintenanceIntervalError && <p role="alert" className="text-sm text-red-600">{mileageError}</p>}
           {intervalError && <p role="alert" className="text-sm text-red-600">{intervalError}</p>}
           {isOdometerOnlyUpdate ? (

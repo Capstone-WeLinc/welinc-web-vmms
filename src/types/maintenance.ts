@@ -18,6 +18,21 @@ export const MaintenanceStatus = {
 export type MaintenanceStatus =
   (typeof MaintenanceStatus)[keyof typeof MaintenanceStatus];
 
+export const MaintenancePriority = {
+  HIGH: "HIGH",
+  MEDIUM: "MEDIUM",
+  LOW: "LOW",
+} as const;
+
+export type MaintenancePriority =
+  (typeof MaintenancePriority)[keyof typeof MaintenancePriority];
+
+export const maintenancePriorityLabels: Record<MaintenancePriority, string> = {
+  [MaintenancePriority.HIGH]: "High",
+  [MaintenancePriority.MEDIUM]: "Medium",
+  [MaintenancePriority.LOW]: "Low",
+};
+
 export const MaintenanceTriggerType = {
   MANUAL: "MANUAL",
   ODOMETER: "ODOMETER",
@@ -82,6 +97,7 @@ export interface MaintenanceTask {
   vehicleId: string;
   title: string;
   status: MaintenanceStatus;
+  priority?: MaintenancePriority;
   date: string;
   assignedDriver: string;
   assignedMechanicId?: string;
