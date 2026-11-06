@@ -10,7 +10,6 @@ import {
 import Sidebar from "./components/Sidebar/Sidebar";
 import { getCurrentUser } from "./lib/api/authService";
 import Dashboard from "./pages/Dashboard/Dashboard";
-import PlaceholderPage from "./pages/PlaceholderPage/PlaceholderPage";
 import SchedulingPage from "./pages/Maintenance Scheduling/MaintenanceScheduling";
 import ChecklistTemplates from "./pages/ChecklistTemplates/ChecklistTemplates";
 import WorkOrders from "./pages/WorkOrders/WorkOrders";
@@ -20,12 +19,18 @@ import FuelManagement from "./pages/FuelManagement/FuelManagement";
 import UserManagement from "./pages/UserManagement/UserManagement";
 import LoginPage from "./pages/Login/LoginPage";
 import Profile from "./pages/Profile/Profile";
+import AIAnalyticsPage from "./pages/AIAnalytics/AIAnalytics";
+import Vehicles from "./pages/Vehicles/Vehicles";
+import Garages from "./pages/Garages/Garages";
 import { useBackend } from "./lib/api/httpClient";
+import { recordLogout } from "./lib/api/vmmsApi";
 
-import { FileBarChart2 } from "lucide-react";
 import { setLastActivity, msUntilAbsoluteExpiry, msUntilInactivityExpiry, clearSession } from "./lib/utils/session";
-import { isMechanicRole, isOperationsRole } from "./lib/utils/permissions";
+
+import { isMechanicRole, isOperationsRole, isChiefMechanicRole } from "./lib/utils/permissions";
 import { useAuthStore } from "./store/authStore";
+import MaintenanceReports from "./pages/MaintenanceReports/MaintenanceReports";
+import AuditLogs from "./pages/AuditLogs/AuditLogs";
 
 function RequireAuthWrapper({
   children,
@@ -55,6 +60,7 @@ function App() {
     new URLSearchParams(location.search).has("token");
   const isMechanic = isMechanicRole(currentUser);
   const isOperations = isOperationsRole(currentUser);
+  const isChiefMechanic = isChiefMechanicRole(currentUser);
 
   const handleLogin = () => {
     setAuthenticated(true);
@@ -64,12 +70,16 @@ function App() {
         navigate("/dashboard", { replace: true });
       })
       .catch(() => {
+        window.localStorage.removeItem("accessToken");
+        clearSession();
+        setAuthenticated(false);
         setCurrentUser(null);
-        navigate("/dashboard", { replace: true });
+        navigate("/login", { replace: true });
       });
   };
 
   const handleLogout = useCallback(() => {
+    void recordLogout();
     window.localStorage.removeItem("accessToken");
     clearSession();
     clearAuth();
@@ -108,6 +118,23 @@ function App() {
       return;
     }
 
+    if (isChiefMechanic) {
+      const allowedChiefMechanicPaths = [
+        "/dashboard",
+        "/maintenance-scheduling",
+        "/work-orders",
+        "/maintenance-logs",
+        "/maintenance-reports",
+        "/vehicles",
+        "/garages",
+        "/profile",
+      ];
+      if (!allowedChiefMechanicPaths.includes(location.pathname)) {
+        navigate("/dashboard", { replace: true });
+      }
+      return;
+    }
+
     if (isOperations) {
       const allowedOperationsPaths = [
         "/dashboard",
@@ -117,14 +144,17 @@ function App() {
         "/maintenance-logs",
         "/profile",
         "/maintenance-reports",
+        "/ai-analytics",
         "/fuel-management",
+        "/vehicles",
+        "/garages",
       ];
 
       if (!allowedOperationsPaths.includes(location.pathname)) {
         navigate("/dashboard", { replace: true });
       }
     }
-  }, [currentUser, isAuthenticated, isMechanic, isOperations, location.pathname, navigate]);
+  }, [currentUser, isAuthenticated, isMechanic, isChiefMechanic, isOperations, location.pathname, navigate]);
 
   useEffect(() => {
     const handleUnauthorized = () => {
@@ -245,6 +275,14 @@ function App() {
             }
           />
           <Route
+            path="/audit-logs"
+            element={
+              <RequireAuthWrapper isAuthenticated={isAuthenticated} location={location}>
+                <AuditLogs />
+              </RequireAuthWrapper>
+            }
+          />
+          <Route
             path="/maintenance-scheduling"
             element={
               <RequireAuthWrapper
@@ -304,17 +342,24 @@ function App() {
             }
           />
           <Route
+            path="/ai-analytics"
+            element={
+              <RequireAuthWrapper
+                isAuthenticated={isAuthenticated}
+                location={location}
+              >
+                <AIAnalyticsPage />
+              </RequireAuthWrapper>
+            }
+          />
+          <Route
             path="/maintenance-reports"
             element={
               <RequireAuthWrapper
                 isAuthenticated={isAuthenticated}
                 location={location}
               >
-                <PlaceholderPage
-                  icon={FileBarChart2}
-                  title="Maintenance Reports"
-                  subtitle="Generate and view maintenance analytics"
-                />
+                <MaintenanceReports />
               </RequireAuthWrapper>
             }
           />
@@ -337,6 +382,28 @@ function App() {
                 location={location}
               >
                 <ExpenseTrackingPage />
+              </RequireAuthWrapper>
+            }
+          />
+          <Route
+            path="/vehicles"
+            element={
+              <RequireAuthWrapper
+                isAuthenticated={isAuthenticated}
+                location={location}
+              >
+                <Vehicles />
+              </RequireAuthWrapper>
+            }
+          />
+          <Route
+            path="/garages"
+            element={
+              <RequireAuthWrapper
+                isAuthenticated={isAuthenticated}
+                location={location}
+              >
+                <Garages />
               </RequireAuthWrapper>
             }
           />

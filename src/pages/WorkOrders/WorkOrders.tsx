@@ -5,7 +5,10 @@ import {
   AlertTriangle,
   ChevronLeft,
   CheckCircle2,
+  Sparkles,
+  BrainCircuit,
 } from "lucide-react";
+
 import PageHeader from "../../components/PageHeader/PageHeader";
 import {
   ActionButton,
@@ -20,8 +23,10 @@ import {
 } from "../../components/ui";
 import {
   MaintenanceIntervalType,
+  MaintenancePriority,
   MaintenanceStatus,
   MaintenanceTriggerType,
+  maintenancePriorityLabels,
   type MaintenanceTask,
 } from "../../types/maintenance";
 import {
@@ -33,17 +38,27 @@ import {
   getChecklistTemplates,
   getWorkOrders,
   updateWorkOrder,
+  updateWorkOrderPriority,
   updateWorkOrderProgress,
+  uploadWorkOrderAttachment,
+  deleteWorkOrderAttachment,
+  openWorkOrderAttachment,
+  type WorkOrderAttachment,
 } from "../../lib/api/maintenanceService";
 import { getVehicles, type VehicleOption } from "../../lib/api/vehicleService";
 import { getCurrentUser, type UserRecord } from "../../lib/api/authService";
 import { getGarages } from "../../lib/api/locationService";
-import { isMechanicRole } from "../../lib/utils/permissions";
+import { canEditWorkOrderPriority, isMechanicRole } from "../../lib/utils/permissions";
 import {
-  formatWorkOrderNumber,
+  getWorkOrderRecommendations,
+  type WorkOrderAiRecommendation,
+} from "../../lib/api/analyticsService";
+
+import {
   getCalculatedMaintenanceStatus,
   getOdometerActivationRange,
   getTimeBasedActivationDate,
+  isDoneStatus,
   isDueStatus,
   isInProgressStatus,
   isOverdueStatus,
@@ -51,6 +66,11 @@ import {
   isPendingOdometerScheduleReadyForMechanic,
   isPendingTimeScheduleReadyForMechanic,
 } from "../../lib/utils/workOrders";
+import {
+  buildBackendWorkOrderProgress,
+  mergeUploadedWorkOrderAttachments,
+  mapWorkOrderProgress,
+} from "../../lib/utils/workOrderProgress";
 
 type ItemStatus = "pass" | "fail" | "pending";
 
@@ -76,7 +96,7 @@ interface ExecutionItem {
   note: string;
   partsUsed?: string;
   partsCost?: string;
-  attachments?: string[];
+  attachments?: WorkOrderAttachment[];
 }
 
 interface ExecutionRecord {
@@ -120,12 +140,6 @@ const saveWorkOrderProgress = (progress: WorkOrderProgress) => {
   } catch {
     // ignore storage failure
   }
-};
-
-const isBackendWorkOrderProgress = (
-  value: unknown,
-): value is { checklist?: ChecklistItem[]; execution?: ExecutionRecord } => {
-  return typeof value === "object" && value !== null;
 };
 
 const normalizeTemplateName = (value?: string | null) =>
@@ -213,8 +227,17 @@ export default function WorkOrders() {
       defaultChecklistTemplates,
     );
 
-  const initialProgress = loadWorkOrderProgress();
+  const [initialProgress] = useState<WorkOrderProgress>(loadWorkOrderProgress);
   const isMechanic = isMechanicRole(currentUser);
+  const canEditPriority = canEditWorkOrderPriority(currentUser);
+  // These state setters are used by the work-order loader below, so declare
+  // both maps before registering that effect.
+  const [checklists, setChecklists] = useState<Map<string, ChecklistItem[]>>(
+    () => new Map(Object.entries(initialProgress.checklists || {})),
+  );
+  const [executions, setExecutions] = useState<Map<string, ExecutionRecord>>(
+    () => new Map(Object.entries(initialProgress.executions || {})),
+  );
 
   useEffect(() => {
     const loadWorkOrders = () => {
@@ -224,26 +247,16 @@ export default function WorkOrders() {
           setChecklists((current) => {
             const next = new Map(current);
             loadedTasks.forEach((task) => {
-              const progress = task.workOrderProgress;
-              if (
-                isBackendWorkOrderProgress(progress) &&
-                Array.isArray(progress.checklist)
-              ) {
-                next.set(task.id, progress.checklist);
-              }
+              const progress = mapWorkOrderProgress(task.workOrderProgress);
+              if (progress?.checklist) next.set(task.id, progress.checklist);
             });
             return next;
           });
           setExecutions((current) => {
             const next = new Map(current);
             loadedTasks.forEach((task) => {
-              const progress = task.workOrderProgress;
-              if (
-                isBackendWorkOrderProgress(progress) &&
-                progress.execution
-              ) {
-                next.set(task.id, progress.execution);
-              }
+              const progress = mapWorkOrderProgress(task.workOrderProgress);
+              if (progress?.execution) next.set(task.id, progress.execution);
             });
             return next;
           });
@@ -270,26 +283,68 @@ export default function WorkOrders() {
     return () => window.removeEventListener("focus", loadWorkOrders);
   }, []);
 
-  // State for checklists could be a Map keyed by task ID to prevent prototype pollution.
-  const [checklists, setChecklists] = useState<Map<string, ChecklistItem[]>>(
-    () => new Map(Object.entries(initialProgress.checklists || {})),
-  );
-
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [selectedStatusFilters, setSelectedStatusFilters] = useState<string[]>([]);
+  const [priorityFilter, setPriorityFilter] = useState<MaintenancePriority | "All">("All");
   const [dateFromFilter, setDateFromFilter] = useState("");
   const [dateToFilter, setDateToFilter] = useState("");
-  const [sortField, setSortField] = useState<"date" | "workOrderId">("date");
+  const [sortField, setSortField] = useState<"date" | "workOrderId" | "priority">("date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const [workOrdersPerPage, setWorkOrdersPerPage] = useState(8);
   const [workOrderStep, setWorkOrderStep] = useState(1);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [savingPriorityId, setSavingPriorityId] = useState<string | null>(null);
   const [pendingWorkOrderAction, setPendingWorkOrderAction] =
     useState<PendingWorkOrderAction>(null);
   const [pendingStartChange, setPendingStartChange] = useState<(() => void) | null>(null);
+
+  const [aiState, setAiState] = useState<{
+    taskId: string;
+    recommendation: WorkOrderAiRecommendation | null;
+    loading: boolean;
+    error: string | null;
+  } | null>(null);
+  const selectedAiState = aiState?.taskId === selectedTask?.id ? aiState : null;
+  const aiRec = selectedAiState?.recommendation ?? null;
+  const loadingAiRec = selectedAiState?.loading ?? false;
+  const aiError = selectedAiState?.error ?? null;
+
+  const handleGenerateWorkOrderAi = (task: MaintenanceTask) => {
+    if (!task) return;
+    setAiState({ taskId: task.id, recommendation: null, loading: true, error: null });
+    const currentItems = checklists.get(task.id) || [];
+    getWorkOrderRecommendations(task.id, {
+      title: task.title,
+      vehiclePlate: getVehiclePlateNumber(task.vehicleId),
+      assignedMechanic: task.assignedDriver,
+      status: task.status,
+      odometerReading: task.odometerReading,
+      triggerType: task.triggerType,
+      checklistItems: currentItems.map((it) => ({ text: it.text })),
+    })
+      .then((data) => setAiState((current) =>
+        current?.taskId === task.id
+          ? { ...current, recommendation: data }
+          : current,
+      ))
+      .catch((err: unknown) => {
+        console.warn("Failed to fetch AI recommendation for selected task:", err);
+        const msg = err instanceof Error ? err.message : "Failed to generate AI recommendations for this work order.";
+        setAiState((current) =>
+          current?.taskId === task.id
+            ? { ...current, error: msg, recommendation: null }
+            : current,
+        );
+      })
+      .finally(() => setAiState((current) =>
+        current?.taskId === task.id ? { ...current, loading: false } : current,
+      ));
+  };
+
+
 
   useEffect(() => {
     const closeActionMenu = () => setOpenActionMenuId(null);
@@ -347,6 +402,7 @@ export default function WorkOrders() {
       (isPendingStatus(task.status) ||
         isDueStatus(task.status) ||
         isInProgressStatus(task.status) ||
+        isDoneStatus(task.status) ||
         isOverdueStatus(task.status)) &&
       isAssignedToCurrentMechanic(task),
   );
@@ -359,9 +415,14 @@ export default function WorkOrders() {
           (status === MaintenanceStatus.PENDING && isPendingStatus(t.status)) ||
           (status === MaintenanceStatus.DUE && isDueStatus(t.status)) ||
           (status === MaintenanceStatus.IN_PROGRESS && isInProgressStatus(t.status)) ||
+          (status === MaintenanceStatus.DONE && isDoneStatus(t.status)) ||
           (status === MaintenanceStatus.OVERDUE && isOverdueStatus(t.status)),
       ),
     );
+  }
+
+  if (priorityFilter !== "All") {
+    activeTasks = activeTasks.filter((task) => (task.priority ?? MaintenancePriority.MEDIUM) === priorityFilter);
   }
 
   if (dateFromFilter) {
@@ -384,6 +445,15 @@ export default function WorkOrders() {
   }
 
   activeTasks = activeTasks.sort((a, b) => {
+    if (sortField === "priority") {
+      const rank: Record<MaintenancePriority, number> = {
+        [MaintenancePriority.HIGH]: 3,
+        [MaintenancePriority.MEDIUM]: 2,
+        [MaintenancePriority.LOW]: 1,
+      };
+      const difference = rank[a.priority ?? MaintenancePriority.MEDIUM] - rank[b.priority ?? MaintenancePriority.MEDIUM];
+      return sortDirection === "asc" ? difference : -difference;
+    }
     if (sortField === "workOrderId") {
       const getIdNumber = (id: string) => {
         const match = id.match(/(\d+)$/);
@@ -410,6 +480,7 @@ export default function WorkOrders() {
 
   const handleSelectTask = (task: MaintenanceTask) => {
     setSelectedTask(task);
+    setAiState(null);
     setWorkOrderStep(1);
     const templateItems = findTemplateItems(templates, task.title);
 
@@ -436,13 +507,24 @@ export default function WorkOrders() {
     });
   };
 
+  const handlePriorityChange = async (task: MaintenanceTask, priority: MaintenancePriority) => {
+    if (!canEditPriority || priority === (task.priority ?? MaintenancePriority.MEDIUM)) return;
+    setSavingPriorityId(task.id);
+    try {
+      const updated = await updateWorkOrderPriority(task.id, priority);
+      setTasks((current) => current.map((entry) => entry.id === task.id ? { ...entry, ...updated } : entry));
+      setSelectedTask((current) => current?.id === task.id ? { ...current, ...updated } : current);
+      setToast({ type: "success", message: "Work-order priority updated." });
+    } catch (error) {
+      setToast({ type: "error", message: error instanceof Error ? error.message : "Could not update work-order priority." });
+    } finally {
+      setSavingPriorityId(null);
+    }
+  };
+
   const currentChecklist = selectedTask
     ? checklists.get(selectedTask.id) || []
     : [];
-
-  const [executions, setExecutions] = useState<Map<string, ExecutionRecord>>(
-    () => new Map(Object.entries(initialProgress.executions || {})),
-  );
 
   useEffect(() => {
     saveWorkOrderProgress({
@@ -462,29 +544,33 @@ export default function WorkOrders() {
     : { done: false, items: [] };
 
   useEffect(() => {
-    if (!selectedTask) return;
+    if (!selectedTask || !isMechanic || !isInProgressStatus(selectedTask.status)) return;
 
     const checklist = checklists.get(selectedTask.id);
     const execution = executions.get(selectedTask.id);
     if (!checklist && !execution) return;
 
     const timeout = window.setTimeout(() => {
-      updateWorkOrderProgress(selectedTask.id, {
-        checklist: checklist ?? [],
-        execution: execution ?? {
+      updateWorkOrderProgress(
+        selectedTask.id,
+        buildBackendWorkOrderProgress(
+          checklist ?? [],
+          execution ?? {
           done: false,
           items: [],
           attachments: [],
           remarks: "",
           technicianSignature: "",
-        },
-      }).catch((error) => {
+          },
+          selectedTask.workOrderProgress,
+        ),
+      ).catch((error) => {
         console.error("Failed to save work order progress", error);
       });
     }, 400);
 
     return () => window.clearTimeout(timeout);
-  }, [selectedTask, checklists, executions]);
+  }, [selectedTask, checklists, executions, isMechanic]);
 
   const canMechanicStartTask =
     !selectedTask ||
@@ -494,6 +580,7 @@ export default function WorkOrders() {
   const canModifySelectedTask =
     isMechanic &&
     Boolean(selectedTask) &&
+    selectedTask?.status !== MaintenanceStatus.DONE &&
     selectedTask?.status !== MaintenanceStatus.COMPLETED &&
     canMechanicStartTask;
 
@@ -555,9 +642,11 @@ export default function WorkOrders() {
     if (selectedTask?.id === taskId) {
       setSelectedTask(updatedTask);
     }
-    updateWorkOrder(updatedTask).catch(() => {
-      // ignore service failure, keep local state
-    });
+    if (!isMechanic) {
+      updateWorkOrder(updatedTask).catch(() => {
+        // ignore service failure, keep local state
+      });
+    }
   };
 
   const detailRef = useRef<HTMLDivElement | null>(null);
@@ -578,11 +667,14 @@ export default function WorkOrders() {
     return garages.find((garage) => garage.id === garageId)?.name ?? garageId;
   };
 
+
+
   const renderScheduleDetails = (task: MaintenanceTask) => {
     const details = [
-      { label: "Work Order No.", value: formatWorkOrderNumber(task.id) },
+      { label: "Work Order No.", value: task.workOrderNumber ?? "N/A" },
       { label: "Vehicle", value: getVehiclePlateNumber(task.vehicleId) },
       { label: "Checklist Template", value: task.title },
+      { label: "Priority", value: task.priority ?? MaintenancePriority.MEDIUM },
       { label: "Assigned Mechanic", value: task.assignedDriver },
       { label: "Date Created", value: task.date },
       { label: "Garage / Cluster", value: getGarageName(task.garageId) },
@@ -631,13 +723,248 @@ export default function WorkOrders() {
                       {detail.label}
                     </th>
                     <td className="px-6 py-4 text-sm text-[var(--color-text-primary)]">
-                      {detail.value}
+                      {detail.label === "Priority" ? (
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${detail.value === MaintenancePriority.HIGH ? "bg-rose-100 text-rose-800" : detail.value === MaintenancePriority.LOW ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                          {maintenancePriorityLabels[detail.value as MaintenancePriority]}
+                        </span>
+                      ) : detail.value}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           ))}
+        </div>
+        {canEditPriority && task.status !== MaintenanceStatus.COMPLETED && task.status !== MaintenanceStatus.CANCELLED && (
+          <div className="border-t border-[var(--color-divider)] px-6 py-4">
+            <label htmlFor="work-order-priority" className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Change priority</label>
+            <select
+              id="work-order-priority"
+              value={task.priority ?? MaintenancePriority.MEDIUM}
+              disabled={savingPriorityId === task.id}
+              onChange={(event) => void handlePriorityChange(task, event.target.value as MaintenancePriority)}
+              className="w-full max-w-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-2.5 text-sm text-[var(--color-text-primary)] disabled:opacity-60"
+            >
+              {Object.values(MaintenancePriority).map((priority) => (
+                <option key={priority} value={priority}>{maintenancePriorityLabels[priority]}</option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+    );
+  };
+  const parseAiExecutionSections = (text: string) => {
+    if (!text) return [];
+
+    const lines = text.split(/\r?\n/);
+    const result: { title: string; items: string[] }[] = [];
+    let current: { title: string; items: string[] } | null = null;
+
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line) continue;
+
+      const isHeading =
+        /^(?:#+\s*|\*\*\d+[.)]|\d+[.)])\s*/.test(line) ||
+        (line.endsWith(":") && line.length < 80 && !line.includes("•"));
+
+      if (isHeading) {
+        if (current && current.items.length > 0) {
+          result.push(current);
+        }
+        const cleanTitle = line
+          .replace(/^[#*\d.)\s]+/, "")
+          .replace(/[:*]+$/, "")
+          .trim();
+        current = { title: cleanTitle || line, items: [] };
+      } else if (current) {
+        current.items.push(line.replace(/^[-*•]\s*/, ""));
+      } else {
+        current = { title: "Execution Advisory", items: [line.replace(/^[-*•]\s*/, "")] };
+      }
+    }
+
+    if (current && current.items.length > 0) {
+      result.push(current);
+    }
+
+    return result;
+  };
+
+  const renderAiRecommendations = () => {
+    if (!selectedTask) return null;
+
+    const sections = aiRec?.aiRecommendations ? parseAiExecutionSections(aiRec.aiRecommendations) : [];
+
+    if (aiError && !loadingAiRec) {
+      return (
+        <div className="mb-6 overflow-hidden rounded-3xl border border-rose-500/30 bg-rose-500/5 shadow-sm p-8 text-center flex flex-col items-center justify-center space-y-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-500 border border-rose-500/20 shadow-sm">
+            <AlertTriangle size={32} />
+          </div>
+          <div className="max-w-xl space-y-1.5">
+            <h3 className="text-lg font-bold text-[var(--color-text-primary)]">AI Recommendation Generation Failed</h3>
+            <p className="text-xs text-rose-500 font-medium leading-relaxed">{aiError}</p>
+            <p className="text-xs text-[var(--color-text-secondary)]">
+              Please check your network connection or backend services and try re-generating.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleGenerateWorkOrderAi(selectedTask)}
+            disabled={loadingAiRec}
+            className="mt-2 flex items-center gap-2 rounded-xl bg-[var(--color-brand-primary)] px-6 py-2.5 text-xs font-semibold text-white shadow-md hover:brightness-110 transition disabled:opacity-50"
+          >
+            <Sparkles size={15} />
+            <span>Re-Generate Recommendations</span>
+          </button>
+        </div>
+      );
+    }
+
+    if (!aiRec && !loadingAiRec) {
+      return (
+        <div className="mb-6 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-[0_25px_50px_rgba(0,0,0,0.08)] p-8 text-center flex flex-col items-center justify-center space-y-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20 shadow-sm">
+            <BrainCircuit size={32} />
+          </div>
+          <div className="max-w-xl space-y-1.5">
+            <h3 className="text-lg font-bold text-[var(--color-text-primary)]">AI Work Order Recommendations & Procedure</h3>
+            <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
+              Click below to analyze task requirements for <strong className="text-[var(--color-text-primary)]">{selectedTask.title}</strong> and generate AI execution procedures and technical suggestions.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleGenerateWorkOrderAi(selectedTask)}
+            disabled={loadingAiRec}
+            className="mt-2 flex items-center gap-2 rounded-xl bg-[var(--color-brand-primary)] px-6 py-2.5 text-xs font-semibold text-white shadow-md hover:brightness-110 transition disabled:opacity-50"
+          >
+            <Sparkles size={15} />
+            <span>Generate AI Recommendations</span>
+          </button>
+        </div>
+      );
+    }
+
+    if (!aiRec && loadingAiRec) {
+      return (
+        <div className="mb-6 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-12 text-center flex flex-col items-center justify-center space-y-4 shadow-sm">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20 shadow-sm">
+            <Sparkles size={28} className="animate-spin" />
+          </div>
+          <div className="max-w-xl space-y-1.5">
+            <h3 className="text-lg font-bold text-[var(--color-text-primary)]">Generating AI Recommendations...</h3>
+            <p className="text-xs text-[var(--color-text-secondary)]">
+              Analyzing vehicle diagnostics, checklist requirements, and technical procedures for <strong className="text-[var(--color-text-primary)]">{selectedTask.title}</strong>.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    if (!aiRec) return null;
+
+    return (
+      <div className="mb-6 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-[0_25px_50px_rgba(0,0,0,0.08)]">
+        {/* Advisory Header Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--color-divider)] bg-gradient-to-r from-blue-950/20 via-[var(--color-card-bg)] to-indigo-950/20 px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-500 border border-blue-500/20">
+              <Sparkles size={20} />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-[var(--color-text-primary)] flex items-center gap-2">
+                <span>Gemini AI Execution Recommendations &amp; Procedure</span>
+                {aiRec.priority && (
+                  <span className="rounded-full bg-blue-500/10 px-2.5 py-0.5 text-[10px] font-extrabold tracking-wider text-blue-500 border border-blue-500/20">
+                    {aiRec.priority} PRIORITY
+                  </span>
+                )}
+              </h3>
+              <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
+                AI-driven technical procedure suggestions, required tools, and execution steps for {selectedTask.title}.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => handleGenerateWorkOrderAi(selectedTask)}
+            disabled={loadingAiRec}
+            className="flex items-center gap-2 rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:brightness-110 transition disabled:opacity-50"
+          >
+            <Sparkles size={14} className={loadingAiRec ? "animate-spin" : ""} />
+            <span>{loadingAiRec ? "Generating..." : "Re-Generate Recommendations"}</span>
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* AI Technical Execution Checklist & Suggestions */}
+          {aiRec.checklist && aiRec.checklist.length > 0 && (
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-blue-500 mb-3 flex items-center gap-1.5">
+                <BrainCircuit size={14} />
+                <span>Step-by-Step Technical Execution Suggestions</span>
+              </h4>
+              <div className="grid gap-3">
+                {aiRec.checklist.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-2xl border border-[var(--color-divider)] bg-[var(--color-card-bg-hover)] p-4 text-xs transition hover:border-blue-500/30"
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-bold text-[var(--color-text-primary)] text-xs flex items-center gap-2">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-500/15 text-[10px] font-bold text-blue-500">
+                          {item.stepNumber || idx + 1}
+                        </span>
+                        {item.title}
+                      </span>
+                      {item.priority && (
+                        <span className="text-[10px] font-semibold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full">
+                          {item.priority}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[var(--color-text-secondary)] leading-relaxed pl-7">
+                      {item.description}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Parsed AI Procedure Sections */}
+          {sections.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              {sections.map((sec, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-2xl border border-[var(--color-divider)] bg-[var(--color-card-bg-hover)] p-4 text-xs space-y-2"
+                >
+                  <h4 className="font-bold text-[var(--color-text-primary)] uppercase tracking-wider text-[11px] flex items-center gap-1.5 text-blue-400">
+                    <Wrench size={13} />
+                    {sec.title}
+                  </h4>
+                  <ul className="space-y-1.5 text-[var(--color-text-secondary)] pl-1 leading-relaxed">
+                    {sec.items.slice(0, 4).map((it, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="text-blue-500 font-bold">•</span>
+                        <span>{it}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          ) : (
+            /* Fallback if unparsed string */
+            <div className="rounded-2xl border border-[var(--color-divider)] bg-[var(--color-card-bg-hover)] p-4 text-xs whitespace-pre-line leading-relaxed text-[var(--color-text-secondary)]">
+              {aiRec.aiRecommendations}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -671,7 +998,7 @@ export default function WorkOrders() {
             <td style="padding:8px;border:1px solid #e2e8f0">${(it.note || "").replace(/</g, "&lt;")}</td>
             <td style="padding:8px;border:1px solid #e2e8f0">${it.partsUsed || ""}</td>
             <td style="padding:8px;border:1px solid #e2e8f0;text-align:right">${it.partsCost || ""}</td>
-            <td style="padding:8px;border:1px solid #e2e8f0">${it.attachments?.join(", ") || ""}</td>
+            <td style="padding:8px;border:1px solid #e2e8f0">${it.attachments?.map((file) => file.name).join(", ") || ""}</td>
           </tr>`;
       })
       .join("");
@@ -722,11 +1049,12 @@ export default function WorkOrders() {
       { label: "Notes", value: selectedTask.notes },
     ].filter((item) => item.value && item.value !== "");
 
-    const signatureHtml = currentExecution.technicianSignature?.trim()
+    const assignedChief = selectedTask.chiefMechanic || currentExecution.technicianSignature;
+    const signatureHtml = assignedChief?.trim()
       ? `
           <div class="section">
             <h2>Chief Mechanic</h2>
-            <p>${currentExecution.technicianSignature}</p>
+            <p>${assignedChief}</p>
           </div>
         `
       : "";
@@ -846,8 +1174,7 @@ export default function WorkOrders() {
   ).length;
   const canCompleteExecution =
     currentExecution.items.length > 0 &&
-    executionPendingCount === 0 &&
-    !!currentExecution.technicianSignature?.trim();
+    executionPendingCount === 0;
   const parseCostValue = (value?: string) => {
     if (!value) return 0;
     const parsed = Number(value.replace(/[^\d.-]/g, ""));
@@ -868,6 +1195,7 @@ export default function WorkOrders() {
     MaintenanceStatus.PENDING,
     MaintenanceStatus.DUE,
     MaintenanceStatus.IN_PROGRESS,
+    MaintenanceStatus.DONE,
     MaintenanceStatus.OVERDUE,
   ];
 
@@ -879,13 +1207,29 @@ export default function WorkOrders() {
     change();
   };
 
-  const confirmStartWorkOrder = () => {
+  const confirmStartWorkOrder = async () => {
     if (!selectedTask || !pendingStartChange) return;
 
-    persistTaskStatus(selectedTask.id, MaintenanceStatus.IN_PROGRESS);
-    pendingStartChange();
-    setPendingStartChange(null);
-    setToast({ type: "success", message: "Work order started successfully." });
+    try {
+      await updateWorkOrderProgress(selectedTask.id, { action: "START" });
+      const startedTask = {
+        ...selectedTask,
+        status: MaintenanceStatus.IN_PROGRESS,
+      };
+      setTasks((prev) =>
+        prev.map((task) => (task.id === startedTask.id ? startedTask : task)),
+      );
+      setSelectedTask(startedTask);
+      pendingStartChange();
+      setPendingStartChange(null);
+      setToast({ type: "success", message: "Work order started successfully." });
+    } catch (error) {
+      console.error("Failed to start work order", error);
+      setToast({
+        type: "error",
+        message: error instanceof Error ? error.message : "Failed to start work order.",
+      });
+    }
   };
 
   const updateExecutionItemStatus = (
@@ -968,20 +1312,55 @@ export default function WorkOrders() {
     files: FileList | null,
   ) => {
     if (!canModifySelectedTask) return;
+    if (!files?.length) return;
+    void (async () => {
+      const uploaded: WorkOrderAttachment[] = [];
+      const failures: string[] = [];
+      for (const file of Array.from(files)) {
+        try {
+          uploaded.push(await uploadWorkOrderAttachment(taskId, itemId, file));
+        } catch (error) {
+          failures.push(error instanceof Error ? error.message : `Could not upload ${file.name}.`);
+        }
+      }
+      if (uploaded.length) {
+        applyChangeOrConfirmStart(() => setExecutions((prev) => {
+          const next = new Map(prev);
+          const cur = next.get(taskId) || { done: false, items: [] as ExecutionItem[] };
+          const items = cur.items.map((item) => item.id === itemId
+            ? {
+                ...item,
+                attachments: mergeUploadedWorkOrderAttachments(item.attachments ?? [], uploaded),
+              }
+            : item);
+          next.set(taskId, { ...cur, items });
+          return next;
+        }));
+      }
+      if (failures.length) setToast({ type: "error", message: failures.join(" ") });
+      else if (uploaded.length) setToast({ type: "success", message: "Attachment uploaded." });
+    })();
+  };
 
-    const names = files ? Array.from(files).map((file) => file.name) : [];
-    applyChangeOrConfirmStart(() => setExecutions((prev) => {
-      const next = new Map(prev);
-      const cur = next.get(taskId) || {
-        done: false,
-        items: [] as ExecutionItem[],
-      };
-      const items = cur.items.map((item) =>
-        item.id === itemId ? { ...item, attachments: names } : item,
-      );
-      next.set(taskId, { ...cur, items });
-      return next;
-    }));
+  const removeExecutionItemAttachment = async (taskId: string, itemId: string, attachment: WorkOrderAttachment) => {
+    try {
+      await deleteWorkOrderAttachment(taskId, attachment.id);
+      setExecutions((prev) => {
+        const next = new Map(prev);
+        const current = next.get(taskId);
+        if (!current) return next;
+        next.set(taskId, {
+          ...current,
+          items: current.items.map((item) => item.id === itemId
+            ? { ...item, attachments: (item.attachments ?? []).filter((file) => file.id !== attachment.id) }
+            : item),
+        });
+        return next;
+      });
+      setToast({ type: "success", message: "Attachment deleted." });
+    } catch (error) {
+      setToast({ type: "error", message: error instanceof Error ? error.message : "Could not delete attachment." });
+    }
   };
 
   const handleStatusChange = (id: string, newStatus: ItemStatus) => {
@@ -1324,6 +1703,7 @@ export default function WorkOrders() {
                 onApply={() => setShowFilters(false)}
                 onClear={() => {
                   setSelectedStatusFilters([]);
+                  setPriorityFilter("All");
                   setDateFromFilter("");
                   setDateToFilter("");
                   setSortField("date");
@@ -1339,7 +1719,7 @@ export default function WorkOrders() {
                     value={`${sortField}-${sortDirection}`}
                     onChange={(e) => {
                       const [field, direction] = e.target.value.split("-") as [
-                        "date" | "workOrderId",
+                        "date" | "workOrderId" | "priority",
                         "asc" | "desc",
                       ];
                       setSortField(field);
@@ -1360,6 +1740,24 @@ export default function WorkOrders() {
                     <option value="workOrderId-desc">
                       {"Work Order ID - Descending"}
                     </option>
+                    <option value="priority-desc">{"Priority - High to Low"}</option>
+                    <option value="priority-asc">{"Priority - Low to High"}</option>
+                  </select>
+                </label>
+                <label className="mt-4 block">
+                  <span className="text-sm font-semibold uppercase text-black">Priority</span>
+                  <select
+                    value={priorityFilter}
+                    onChange={(event) => {
+                      setPriorityFilter(event.target.value as MaintenancePriority | "All");
+                      setCurrentPage(1);
+                    }}
+                    className="mt-2 h-10 w-full rounded-lg border border-[#cbd3df] bg-white px-3 text-sm font-semibold text-[#141827] outline-none transition focus:border-[#070b45] focus:ring-2 focus:ring-[#070b45]/10"
+                  >
+                    <option value="All">All Priorities</option>
+                    {Object.values(MaintenancePriority).map((priority) => (
+                      <option key={priority} value={priority}>{maintenancePriorityLabels[priority]}</option>
+                    ))}
                   </select>
                 </label>
               </FilterDropdown>
@@ -1378,7 +1776,7 @@ export default function WorkOrders() {
                 key: "workOrder",
                 header: "Work Order NO.",
                 width: "11%",
-                render: (task) => formatWorkOrderNumber(task.id),
+                render: (task) => task.workOrderNumber ?? "N/A",
               },
               {
                 key: "plate no",
@@ -1391,6 +1789,20 @@ export default function WorkOrders() {
                 header: "Maintenance Type",
                 width: "18%",
                 render: (task) => task.title,
+              },
+              {
+                key: "priority",
+                header: "Priority",
+                width: "9%",
+                render: (task) => {
+                  const priority = task.priority ?? MaintenancePriority.MEDIUM;
+                  const color = priority === MaintenancePriority.HIGH
+                    ? "bg-rose-100 text-rose-800"
+                    : priority === MaintenancePriority.LOW
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-amber-100 text-amber-800";
+                  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${color}`}>{maintenancePriorityLabels[priority]}</span>;
+                },
               },
               {
                 key: "mechanic",
@@ -1510,7 +1922,12 @@ export default function WorkOrders() {
             </div>
           )}
 
-          {(!isMechanic || workOrderStep === 1) && renderScheduleDetails(selectedTask)}
+          {(!isMechanic || workOrderStep === 1) && (
+            <>
+              {renderScheduleDetails(selectedTask)}
+              {renderAiRecommendations()}
+            </>
+          )}
 
           {!canMechanicStartTask && (
             <div className="mb-6 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-4 shadow-card">
@@ -1592,7 +2009,19 @@ export default function WorkOrders() {
                           }`}
                         >
                           <div className="text-sm font-medium text-[var(--color-text-primary)]">
-                            {item.text}
+                            <div>{item.text}</div>
+                            {(() => {
+                              const recStep = aiRec?.checklist?.find(
+                                (c) => c.title.toLowerCase().trim() === item.text.toLowerCase().trim()
+                              );
+                              if (!recStep?.description) return null;
+                              return (
+                                <div className="mt-1 flex items-start gap-1 text-[11px] font-normal text-[var(--color-text-secondary)]">
+                                  <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-blue-400" />
+                                  <span>{recStep.description}</span>
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           <div className="flex justify-center">
@@ -1705,24 +2134,13 @@ export default function WorkOrders() {
                     </div>
 
                     <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 px-6 pb-6">
-                      <div>
-                        <label className="block text-xs text-[var(--color-text-secondary)]">
-                          Chief Mechanic
-                        </label>
-                        <input
-                          type="text"
-                          value={currentExecution.technicianSignature || ""}
-                          disabled={!canModifySelectedTask || currentExecution.done || !canMechanicStartTask}
-                          onChange={(e) =>
-                            updateExecutionField(
-                              selectedTask.id,
-                              "technicianSignature",
-                              e.target.value,
-                            )
-                          }
-                          className={`w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] ${!canModifySelectedTask || currentExecution.done || !canMechanicStartTask ? "opacity-70" : ""}`}
-                          placeholder="Chief Mechanic name"
-                        />
+                      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-3">
+                        <span className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                          Assigned Chief Mechanic
+                        </span>
+                        <p className="mt-1 text-sm font-bold text-[var(--color-text-primary)]">
+                          {selectedTask.chiefMechanic || currentExecution.technicianSignature || "Not Assigned"}
+                        </p>
                       </div>
                     </div>
 
@@ -1738,10 +2156,7 @@ export default function WorkOrders() {
                           </h3>
                           <p className="mt-1 text-sm text-rose-700/80">
                             {executionPendingCount > 0
-                              ? `${executionPendingCount} item(s) still need proof of check/change. `
-                              : ""}
-                            {!currentExecution.technicianSignature?.trim()
-                              ? "Chief Mechanic name is required before execution can be completed."
+                              ? `${executionPendingCount} item(s) still need proof of check/change.`
                               : ""}
                           </p>
                         </div>
@@ -1772,7 +2187,7 @@ export default function WorkOrders() {
             </>
           )}
 
-          {selectedTask && (!isMechanic || workOrderStep === 2) && (
+          {selectedTask && currentExecution.items.some((item) => item.status === "changed") && (!isMechanic || workOrderStep === 2) && (
             <div className="mb-6 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card">
               <div className="border-b border-[var(--color-divider)] px-6 py-4">
                 <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
@@ -1784,7 +2199,7 @@ export default function WorkOrders() {
               </div>
 
               <div className="divide-y divide-[var(--color-divider)]">
-                {currentExecution.items.map((item) => (
+                {currentExecution.items.filter((item) => item.status === "changed").map((item) => (
                   <div key={item.id} className="grid gap-4 px-6 py-4 lg:grid-cols-[1.2fr_1fr_160px_1.2fr]">
                     <div>
                       <p className="text-sm font-semibold text-[var(--color-text-primary)]">
@@ -1801,7 +2216,7 @@ export default function WorkOrders() {
                       <input
                         type="text"
                         value={item.partsUsed || ""}
-                        disabled={!canModifySelectedTask || item.status !== "changed"}
+                        disabled={!canModifySelectedTask}
                         onChange={(event) =>
                           updateExecutionItemField(
                             selectedTask.id,
@@ -1810,8 +2225,8 @@ export default function WorkOrders() {
                             event.target.value,
                           )
                         }
-                        placeholder={item.status === "changed" ? "Part(s) used" : "Not applicable"}
-                        className={`mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)] ${!canModifySelectedTask || item.status !== "changed" ? "cursor-not-allowed opacity-70" : ""}`}
+                        placeholder="Part(s) used"
+                        className={`mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)] ${!canModifySelectedTask ? "cursor-not-allowed opacity-70" : ""}`}
                       />
                     </div>
                     <div>
@@ -1821,7 +2236,7 @@ export default function WorkOrders() {
                       <input
                         type="text"
                         value={item.partsCost || ""}
-                        disabled={!canModifySelectedTask || item.status !== "changed"}
+                        disabled={!canModifySelectedTask}
                         onChange={(event) =>
                           updateExecutionItemField(
                             selectedTask.id,
@@ -1831,7 +2246,7 @@ export default function WorkOrders() {
                           )
                         }
                         placeholder="0.00"
-                        className={`mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)] ${!canModifySelectedTask || item.status !== "changed" ? "cursor-not-allowed opacity-70" : ""}`}
+                        className={`mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)] ${!canModifySelectedTask ? "cursor-not-allowed opacity-70" : ""}`}
                       />
                     </div>
                     <div>
@@ -1840,9 +2255,9 @@ export default function WorkOrders() {
                       </label>
                       <input
                         type="file"
-                        accept="image/*"
+                        accept="image/*,video/mp4,application/pdf,text/plain"
                         multiple
-                        disabled={!canModifySelectedTask || item.status !== "changed"}
+                        disabled={!canModifySelectedTask}
                         onChange={(event) =>
                           updateExecutionItemAttachments(
                             selectedTask.id,
@@ -1850,11 +2265,42 @@ export default function WorkOrders() {
                             event.target.files,
                           )
                         }
-                        className={`mt-1 w-full text-xs text-[var(--color-text-secondary)] ${!canModifySelectedTask || item.status !== "changed" ? "cursor-not-allowed opacity-60" : ""}`}
+                        className={`mt-1 w-full text-xs text-[var(--color-text-secondary)] ${!canModifySelectedTask ? "cursor-not-allowed opacity-60" : ""}`}
                       />
+                      {item.attachments?.some((attachment) => !attachment.storageName) ? (
+                        <p className="mt-2 text-xs text-amber-800">
+                          Older records saved only the filename. The assigned mechanic can select the original file again with the same filename to restore viewing.
+                        </p>
+                      ) : null}
                       {item.attachments && item.attachments.length > 0 ? (
-                        <div className="mt-2 text-xs text-[var(--color-text-secondary)]">
-                          {item.attachments.join(", ")}
+                        <div className="mt-2 space-y-1">
+                          {item.attachments.map((attachment) => (
+                            <div key={attachment.id || attachment.name} className="flex items-center gap-2 text-xs">
+                              {attachment.storageName ? (
+                                <button
+                                  type="button"
+                                  className="text-[var(--color-brand-primary)] underline"
+                                  onClick={() => void openWorkOrderAttachment(selectedTask.id, attachment).catch((error) => setToast({
+                                    type: "error",
+                                    message: error instanceof Error ? error.message : "Could not open attachment.",
+                                  }))}
+                                >
+                                  View {attachment.name}
+                                </button>
+                              ) : (
+                                <span className="text-amber-800">Re-upload “{attachment.name}” to make it viewable.</span>
+                              )}
+                              {isMechanic && currentUser?.id === selectedTask.assignedMechanicId && attachment.storageName ? (
+                                <button
+                                  type="button"
+                                  className="text-red-700 underline"
+                                  onClick={() => void removeExecutionItemAttachment(selectedTask.id, item.id, attachment)}
+                                >
+                                  Delete
+                                </button>
+                              ) : null}
+                            </div>
+                          ))}
                         </div>
                       ) : (
                         <p className="mt-2 text-xs text-[var(--color-text-secondary)]">

@@ -95,7 +95,7 @@ export type UserRecord = {
   name: string;
   email: string;
   username?: string;
-  role: "ADMIN" | "MECHANIC" | "OPERATIONS";
+  role: "ADMIN" | "MECHANIC" | "OPERATIONS" | "CHIEF_MECHANIC";
   status: UserStatus;
   lastActive: string;
   updatedAt?: string;
@@ -299,6 +299,7 @@ export const mockWorkOrders: MaintenanceTask[] = [
     status: MaintenanceStatus.PENDING,
     date: "2026-05-22",
     assignedDriver: "J. Dela Cruz",
+    chiefMechanic: "Chief Mech One",
     notes: "Standard oil and filter change. Synthetic 5W-30.",
     garageId: "g1",
     accountType: AccountType.IN_HOUSE,
@@ -318,6 +319,7 @@ export const mockWorkOrders: MaintenanceTask[] = [
     status: MaintenanceStatus.IN_PROGRESS,
     date: "2026-05-20",
     assignedDriver: "Sarah Connor",
+    chiefMechanic: "Chief Mech One",
     notes: "Scheduled 10,000-mile tire rotation and alignment check.",
     garageId: "g2",
     accountType: AccountType.IN_HOUSE,
@@ -337,6 +339,7 @@ export const mockWorkOrders: MaintenanceTask[] = [
     status: MaintenanceStatus.PENDING,
     date: "2026-05-22",
     assignedDriver: "David Miller",
+    chiefMechanic: "Chief Mech One",
     notes: "Standard oil and filter change. Synthetic 5W-30.",
   },
   {
@@ -346,6 +349,7 @@ export const mockWorkOrders: MaintenanceTask[] = [
     status: MaintenanceStatus.COMPLETED,
     date: "2026-05-25",
     assignedDriver: "Elena Rostova",
+    chiefMechanic: "Chief Mech One",
     notes: "Spark plug replacement and engine timing calibration completed.",
   },
   {
@@ -355,6 +359,7 @@ export const mockWorkOrders: MaintenanceTask[] = [
     status: MaintenanceStatus.OVERDUE,
     date: "2026-05-27",
     assignedDriver: "James Carter",
+    chiefMechanic: "Chief Mech One",
     notes:
       "Coolant leak reported near radiator intake. Urgently flag for repair inspection.",
   },
@@ -622,6 +627,14 @@ export const mockUsers: UserRecord[] = [
     status: "Active",
     lastActive: "2026-05-29T09:05:00.000Z",
   },
+  {
+    id: "u6",
+    name: "Chief Mech One",
+    email: "vmms.chiefmech@welinc.com",
+    role: "CHIEF_MECHANIC",
+    status: "Active",
+    lastActive: "2026-05-30T07:00:00.000Z",
+  },
 ];
 
 export function getMockChecklistTemplates(): Record<
@@ -651,9 +664,9 @@ export function saveMockChecklistTemplates(
 
 export type GarageRecord = { id: string; name: string };
 export const mockGarages: GarageRecord[] = [
-  { id: "g1", name: "Main Garage" },
-  { id: "g2", name: "North Cluster" },
-  { id: "g3", name: "South Hub" },
+  { id: "g1", name: "Marikina" },
+  { id: "g2", name: "Sta. Rosa" },
+  { id: "g3", name: "Pulilan" },
 ];
 
 export type SystemRecord = { id: string; name: string };
@@ -662,4 +675,53 @@ export const mockSystems: SystemRecord[] = [
   { id: "s2", name: "Brakes" },
   { id: "s3", name: "Electrical" },
   { id: "s4", name: "Transmission" },
+];
+
+// --- Vehicle Management ---
+export type VehicleRecord = {
+  id: string;
+  plateNumber: string;
+  make: string | null;
+  model: string;
+  year: number | null;
+  engineType: string | null;
+  truckSizeCategory: string | null;
+  odometer: number;
+  lastMaintenanceDate: string | null;
+  garageId: string | null;
+  garageName?: string | null;
+  status: "AVAILABLE" | "IN_TRANSIT" | "UNDER_MAINTENANCE" | "UNDER_REPAIR";
+  isActive: boolean;
+};
+
+export type VehicleRecordInput = Omit<
+  VehicleRecord,
+  "id" | "garageId" | "garageName" | "make" | "year" | "engineType" | "truckSizeCategory" | "lastMaintenanceDate" | "status" | "isActive"
+> & {
+  garageId: string;
+  make: string;
+  year: number;
+  engineType: string;
+  truckSizeCategory: string;
+};
+
+export const mockVehicleRecords: VehicleRecord[] = [
+  { id: "vr1", plateNumber: "ABC-1234", make: "Isuzu", model: "Elf", year: 2020, engineType: "Diesel", truckSizeCategory: "Light Duty", odometer: 12000, lastMaintenanceDate: "2026-09-12T08:30:00.000Z", garageId: "g1", garageName: "Marikina", status: "AVAILABLE", isActive: true },
+  { id: "vr2", plateNumber: "DEF-5678", make: "Mitsubishi", model: "Fuso FB", year: 2019, engineType: "Diesel", truckSizeCategory: "Medium Duty", odometer: 45000, lastMaintenanceDate: "2026-08-18T08:30:00.000Z", garageId: "g2", garageName: "Sta. Rosa", status: "UNDER_REPAIR", isActive: true },
+  { id: "vr3", plateNumber: "GHI-9012", make: "Fuso", model: "Canter", year: 2021, engineType: "Diesel", truckSizeCategory: "Light Duty", odometer: 8200, lastMaintenanceDate: null, garageId: "g3", garageName: "Pulilan", status: "AVAILABLE", isActive: true },
+  { id: "vr4", plateNumber: "JKL-3456", make: null, model: "Hino 500", year: null, engineType: null, truckSizeCategory: null, odometer: 62000, lastMaintenanceDate: null, garageId: null, garageName: null, status: "UNDER_MAINTENANCE", isActive: false },
+  { id: "vr5", plateNumber: "MNO-7890", make: "Isuzu", model: "NKR", year: 2018, engineType: "Diesel", truckSizeCategory: "Light Duty", odometer: 3100, lastMaintenanceDate: "2026-07-01T08:30:00.000Z", garageId: "g1", garageName: "Marikina", status: "AVAILABLE", isActive: true },
+];
+
+// --- Garage Management ---
+export type GarageFullRecord = {
+  id: string;
+  name: string;
+  isActive: boolean;
+};
+
+export const mockGarageRecords: GarageFullRecord[] = [
+  { id: "g1", name: "Marikina", isActive: true },
+  { id: "g2", name: "Sta. Rosa", isActive: true },
+  { id: "g3", name: "Pulilan", isActive: true },
 ];

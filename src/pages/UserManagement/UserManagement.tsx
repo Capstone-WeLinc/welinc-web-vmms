@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Edit2, KeyRound, Plus, Unlock, UserRoundCheck, Users } from "lucide-react";
+import { Activity, Edit2, KeyRound, Plus, Unlock, UserRoundCheck, Users } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import {
   ActionButton,
@@ -14,6 +14,7 @@ import {
 } from "../../components/ui";
 import {
   createUser,
+  getLoginActivity,
   getManagedUsers,
   resetUserPassword,
   unlockUser,
@@ -23,6 +24,7 @@ import {
   type UserCreateInput,
   type UserRecord,
   type UserRole,
+  type LoginActivityRecord,
 } from "../../lib/api/userService";
 
 type ToastState = {
@@ -44,7 +46,16 @@ const EMPTY_FORM: UserForm = {
   isActive: true,
 };
 
-const ROLE_OPTIONS: UserRole[] = ["ADMIN", "MECHANIC"];
+const INVALID_NAME_MESSAGE = "Name must contain alphanumeric characters only.";
+
+const ROLE_OPTIONS: UserRole[] = ["ADMIN", "OPERATIONS", "MECHANIC", "CHIEF_MECHANIC"];
+
+const ROLE_LABELS: Record<UserRole, string> = {
+  ADMIN: "Admin",
+  OPERATIONS: "Operations",
+  MECHANIC: "Mechanic",
+  CHIEF_MECHANIC: "Chief Mechanic",
+};
 
 const normalizeIdentity = (value?: string | null) =>
   (value ?? "").trim().toLowerCase();
@@ -65,6 +76,9 @@ export default function UserManagement() {
   const [deactivateTarget, setDeactivateTarget] = useState<UserRecord | null>(null);
   const [editConfirmationOpen, setEditConfirmationOpen] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [activityUser, setActivityUser] = useState<UserRecord | null>(null);
+  const [loginActivity, setLoginActivity] = useState<LoginActivityRecord[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
 
   const loadData = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
@@ -195,7 +209,13 @@ export default function UserManagement() {
       setForm(EMPTY_FORM);
     } catch (error) {
       console.error("Failed to save user", error);
-      setToast({ type: "error", message: "Unable to save the user." });
+      setToast({
+        type: "error",
+        message:
+          error instanceof Error && error.message.includes(INVALID_NAME_MESSAGE)
+            ? INVALID_NAME_MESSAGE
+            : "Unable to save the user.",
+      });
       if (editingUser) setFormOpen(true);
     } finally {
       setProcessing(false);
@@ -209,6 +229,10 @@ export default function UserManagement() {
 
     if (!name || !email || !form.role) {
       setToast({ type: "warning", message: "Name, email, and role are required." });
+      return;
+    }
+    if (!/^(?=.*[A-Za-z0-9])[A-Za-z0-9 -]+$/.test(name)) {
+      setToast({ type: "error", message: INVALID_NAME_MESSAGE });
       return;
     }
     const duplicate = users.find(
@@ -291,6 +315,20 @@ export default function UserManagement() {
     }
   };
 
+  const openLoginActivity = async (user: UserRecord) => {
+    setActivityUser(user);
+    setLoginActivity([]);
+    setActivityLoading(true);
+    try {
+      setLoginActivity(await getLoginActivity(user.id));
+    } catch (error) {
+      console.error("Failed to load login activity", error);
+      setToast({ type: "error", message: "Unable to load login activity." });
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="fixed right-6 top-6 z-[80] w-[340px] max-w-[calc(100vw-2rem)]">
@@ -342,7 +380,7 @@ export default function UserManagement() {
                 </div>
               ),
             },
-            { key: "role", header: "Role", width: "18%", render: (user) => user.role },
+            { key: "role", header: "Role", width: "18%", render: (user) => ROLE_LABELS[user.role as UserRole] ?? user.role },
             {
               key: "status",
               header: "Status",
@@ -371,6 +409,14 @@ export default function UserManagement() {
                     setOpenMenuId((current) => (current === user.id ? null : user.id));
                   }}
                   items={[
+                    {
+                      label: "Login Activity",
+                      icon: Activity,
+                      onClick: () => {
+                        setOpenMenuId(null);
+                        void openLoginActivity(user);
+                      },
+                    },
                     { label: "Edit", icon: Edit2, onClick: () => openEdit(user) },
                     {
                       label: "Reset Password",
@@ -423,6 +469,33 @@ export default function UserManagement() {
       </section>
 
       <Modal
+        isOpen={Boolean(activityUser)}
+        title={activityUser ? `Recent Login Activity - ${activityUser.name}` : "Recent Login Activity"}
+        size="lg"
+        onClose={() => setActivityUser(null)}
+      >
+        {activityLoading ? (
+          <p className="py-6 text-center text-sm text-[var(--color-text-secondary)]">Loading activity...</p>
+        ) : loginActivity.length === 0 ? (
+          <p className="py-6 text-center text-sm text-[var(--color-text-secondary)]">No login activity recorded.</p>
+        ) : (
+          <div className="max-h-[60vh] overflow-y-auto">
+            <DataTable
+              data={loginActivity}
+              getRowKey={(event) => event.id}
+              minWidth="620px"
+              columns={[
+                { key: "event", header: "Event", render: (event) => event.event.replaceAll("_", " ").toLowerCase().replace(/^./, (letter) => letter.toUpperCase()) },
+                { key: "createdAt", header: "Timestamp", render: (event) => new Date(event.createdAt).toLocaleString() },
+                { key: "ipAddress", header: "IP Address", render: (event) => event.ipAddress || "Unavailable" },
+                { key: "deviceType", header: "Device", render: (event) => event.deviceType },
+              ]}
+            />
+          </div>
+        )}
+      </Modal>
+
+      <Modal
         isOpen={formOpen}
         title={editingUser ? "Edit User" : "Create User"}
         size="lg"
@@ -464,7 +537,11 @@ export default function UserManagement() {
               className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)]"
             >
               <option value="" disabled>Select role</option>
-              {ROLE_OPTIONS.map((role) => <option key={role} value={role}>{role}</option>)}
+              {ROLE_OPTIONS.map((role) => (
+                <option key={role} value={role}>
+                  {ROLE_LABELS[role] ?? role}
+                </option>
+              ))}
             </select>
           </label>
           {!editingUser ? (

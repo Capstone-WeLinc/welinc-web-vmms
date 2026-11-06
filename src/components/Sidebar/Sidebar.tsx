@@ -1,8 +1,11 @@
 import type { UserRecord } from "../../lib/api/authService";
-import { useState } from "react";
-import { NavLink } from "react-router-dom";
-import { isMechanicRole, isOperationsRole } from "../../lib/utils/permissions";
-import { ConfirmationModal } from "../ui";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { NavLink, useLocation } from "react-router-dom";
+import {
+  canSeeVmmsNavigationPath,
+} from "../../lib/utils/permissions";
+import { ConfirmationModal, Modal } from "../ui";
+import { fetchJSON } from "../../lib/api/httpClient";
 import logo from "../../assets/logo.png";
 import {
   LayoutDashboard,
@@ -13,81 +16,243 @@ import {
   Wrench,
   ClipboardList,
   ClipboardCheck,
+  BrainCircuit,
+  FileBarChart2,
+  Fuel,
+  DollarSign,
+  Truck,
+  Warehouse,
+  ChevronDown,
+  Compass,
+  Building2,
+  FolderKanban,
+  Layers,
+  ShieldCheck,
+  ScrollText,
+  Bell,
+  type LucideIcon,
 } from "lucide-react";
 
 interface SidebarProps {
   currentUser?: UserRecord | null;
 }
 
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
-  { label: "User Management", icon: Users, path: "/users" },
-  { label: "Maintenance Scheduling", icon: CalendarClock, path: "/maintenance-scheduling" },
-  { label: "Work Orders", icon: Wrench, path: "/work-orders" },
-  { label: "Checklist Templates", icon: ClipboardCheck, path: "/checklist-templates" },
-  { label: "Maintenance Logs", icon: ClipboardList, path: "/maintenance-logs" },
-//  { label: "Maintenance Reports", icon: FileBarChart2, path: "/maintenance-reports" },
-//  { label: "Fuel Management", icon: Fuel, path: "/fuel-management" },
-//  { label: "Expense & Profitability", icon: DollarSign, path: "/expense-profitability" },
+interface NavItem {
+  label: string;
+  icon: LucideIcon;
+  path: string;
+}
+
+interface NavGroup {
+  category: string;
+  icon: LucideIcon;
+  items: NavItem[];
+}
+
+interface NotificationRecord {
+  id: string;
+  title: string;
+  message: string;
+  type: "info" | "success" | "warning" | "error";
+  isRead: boolean;
+  createdAt: string;
+}
+
+const navGroups: NavGroup[] = [
+  {
+    category: "Overview",
+    icon: Compass,
+    items: [
+      { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
+      { label: "Analytics", icon: BrainCircuit, path: "/ai-analytics" },
+    ],
+  },
+  {
+    category: "Fleet & Facilities",
+    icon: Building2,
+    items: [
+      { label: "Fleet Vehicles", icon: Truck, path: "/vehicles" },
+      { label: "Service Garages", icon: Warehouse, path: "/garages" },
+    ],
+  },
+  {
+    category: "Maintenance",
+    icon: FolderKanban,
+    items: [
+      { label: "Scheduling", icon: CalendarClock, path: "/maintenance-scheduling" },
+      { label: "Work Orders", icon: Wrench, path: "/work-orders" },
+      { label: "Checklists", icon: ClipboardCheck, path: "/checklist-templates" },
+      { label: "Service Logs", icon: ClipboardList, path: "/maintenance-logs" },
+      { label: "Reports", icon: FileBarChart2, path: "/maintenance-reports" },
+    ],
+  },
+  {
+    category: "Operations",
+    icon: Layers,
+    items: [
+      { label: "Fuel Management", icon: Fuel, path: "/fuel-management" },
+      { label: "Expense & Profitability", icon: DollarSign, path: "/expense-profitability" },
+    ],
+  },
+  {
+    category: "Administration",
+    icon: ShieldCheck,
+    items: [
+      { label: "User Management", icon: Users, path: "/users" },
+      { label: "Audit Logs", icon: ScrollText, path: "/audit-logs" },
+    ],
+  },
 ];
 
 const roleLabelMap: Record<string, string> = {
   ADMIN: "Administrator",
   OPERATIONS: "Operations",
   MECHANIC: "Mechanic",
+  CHIEF_MECHANIC: "Chief Mechanic",
 };
 
-const asideBaseClasses = "group/sidebar fixed left-0 top-0 z-50 flex h-screen w-20 flex-col overflow-hidden border-r border-[#111a62] bg-[#020849] shadow-[10px_0_32px_rgba(2,8,73,0.28)] transition-[width,box-shadow] duration-300 ease-out hover:w-[292px] hover:shadow-[18px_0_42px_rgba(2,8,73,0.34)]";
-const headerClasses = "flex h-24 items-center gap-0 border-b border-white/5 px-5 transition-all duration-300 group-hover/sidebar:gap-3";
-const logoFrameClasses = "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden border border-[#f4c400] bg-[#061056] shadow-[0_0_0_1px_rgba(244,196,0,0.12)]";
-const labelRevealClasses = "max-w-0 min-w-0 translate-x-2 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 ease-out group-hover/sidebar:max-w-[190px] group-hover/sidebar:translate-x-0 group-hover/sidebar:opacity-100";
-const navClasses = "flex min-h-0 flex-1 overflow-hidden py-2";
-const navListClasses = 'm-0 p-0 list-none';
-const navItemClasses = 'mb-0.5';
-const footerClasses = "border-t border-white/5 px-4 py-4";
-const baseButtonClasses = "mx-auto flex h-10 w-10 items-center justify-center gap-0 rounded-full text-sm font-bold transition-all duration-300 group-hover/sidebar:mx-0 group-hover/sidebar:w-full group-hover/sidebar:justify-start group-hover/sidebar:gap-4 group-hover/sidebar:px-5";
+const asideBaseClasses =
+  "group/sidebar fixed left-0 top-0 z-50 flex h-screen w-20 flex-col overflow-hidden border-r border-[#111a62] bg-[#020849] shadow-[10px_0_32px_rgba(2,8,73,0.28)] transition-[width,box-shadow] duration-300 ease-out hover:w-[280px] hover:shadow-[18px_0_42px_rgba(2,8,73,0.34)]";
+const headerClasses =
+  "flex h-20 items-center gap-0 border-b border-white/10 px-5 transition-all duration-300 group-hover/sidebar:gap-3 shrink-0";
+const logoFrameClasses =
+  "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[#f4c400]/80 bg-[#061056] shadow-[0_0_0_1px_rgba(244,196,0,0.15)]";
+const labelRevealClasses =
+  "max-w-0 min-w-0 translate-x-2 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 ease-out group-hover/sidebar:max-w-[190px] group-hover/sidebar:translate-x-0 group-hover/sidebar:opacity-100";
+const navClasses =
+  "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden py-3 px-2 space-y-2.5 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.12)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-white/10 hover:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-thumb]:rounded-full";
+const footerClasses = "border-t border-white/10 px-3 py-3 shrink-0 bg-[#020849]/90 backdrop-blur-sm";
+const baseButtonClasses =
+  "mx-auto flex h-9 w-9 items-center justify-center gap-0 rounded-lg text-sm font-semibold transition-all duration-200 group-hover/sidebar:mx-0 group-hover/sidebar:w-full group-hover/sidebar:justify-start group-hover/sidebar:gap-3 group-hover/sidebar:px-3.5";
 
 const getNavLinkClass = (isActive: boolean) => {
-  const base = "mx-4 flex h-10 items-center justify-center gap-0 rounded-full text-sm font-bold tracking-[-0.01em] transition-all duration-300 group-hover/sidebar:mx-0 group-hover/sidebar:justify-start group-hover/sidebar:gap-4 group-hover/sidebar:rounded-none group-hover/sidebar:px-10";
+  const base =
+    "mx-auto flex h-9 w-9 items-center justify-center gap-0 rounded-lg text-sm font-medium tracking-tight transition-all duration-200 group-hover/sidebar:mx-0 group-hover/sidebar:w-[calc(100%-0.5rem)] group-hover/sidebar:ml-1.5 group-hover/sidebar:justify-start group-hover/sidebar:gap-3 group-hover/sidebar:px-3";
   if (isActive) {
-    return `${base} bg-[#f4c400] text-[#030737] shadow-[0_12px_24px_rgba(244,196,0,0.18)]`;
+    return `${base} bg-[#f4c400] text-[#030737] font-bold shadow-[0_4px_16px_rgba(244,196,0,0.25)]`;
   }
-  return `${base} text-[#8e96cf] hover:bg-white/5 hover:text-white group-hover/sidebar:hover:rounded-none`;
+  return `${base} text-[#9ba4db] hover:bg-white/10 hover:text-white`;
+};
+
+const isItemActive = (itemPath: string, currentPath: string) => {
+  if (itemPath === "/dashboard") {
+    return currentPath === "/dashboard" || currentPath === "/";
+  }
+  return currentPath === itemPath || (itemPath !== "/" && currentPath.startsWith(itemPath + "/"));
 };
 
 export default function Sidebar({ currentUser }: SidebarProps) {
+  const location = useLocation();
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
-  const isMechanic = isMechanicRole(currentUser);
-  const isOperations = isOperationsRole(currentUser);
-  const visibleNavItems = isMechanic
-    ? navItems.filter((item) => ["/dashboard", "/work-orders", "/maintenance-logs"].includes(item.path))
-    : isOperations
-      ? navItems.filter((item) =>
-          ["/dashboard", "/maintenance-scheduling", "/work-orders", "/maintenance-logs", "/maintenance-reports", "/fuel-management"].includes(item.path),
-        )
-      : navItems;
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
+  const loadNotifications = useCallback(async () => {
+    if (!currentUser) {
+      setNotifications([]);
+      return;
+    }
+
+    try {
+      setIsLoadingNotifications(true);
+      const nextNotifications = await fetchJSON<NotificationRecord[]>("/notifications");
+      setNotifications(Array.isArray(nextNotifications) ? nextNotifications : []);
+    } catch {
+      setNotifications([]);
+    } finally {
+      setIsLoadingNotifications(false);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (isNotificationsOpen) {
+      void loadNotifications();
+    }
+  }, [isNotificationsOpen, loadNotifications]);
+
+  const markNotificationAsRead = async (notificationId: string) => {
+    try {
+      const updatedNotification = await fetchJSON<NotificationRecord>(`/notifications/${notificationId}/read`, {
+        method: "PATCH",
+      });
+      setNotifications((current) =>
+        current.map((notification) =>
+          notification.id === notificationId ? { ...notification, isRead: updatedNotification.isRead } : notification,
+        ),
+      );
+    } catch {
+      // Ignore update failures and keep the UI responsive.
+    }
+  };
+
+  const unreadNotificationCount = notifications.filter((notification) => !notification.isRead).length;
+
+  const visibleGroups = useMemo(() => {
+    return navGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) =>
+          canSeeVmmsNavigationPath(item.path, currentUser),
+        ),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [currentUser]);
+
+  const findActiveGroupCategory = useCallback(
+    (pathname: string): string | null => {
+      for (const group of visibleGroups) {
+        if (group.items.some((item) => isItemActive(item.path, pathname))) {
+          return group.category;
+        }
+      }
+      return null;
+    },
+    [visibleGroups],
+  );
+
+  // Initialize expanded group based on active route
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(() => {
+    return findActiveGroupCategory(location.pathname) ?? visibleGroups[0]?.category ?? null;
+  });
+
+  const lastPathRef = useRef(location.pathname);
+
+  // Automatically expand the group containing the active page ONLY when route changes
+  useEffect(() => {
+    if (lastPathRef.current !== location.pathname) {
+      lastPathRef.current = location.pathname;
+      const activeCategory = findActiveGroupCategory(location.pathname);
+      if (activeCategory) {
+        setExpandedCategory(activeCategory);
+      }
+    }
+  }, [location.pathname, findActiveGroupCategory]);
+
+  const toggleGroup = (category: string) => {
+    setExpandedCategory((prev) => (prev === category ? null : category));
+  };
 
   const getSubsystemCount = () => {
     try {
-      const token = window.localStorage.getItem('accessToken');
+      const token = window.localStorage.getItem("accessToken");
       if (!token) return 0;
-      const [, payload] = token.split('.');
+      const [, payload] = token.split(".");
       if (!payload) return 0;
-      const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+      const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
       const json = decodeURIComponent(
         atob(base64)
-          .split('')
-          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join(''),
+          .split("")
+          .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+          .join(""),
       );
       const decoded = JSON.parse(json) as { roles?: { system: string }[] };
       const subsystemRoles = (decoded.roles || []).filter((r) =>
-        ['VRMS', 'VMMS', 'BMS'].includes(r.system.toUpperCase())
+        ["VRMS", "VMMS", "BMS"].includes(r.system.toUpperCase()),
       );
-      const uniqueSystems = new Set(subsystemRoles.map(r => r.system.toUpperCase()));
+      const uniqueSystems = new Set(subsystemRoles.map((r) => r.system.toUpperCase()));
       return uniqueSystems.size;
     } catch (err) {
-      console.error('Error parsing token to count subsystems:', err);
+      console.error("Error parsing token to count subsystems:", err);
       return 2;
     }
   };
@@ -108,7 +273,7 @@ export default function Sidebar({ currentUser }: SidebarProps) {
   };
 
   const handleSwitchToVrms = () => {
-    const token = window.localStorage.getItem('accessToken');
+    const token = window.localStorage.getItem("accessToken");
     const vrmsUrl = import.meta.env.VITE_VRMS_URL || "http://localhost:8001";
     if (token) {
       window.location.href = `${vrmsUrl}/login?token=${token}`;
@@ -129,77 +294,232 @@ export default function Sidebar({ currentUser }: SidebarProps) {
 
   return (
     <>
-    <aside className={asideBaseClasses} data-sidebar-mode="hover-expand">
-      <div className={headerClasses}>
-        <div className={logoFrameClasses}>
-          <img src={logo} alt="WeLinc Logistics" className="h-full w-full object-cover" />
-        </div>
-        <div className={labelRevealClasses}>
-          <p className="text-lg font-extrabold leading-5 text-white">WeLinc Logistics</p>
-          <p className="mt-1 text-[10px] font-semibold leading-4 text-white">Vehicle Maintenance Management System</p>
-        </div>
-      </div>
-
-      <nav className={navClasses}>
-        <ul className={`${navListClasses} w-full`}>
-          {visibleNavItems.map((item) => (
-            <li key={item.path} className={navItemClasses}>
-              <NavLink to={item.path} title={item.label} className={({ isActive }) => getNavLinkClass(isActive)}>
-                <item.icon className="h-5 w-5 shrink-0" strokeWidth={1.9} />
-                <span className={labelRevealClasses}>{item.label}</span>
-              </NavLink>
-            </li>
-          ))}
-        </ul>
-      </nav>
-
-      <div className={footerClasses}>
-        <NavLink
-          to="/profile"
-          title="Profile"
-          className="mb-4 flex items-center justify-center gap-0 rounded-full transition-all duration-300 hover:bg-white/5 group-hover/sidebar:justify-start group-hover/sidebar:gap-4 group-hover/sidebar:px-5"
-        >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f4c400] text-sm font-extrabold text-[#030737]">
-            {currentInitials}
+      <aside className={asideBaseClasses} data-sidebar-mode="hover-expand">
+        <div className={headerClasses}>
+          <div className={logoFrameClasses}>
+            <img src={logo} alt="WeLinc Logistics" className="h-full w-full object-cover" />
           </div>
           <div className={labelRevealClasses}>
-            <p className="text-sm font-extrabold leading-5 text-white">{currentUser ? currentUser.name : "username"}</p>
-            <p className="text-xs leading-4 text-white">{currentRole}</p>
+            <p className="text-base font-extrabold leading-5 text-white">WeLinc Logistics</p>
+            <p className="mt-0.5 text-[10px] font-medium leading-3 text-[#9ba4db]">
+              Vehicle Maintenance (VMMS)
+            </p>
           </div>
-        </NavLink>
+        </div>
 
-        {hasMultipleSystems && (
+        <nav className={navClasses}>
+          {visibleGroups.map((group, groupIdx) => {
+            const isExpanded = expandedCategory === group.category;
+            const hasActiveChild = group.items.some((item) => isItemActive(item.path, location.pathname));
+            const GroupIcon = group.icon;
+            const groupId = `nav-group-${group.category.toLowerCase().replace(/[^a-z0-9]/g, "-")}`;
+
+            return (
+              <div key={group.category} className="space-y-1">
+                {/* Subtle separator between groups */}
+                {groupIdx > 0 && (
+                  <div className="mx-2 my-1 border-t border-white/5" />
+                )}
+
+                {/* Collapsible Group Header Button */}
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.category)}
+                  className={`group/header relative mx-auto flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-left transition-all duration-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#f4c400]/50 group-hover/sidebar:mx-0 group-hover/sidebar:h-auto group-hover/sidebar:w-full group-hover/sidebar:justify-between group-hover/sidebar:px-2.5 group-hover/sidebar:py-1.5 ${
+                    isExpanded || hasActiveChild
+                      ? "bg-white/[0.08] text-[#f4c400]"
+                      : "text-[#9ba4db] hover:bg-white/5 hover:text-white"
+                  }`}
+                  aria-expanded={isExpanded}
+                  aria-controls={groupId}
+                  title={`${group.category} (${isExpanded ? "Expanded - Click to collapse" : "Collapsed - Click to expand"})`}
+                >
+                  <div className="flex items-center gap-0 group-hover/sidebar:gap-2.5 min-w-0">
+                    <GroupIcon
+                      className={`h-4.5 w-4.5 shrink-0 transition-colors ${
+                        isExpanded || hasActiveChild
+                          ? "text-[#f4c400]"
+                          : "text-[#9ba4db] group-hover/header:text-white"
+                      }`}
+                      strokeWidth={2}
+                    />
+                    <span className="hidden select-none text-[10.5px] font-extrabold uppercase tracking-wider text-[#f4c400] transition-all duration-200 group-hover/sidebar:inline truncate">
+                      {group.category}
+                    </span>
+                  </div>
+
+                  {/* Active dot indicator in collapsed rail mode */}
+                  {hasActiveChild && !isExpanded && (
+                    <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-[#f4c400] shadow-[0_0_8px_#f4c400] group-hover/sidebar:hidden" />
+                  )}
+
+                  {/* Chevron Icon in expanded sidebar mode */}
+                  <ChevronDown
+                    className={`hidden h-3.5 w-3.5 shrink-0 transition-transform duration-200 group-hover/sidebar:inline ${
+                      isExpanded
+                        ? "rotate-0 text-[#f4c400]"
+                        : "-rotate-90 text-[#9ba4db]/70 group-hover/header:text-white"
+                    }`}
+                    strokeWidth={2.2}
+                  />
+                </button>
+
+                {/* Animated Collapsible Child Nav Items */}
+                <div
+                  id={groupId}
+                  className={`grid transition-[grid-template-rows,opacity] duration-250 ease-in-out ${
+                    isExpanded
+                      ? "grid-rows-[1fr] opacity-100"
+                      : "grid-rows-[0fr] opacity-0 pointer-events-none"
+                  }`}
+                >
+                  <div className="overflow-hidden">
+                    <ul className="m-0 list-none space-y-0.5 p-0 pt-0.5">
+                      {group.items.map((item) => (
+                        <li key={item.path}>
+                          <NavLink
+                            to={item.path}
+                            title={item.label}
+                            className={({ isActive }) => getNavLinkClass(isActive)}
+                          >
+                            <item.icon className="h-4.5 w-4.5 shrink-0" strokeWidth={1.9} />
+                            <span className={labelRevealClasses}>{item.label}</span>
+                          </NavLink>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </nav>
+
+        <div className={footerClasses}>
           <button
-            className={`${baseButtonClasses} mb-1 text-[#8e96cf] hover:bg-white/5 hover:text-white`}
-            onClick={handleSwitchToVrms}
-            title="Switch to VRMS"
+            className={`${baseButtonClasses} relative mb-2 text-[#9ba4db] hover:bg-white/10 hover:text-white`}
+            onClick={() => setIsNotificationsOpen(true)}
+            title="Notifications"
             type="button"
           >
-            <LayoutGrid size={20} strokeWidth={1.7} />
-            <span className={labelRevealClasses}>Switch to VRMS</span>
+            <div className="relative">
+              <Bell size={18} strokeWidth={1.8} />
+              {unreadNotificationCount > 0 && (
+                <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#f4c400] px-1 text-[9px] font-bold text-[#020849]">
+                  {unreadNotificationCount}
+                </span>
+              )}
+            </div>
+            <span className={labelRevealClasses}>Notifications</span>
           </button>
-        )}
 
-        <button
-          className={`${baseButtonClasses} text-[#ef4444] hover:bg-red-500/10`}
-          onClick={() => setIsLogoutModalOpen(true)}
-          title="Sign Out"
-          type="button"
-        >
-          <LogOut size={20} strokeWidth={1.7} />
-          <span className={labelRevealClasses}>Sign Out</span>
-        </button>
-      </div>
-    </aside>
-    <ConfirmationModal
-      isOpen={isLogoutModalOpen}
-      title="Confirm Sign Out"
-      message="Are you sure you want to sign out of your account?"
-      onConfirm={handleSignOut}
-      onCancel={() => setIsLogoutModalOpen(false)}
-      confirmLabel="Sign Out"
-      variant="danger"
-    />
+          <NavLink
+            to="/profile"
+            title="Profile"
+            className="mb-2.5 flex items-center justify-center gap-0 rounded-lg p-1.5 transition-all duration-200 hover:bg-white/10 group-hover/sidebar:justify-start group-hover/sidebar:gap-3"
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f4c400] text-xs font-extrabold text-[#030737] shadow-sm">
+              {currentInitials}
+            </div>
+            <div className={labelRevealClasses}>
+              <p className="text-xs font-bold leading-4 text-white truncate max-w-[140px]">
+                {currentUser ? currentUser.name : "Admin User"}
+              </p>
+              <p className="text-[10px] font-medium leading-3 text-[#9ba4db]">{currentRole}</p>
+            </div>
+          </NavLink>
+
+          {hasMultipleSystems && (
+            <button
+              className={`${baseButtonClasses} mb-1 text-[#9ba4db] hover:bg-white/10 hover:text-white`}
+              onClick={handleSwitchToVrms}
+              title="Switch to VRMS"
+              type="button"
+            >
+              <LayoutGrid size={18} strokeWidth={1.8} />
+              <span className={labelRevealClasses}>Switch to VRMS</span>
+            </button>
+          )}
+
+          <button
+            className={`${baseButtonClasses} text-[#ef4444] hover:bg-red-500/15`}
+            onClick={() => setIsLogoutModalOpen(true)}
+            title="Sign Out"
+            type="button"
+          >
+            <LogOut size={18} strokeWidth={1.8} />
+            <span className={labelRevealClasses}>Sign Out</span>
+          </button>
+        </div>
+      </aside>
+
+      <ConfirmationModal
+        isOpen={isLogoutModalOpen}
+        title="Confirm Sign Out"
+        message="Are you sure you want to sign out of your account?"
+        onConfirm={handleSignOut}
+        onCancel={() => setIsLogoutModalOpen(false)}
+        confirmLabel="Sign Out"
+        variant="danger"
+      />
+
+      <Modal
+        isOpen={isNotificationsOpen}
+        title="Notifications"
+        onClose={() => setIsNotificationsOpen(false)}
+        size="sm"
+        footer={
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setIsNotificationsOpen(false)}
+              className="rounded-lg bg-[#070b45] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#111a62]"
+            >
+              Close
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          {isLoadingNotifications ? (
+            <p className="text-xs text-[#8a98ad]">Loading notifications...</p>
+          ) : notifications.length === 0 ? (
+            <p className="text-xs text-[#8a98ad]">
+              You have no new notifications.
+            </p>
+          ) : (
+            notifications.map((notification) => (
+              <button
+                key={notification.id}
+                type="button"
+                onClick={() => void markNotificationAsRead(notification.id)}
+                className={`w-full rounded-lg border p-3 text-left transition ${
+                  notification.isRead ? "border-[#dce3ed] bg-[#f7f9fc]" : "border-[#f4c400]/60 bg-[#fffaf0]"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-bold text-[#141827]">{notification.title}</p>
+                    <p className="mt-1 text-sm text-[#667085]">{notification.message}</p>
+                  </div>
+                  {!notification.isRead && (
+                    <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-[#f4c400]" />
+                  )}
+                </div>
+                <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-[#8a98ad]">
+                  {new Date(notification.createdAt).toLocaleString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                </p>
+              </button>
+            ))
+          )}
+        </div>
+      </Modal>
     </>
   );
 }

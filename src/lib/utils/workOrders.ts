@@ -4,6 +4,7 @@ import {
   MaintenanceTriggerType,
   type MaintenanceTask,
 } from "../../types/maintenance";
+import { timeIntervalDueDate } from './timeInterval';
 
 export const normalizeMaintenanceStatus = (status?: string | null) =>
   (status ?? "").trim().toLowerCase().replace(/[\s_]+/g, "-");
@@ -18,19 +19,11 @@ export const isInProgressStatus = (status?: string | null) =>
   normalizeMaintenanceStatus(status) === "in-progress" ||
   normalizeMaintenanceStatus(status) === "in-progress";
 
+export const isDoneStatus = (status?: string | null) =>
+  normalizeMaintenanceStatus(status) === "done";
+
 export const isOverdueStatus = (status?: string | null) =>
   normalizeMaintenanceStatus(status) === "overdue";
-
-export const formatWorkOrderNumber = (id: string) => {
-  const numericSuffix = id.match(/^(?:task-)?(\d+)$/i)?.[1];
-
-  if (numericSuffix) {
-    return `WO-${numericSuffix.slice(-6).padStart(6, "0")}`;
-  }
-
-  const normalizedId = id.replace(/[^a-z0-9]/gi, "").toUpperCase();
-  return `WO-${normalizedId.slice(0, 8).padEnd(8, "0")}`;
-};
 
 export const getNextWorkOrderId = (tasks: Pick<MaintenanceTask, "id">[]) => {
   const nextNumber =
@@ -169,9 +162,16 @@ export const getCalculatedMaintenanceStatus = (
   task: MaintenanceTask,
   currentDate = new Date(),
 ): MaintenanceTask["status"] => {
-  if (task.status === MaintenanceStatus.COMPLETED) return MaintenanceStatus.COMPLETED;
-  if (task.status === MaintenanceStatus.CANCELLED) return MaintenanceStatus.CANCELLED;
-  if (isInProgressStatus(task.status)) return MaintenanceStatus.IN_PROGRESS;
+  if (task.status) {
+    const normalized = normalizeMaintenanceStatus(task.status);
+    if (normalized === "completed") return MaintenanceStatus.COMPLETED;
+    if (normalized === "cancelled") return MaintenanceStatus.CANCELLED;
+    if (normalized === "done") return MaintenanceStatus.DONE;
+    if (normalized === "in-progress" || normalized === "in_progress") return MaintenanceStatus.IN_PROGRESS;
+    if (normalized === "overdue") return MaintenanceStatus.OVERDUE;
+    if (normalized === "due") return MaintenanceStatus.DUE;
+    if (normalized === "pending") return MaintenanceStatus.PENDING;
+  }
 
   if (task.triggerType === MaintenanceTriggerType.ODOMETER) {
     const odometerReading = parseKm(task.odometerReading);
@@ -195,8 +195,6 @@ export const getCalculatedMaintenanceStatus = (
     return MaintenanceStatus.OVERDUE;
   }
 
-  if (isDueStatus(task.status)) return MaintenanceStatus.DUE;
-  if (isOverdueStatus(task.status)) return MaintenanceStatus.OVERDUE;
   return MaintenanceStatus.PENDING;
 };
 
@@ -226,7 +224,7 @@ export const getTimeBasedActivationDate = (task: MaintenanceTask) => {
   const startReferenceDate = parseLocalDate(task.startReferenceDate);
   if (!startReferenceDate) return null;
 
-  return addIntervalToDate(startReferenceDate, task.intervalType);
+  return timeIntervalDueDate(startReferenceDate, task);
 };
 
 export const isPendingTimeScheduleReadyForMechanic = (

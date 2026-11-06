@@ -1,4 +1,4 @@
-import { ApiError, fetchJSON, useBackend } from "./httpClient";
+import { ApiError, apiRequest, fetchJSON, useBackend } from "./httpClient";
 import {
   mockDashboardStats,
   mockRecentActivity,
@@ -39,6 +39,7 @@ const fallbackVehicleOptions: VehicleOption[] = [
 import {
   AccountType,
   MaintenanceIntervalType,
+  MaintenancePriority,
   MaintenanceStatus,
   MaintenanceTriggerType,
   type MaintenanceTask,
@@ -174,8 +175,14 @@ function normalizeMaintenanceTask(task: MaintenanceTask): MaintenanceTask {
     formatLocalDateText();
   const normalizedTask = {
     ...task,
+    workOrderNumber:
+      task.workOrderNumber ??
+      (task as MaintenanceTask & { work_order_number?: string }).work_order_number,
     date,
     status: normalizeMaintenanceStatusValue(task.status),
+    priority: Object.values(MaintenancePriority).includes(task.priority as MaintenancePriority)
+      ? task.priority
+      : MaintenancePriority.MEDIUM,
     accountType: normalizeAccountTypeValue(task.accountType),
     triggerType: normalizeTriggerTypeValue(task.triggerType),
     intervalType: normalizeIntervalTypeValue(task.intervalType),
@@ -183,6 +190,8 @@ function normalizeMaintenanceTask(task: MaintenanceTask): MaintenanceTask {
       task.assignedDriver ??
       (task as MaintenanceTask & { assignedMechanic?: string }).assignedMechanic ??
       "",
+    chiefMechanicId: task.chiefMechanicId,
+    chiefMechanic: task.chiefMechanic,
   };
 
   return {
@@ -283,6 +292,7 @@ export async function login(
 }
 
 export function logout() {
+  void recordLogout();
   window.localStorage.removeItem("accessToken");
   if (!useBackend) {
     window.localStorage.removeItem("mockCurrentUserId");
@@ -423,6 +433,18 @@ export async function getManagedUsers() {
   if (!useBackend) return mockUsers.map((user) => normalizeUserRecord(user));
 
   return fetchJSON<UserRecord[]>("/auth/users?system=VMMS").then((users) =>
+    users.map((user) => normalizeUserRecord(user)),
+  );
+}
+
+export async function getChiefMechanics(): Promise<UserRecord[]> {
+  if (!useBackend) {
+    return mockUsers
+      .filter((u) => u.role === "CHIEF_MECHANIC")
+      .map((user) => normalizeUserRecord(user));
+  }
+
+  return fetchJSON<UserRecord[]>("/users/chief-mechanics").then((users) =>
     users.map((user) => normalizeUserRecord(user)),
   );
 }
@@ -665,6 +687,44 @@ export async function updateWorkOrderProgress(
   );
 }
 
+export type WorkOrderAttachment = {
+  id: string;
+  name: string;
+  sizeMb: number;
+  contentType?: string;
+  storageName?: string;
+};
+
+export async function uploadWorkOrderAttachment(taskId: string, itemId: string, file: File): Promise<WorkOrderAttachment> {
+  const body = new FormData();
+  body.append("itemId", itemId);
+  body.append("file", file);
+  return apiRequest<WorkOrderAttachment>(`/maintenance-schedules/${encodeURIComponent(taskId)}/attachments`, {
+    method: "POST",
+    body,
+  });
+}
+
+export async function deleteWorkOrderAttachment(taskId: string, attachmentId: string): Promise<void> {
+  await apiRequest<void>(`/maintenance-schedules/${encodeURIComponent(taskId)}/attachments/${encodeURIComponent(attachmentId)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function openWorkOrderAttachment(taskId: string, attachment: WorkOrderAttachment): Promise<void> {
+  const preview = window.open("about:blank", "_blank");
+  if (!preview) throw new Error("Allow pop-ups to open this attachment.");
+  try {
+    const blob = await apiRequest<Blob>(`/maintenance-schedules/${encodeURIComponent(taskId)}/attachments/${encodeURIComponent(attachment.id)}`);
+    const objectUrl = URL.createObjectURL(blob);
+    preview.location.href = objectUrl;
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  } catch (error) {
+    preview.close();
+    throw error;
+  }
+}
+
 export async function getChecklistTemplates() {
   if (!useBackend) {
     return getMockChecklistTemplates();
@@ -672,6 +732,40 @@ export async function getChecklistTemplates() {
 
   return fetchJSON<Record<ChecklistTemplateName, ChecklistItemTemplate[]>>(
     "/checklists",
+  );
+}
+
+export async function getChecklistTemplateId(type: string): Promise<string | undefined> {
+  if (!useBackend) return undefined;
+  const template = await fetchJSON<{ id: string; items: ChecklistItemTemplate[] } | null>(
+    `/checklists/type/${encodeURIComponent(type)}`,
+  );
+  if (!template?.id || !template.items?.length) throw new Error('The selected checklist is unavailable or empty. Refresh the templates and try again.');
+  return template.id;
+}
+
+export async function recordLogout() {
+  if (!useBackend || !window.localStorage.getItem("accessToken")) return;
+  try {
+    await fetchJSON<{ message: string }>("/auth/logout", { method: "POST" });
+  } catch (error) {
+    console.warn("Unable to record logout activity", error);
+  }
+}
+
+export type LoginActivityRecord = {
+  id: string;
+  event: "SUCCESSFUL_LOGIN" | "FAILED_LOGIN" | "ACCOUNT_LOCKOUT" | "LOGOUT" | "PLATFORM_ACCESS_DENIED";
+  email: string;
+  ipAddress: string | null;
+  deviceType: string;
+  createdAt: string;
+};
+
+export async function getLoginActivity(userId: string) {
+  if (!useBackend) return [] as LoginActivityRecord[];
+  return fetchJSON<LoginActivityRecord[]>(
+    `/auth/users/${encodeURIComponent(userId)}/login-activity`,
   );
 }
 
@@ -759,10 +853,17 @@ export async function createMaintenanceSchedule(
 
   // Backend expects a narrower DTO — only send supported fields
   const payload = {
+    timeIntervalValue: schedule.timeIntervalValue,
+    timeIntervalUnit: schedule.timeIntervalUnit,
+    startDate: schedule.startDate,
+    checklistTemplateId: schedule.checklistTemplateId,
     vehicleId: schedule.vehicleId,
     title: schedule.title,
     assignedDriver: schedule.assignedDriver,
+    chiefMechanicId: schedule.chiefMechanicId,
+    chiefMechanic: schedule.chiefMechanic,
     status: schedule.status,
+    priority: schedule.priority ?? MaintenancePriority.MEDIUM,
     garageId: schedule.garageId,
     accountType: schedule.accountType,
     odometerReading: schedule.odometerReading,
@@ -796,10 +897,17 @@ export async function updateMaintenanceSchedule(schedule: MaintenanceTask) {
   }
 
   const payload = {
+    timeIntervalValue: schedule.timeIntervalValue,
+    timeIntervalUnit: schedule.timeIntervalUnit,
+    startDate: schedule.startDate,
+    checklistTemplateId: schedule.checklistTemplateId,
     vehicleId: schedule.vehicleId,
     title: schedule.title,
     assignedDriver: schedule.assignedDriver,
+    chiefMechanicId: schedule.chiefMechanicId,
+    chiefMechanic: schedule.chiefMechanic,
     status: schedule.status,
+    priority: schedule.priority ?? MaintenancePriority.MEDIUM,
     garageId: schedule.garageId,
     accountType: schedule.accountType,
     odometerReading: schedule.odometerReading,
@@ -818,6 +926,37 @@ export async function updateMaintenanceSchedule(schedule: MaintenanceTask) {
       body: JSON.stringify(payload),
     },
   ).then(normalizeMaintenanceTask);
+}
+
+export async function updateWorkOrderPriority(
+  id: string,
+  priority: MaintenancePriority,
+): Promise<Pick<MaintenanceTask, "id" | "priority">> {
+  if (!useMaintenanceScheduleBackend) {
+    const schedules = readLocalMaintenanceSchedules();
+    const current = schedules.find((schedule) => schedule.id === id);
+    if (!current) throw new Error("Work order not found.");
+    const updated = normalizeMaintenanceTask({ ...current, priority });
+    writeLocalMaintenanceSchedules(
+      schedules.map((schedule) => schedule.id === id ? updated : schedule),
+    );
+    return { id: updated.id, priority: updated.priority };
+  }
+
+  const result = await fetchJSON<{ id: string; priority: MaintenancePriority }>(
+    `/maintenance-schedules/${encodeURIComponent(id)}/priority`,
+    { method: "PATCH", body: JSON.stringify({ priority }) },
+  );
+  return result;
+}
+
+export async function cancelMaintenanceSchedule(schedule: MaintenanceTask, reason: string): Promise<MaintenanceTask> {
+  if (!useMaintenanceScheduleBackend) throw new Error('Cancellation requires a connected backend to record the Operations audit trail.');
+  const result = await fetchJSON<Pick<MaintenanceTask, 'id' | 'status' | 'cancellations'>>(
+    `/maintenance-schedules/${encodeURIComponent(schedule.id)}/cancel`,
+    { method: 'POST', body: JSON.stringify({ reason: reason.trim() }) },
+  );
+  return { ...schedule, ...result };
 }
 
 export async function deleteMaintenanceSchedule(id: string) {
@@ -933,4 +1072,147 @@ export type {
   UserRecord,
   UserRole,
   UserCreateInput,
+  VehicleRecord,
+  VehicleRecordInput,
+  GarageFullRecord,
 } from "../mocks/vmmsMocks";
+
+// ─── Vehicle Management CRUD ───────────────────────────────────────────────
+
+import type { VehicleRecord, VehicleRecordInput, GarageFullRecord } from "../mocks/vmmsMocks";
+import { mockVehicleRecords, mockGarageRecords } from "../mocks/vmmsMocks";
+
+export type VehicleAuditEntry = {
+  id: string;
+  email: string;
+  action: string;
+  fieldName: string;
+  previousValue: string | null;
+  newValue: string | null;
+  createdAt: string;
+};
+
+export type AuditLogSource = "all" | "login" | "vehicle" | "work-order" | "schedule";
+export type AuditLogRecord = {
+  id: string;
+  source: Exclude<AuditLogSource, "all">;
+  actor: string;
+  action: string;
+  entity: string;
+  details: string | null;
+  previousValue: string | null;
+  newValue: string | null;
+  createdAt: string;
+};
+
+export async function getAuditLogs(source: AuditLogSource = "all"): Promise<AuditLogRecord[]> {
+  if (!useBackend) return [];
+  return fetchJSON<AuditLogRecord[]>(`/auth/audit-logs?source=${encodeURIComponent(source)}`);
+}
+
+export async function getVehicleRecords(): Promise<VehicleRecord[]> {
+  if (!useBackend) return [...mockVehicleRecords];
+  const data = await fetchJSON<VehicleRecord[]>("/vehicles");
+  return data;
+}
+
+export async function getVehicleAuditHistory(vehicleId: string): Promise<VehicleAuditEntry[]> {
+  if (!useBackend) return [];
+  return fetchJSON<VehicleAuditEntry[]>(`/vehicles/${encodeURIComponent(vehicleId)}/audit`);
+}
+
+export async function createVehicleRecord(
+  dto: VehicleRecordInput,
+): Promise<VehicleRecord> {
+  if (!useBackend) {
+    const created: VehicleRecord = {
+      ...dto,
+      id: `vr${Date.now()}`,
+      lastMaintenanceDate: null,
+      status: "AVAILABLE",
+      isActive: true,
+    };
+    mockVehicleRecords.unshift(created);
+    return created;
+  }
+  return fetchJSON<VehicleRecord>("/vehicles", {
+    method: "POST",
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function updateVehicleRecord(
+  id: string,
+  dto: Partial<Omit<VehicleRecord, "id" | "garageId" | "garageName">> & { garageId?: string },
+): Promise<VehicleRecord> {
+  if (!useBackend) {
+    const idx = mockVehicleRecords.findIndex((v) => v.id === id);
+    if (idx < 0) throw new Error("Vehicle not found");
+    mockVehicleRecords[idx] = { ...mockVehicleRecords[idx], ...dto };
+    return { ...mockVehicleRecords[idx] };
+  }
+  return fetchJSON<VehicleRecord>(`/vehicles/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function deleteVehicleRecord(id: string): Promise<void> {
+  if (!useBackend) {
+    const idx = mockVehicleRecords.findIndex((v) => v.id === id);
+    if (idx >= 0) mockVehicleRecords.splice(idx, 1);
+    return;
+  }
+  return fetchJSON<void>(`/vehicles/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+// ─── Garage Management CRUD ────────────────────────────────────────────────
+
+export async function getGarageRecords(): Promise<GarageFullRecord[]> {
+  if (!useBackend) return [...mockGarageRecords];
+  return fetchJSON<GarageFullRecord[]>("/garages");
+}
+
+export async function createGarageRecord(
+  dto: Omit<GarageFullRecord, "id">,
+): Promise<GarageFullRecord> {
+  if (!useBackend) {
+    const created: GarageFullRecord = { ...dto, id: `g${Date.now()}` };
+    mockGarageRecords.unshift(created);
+    return created;
+  }
+  return fetchJSON<GarageFullRecord>("/garages", {
+    method: "POST",
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function updateGarageRecord(
+  id: string,
+  dto: Partial<Omit<GarageFullRecord, "id">>,
+): Promise<GarageFullRecord> {
+  if (!useBackend) {
+    const idx = mockGarageRecords.findIndex((g) => g.id === id);
+    if (idx < 0) throw new Error("Garage not found");
+    mockGarageRecords[idx] = { ...mockGarageRecords[idx], ...dto };
+    return { ...mockGarageRecords[idx] };
+  }
+  return fetchJSON<GarageFullRecord>(`/garages/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function deleteGarageRecord(id: string): Promise<void> {
+  if (!useBackend) {
+    const idx = mockGarageRecords.findIndex((g) => g.id === id);
+    if (idx >= 0) mockGarageRecords.splice(idx, 1);
+    return;
+  }
+  return fetchJSON<void>(`/garages/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+

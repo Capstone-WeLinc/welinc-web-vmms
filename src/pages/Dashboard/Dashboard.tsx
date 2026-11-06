@@ -18,8 +18,8 @@ import {
   maintenanceStatusLabels,
   type MaintenanceTask,
 } from "../../types/maintenance";
+import { getTaskTotalCost } from "../../lib/utils/maintenanceCosts";
 import { isMechanicRole } from "../../lib/utils/permissions";
-import { formatWorkOrderNumber } from "../../lib/utils/workOrders";
 
 type DashboardFilter = "all" | "month";
 
@@ -27,6 +27,7 @@ const statusColors: Record<MaintenanceStatus, string> = {
   [MaintenanceStatus.PENDING]: "#64748b",
   [MaintenanceStatus.DUE]: "#7c3aed",
   [MaintenanceStatus.IN_PROGRESS]: "#0284c7",
+  [MaintenanceStatus.DONE]: "#d97706",
   [MaintenanceStatus.COMPLETED]: "#059669",
   [MaintenanceStatus.OVERDUE]: "#dc2626",
   [MaintenanceStatus.CANCELLED]: "#94a3b8",
@@ -46,26 +47,7 @@ const isCurrentMonth = (task: MaintenanceTask) => {
 };
 
 const getMaterialCost = (task: MaintenanceTask) => {
-  const progress = task.workOrderProgress;
-  if (!progress || typeof progress !== "object" || Array.isArray(progress)) return 0;
-
-  const execution = (progress as { execution?: unknown }).execution;
-  if (!execution || typeof execution !== "object" || Array.isArray(execution)) return 0;
-
-  const items = (execution as { items?: unknown }).items;
-  if (!Array.isArray(items)) return 0;
-
-  return items.reduce((total, item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) return total;
-    const value = (item as { partsCost?: unknown }).partsCost;
-    const parsed =
-      typeof value === "number"
-        ? value
-        : typeof value === "string"
-          ? Number(value.replace(/[^\d.-]/g, ""))
-          : 0;
-    return total + (Number.isFinite(parsed) ? parsed : 0);
-  }, 0);
+  return getTaskTotalCost(task);
 };
 
 const formatCurrency = (value: number) =>
@@ -79,6 +61,7 @@ const statusBadgeClasses: Record<MaintenanceStatus, string> = {
   [MaintenanceStatus.PENDING]: "border-slate-300 bg-slate-100 text-slate-700",
   [MaintenanceStatus.DUE]: "border-violet-200 bg-violet-50 text-violet-700",
   [MaintenanceStatus.IN_PROGRESS]: "border-sky-200 bg-sky-50 text-sky-700",
+  [MaintenanceStatus.DONE]: "border-amber-200 bg-amber-50 text-amber-700",
   [MaintenanceStatus.COMPLETED]: "border-emerald-200 bg-emerald-50 text-emerald-700",
   [MaintenanceStatus.OVERDUE]: "border-red-200 bg-red-50 text-red-700",
   [MaintenanceStatus.CANCELLED]: "border-slate-200 bg-slate-50 text-slate-500",
@@ -218,7 +201,6 @@ export default function Dashboard() {
       status,
       count: filteredSchedules.filter((task) => task.status === status).length,
     }));
-  const maxStatusCount = Math.max(...statusBreakdown.map((item) => item.count), 1);
 
   const overdue = schedules
     .filter((task) => task.status === MaintenanceStatus.OVERDUE)
@@ -276,14 +258,68 @@ export default function Dashboard() {
       <div>
         <Panel title="Maintenance Status Breakdown" subtitle="Current work order distribution by status">
           <div className="space-y-4 p-5">
-            {statusBreakdown.map(({ status, count }) => (
-              <div key={status}>
-                <div className="mb-1.5 flex justify-between text-sm"><span>{maintenanceStatusLabels[status]}</span><strong>{count}</strong></div>
-                <div className="h-2 overflow-hidden rounded-full bg-[var(--color-input-bg)]">
-                  <div className="h-full rounded-full transition-all" style={{ width: `${(count / maxStatusCount) * 100}%`, backgroundColor: statusColors[status] }} />
+            {/* Total Summary */}
+            <div className="flex items-center justify-between text-xs font-semibold text-[var(--color-text-secondary)]">
+              <span>Work Order Composition</span>
+              <span className="font-bold text-[var(--color-text-primary)]">
+                {statusBreakdown.reduce((acc, s) => acc + s.count, 0)} Total Work Orders
+              </span>
+            </div>
+
+            {/* Stacked Proportional Distribution Bar */}
+            {(() => {
+              const total = statusBreakdown.reduce((acc, s) => acc + s.count, 0);
+              return (
+                <div className="flex h-3.5 w-full overflow-hidden rounded-full border border-[var(--color-border)] bg-[var(--color-input-bg)] p-0.5 shadow-inner">
+                  {total > 0 ? (
+                    statusBreakdown.map(({ status, count }) => {
+                      const pct = Math.round((count / total) * 100);
+                      if (pct === 0) return null;
+                      return (
+                        <div
+                          key={status}
+                          className="h-full transition-all duration-300 first:rounded-l-full last:rounded-r-full"
+                          style={{ width: `${pct}%`, backgroundColor: statusColors[status] }}
+                          title={`${maintenanceStatusLabels[status]}: ${count} (${pct}%)`}
+                        />
+                      );
+                    })
+                  ) : (
+                    <div className="h-full w-full rounded-full bg-[var(--color-border)] opacity-30" />
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })()}
+
+            {/* Categorical Breakdown Pills / List */}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {(() => {
+                const total = statusBreakdown.reduce((acc, s) => acc + s.count, 0);
+                return statusBreakdown.map(({ status, count }) => {
+                  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                  return (
+                    <div
+                      key={status}
+                      className="flex items-center justify-between rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-3 text-sm shadow-xs"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span
+                          className="h-3 w-3 rounded-full shadow-xs"
+                          style={{ backgroundColor: statusColors[status] }}
+                        />
+                        <span className="font-semibold text-[var(--color-text-primary)]">
+                          {maintenanceStatusLabels[status]}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-bold text-[var(--color-text-primary)]">{count}</span>
+                        <span className="ml-1.5 text-xs text-[var(--color-text-secondary)]">({pct}%)</span>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
           </div>
         </Panel>
       </div>
@@ -311,7 +347,7 @@ export default function Dashboard() {
           <table className="w-full text-left text-sm">
             <thead className="bg-[#070b45] text-xs uppercase text-white"><tr>{["Work Order No.", "Vehicle", "Assigned Mechanic", "Status"].map((heading) => <th key={heading} className="px-4 py-3">{heading}</th>)}</tr></thead>
             <tbody className="divide-y divide-[var(--color-divider)]">
-              {recent.map((task) => <tr key={task.id} className="hover:bg-[var(--color-input-bg)]"><td className="px-4 py-3 font-bold">{formatWorkOrderNumber(task.id)}</td><td className="px-4 py-3">{plateNumber(task)}</td><td className="px-4 py-3">{task.assignedDriver || "Unassigned"}</td><td className="px-4 py-3"><StatusPill status={task.status} /></td></tr>)}
+              {recent.map((task) => <tr key={task.id} className="hover:bg-[var(--color-input-bg)]"><td className="px-4 py-3 font-bold">{task.workOrderNumber ?? "N/A"}</td><td className="px-4 py-3">{plateNumber(task)}</td><td className="px-4 py-3">{task.assignedDriver || "Unassigned"}</td><td className="px-4 py-3"><StatusPill status={task.status} /></td></tr>)}
               {!loading && recent.length === 0 ? <tr><td colSpan={4} className="px-4 py-10 text-center text-[var(--color-text-secondary)]">No work orders found.</td></tr> : null}
             </tbody>
           </table>

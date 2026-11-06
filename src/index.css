@@ -290,3 +290,20 @@
     clip: auto;
   }
 }
+
+@media print {
+  aside,
+  nav,
+  button,
+  .sidebar,
+  .no-print,
+  [role="navigation"] {
+    display: none !important;
+  }
+
+  body, html {
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+}
+

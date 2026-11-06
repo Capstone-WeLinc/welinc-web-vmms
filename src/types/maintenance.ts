@@ -9,6 +9,7 @@ export const MaintenanceStatus = {
   PENDING: "PENDING",
   DUE: "DUE",
   IN_PROGRESS: "IN_PROGRESS",
+  DONE: "DONE",
   COMPLETED: "COMPLETED",
   OVERDUE: "OVERDUE",
   CANCELLED: "CANCELLED",
@@ -16,6 +17,21 @@ export const MaintenanceStatus = {
 
 export type MaintenanceStatus =
   (typeof MaintenanceStatus)[keyof typeof MaintenanceStatus];
+
+export const MaintenancePriority = {
+  HIGH: "HIGH",
+  MEDIUM: "MEDIUM",
+  LOW: "LOW",
+} as const;
+
+export type MaintenancePriority =
+  (typeof MaintenancePriority)[keyof typeof MaintenancePriority];
+
+export const maintenancePriorityLabels: Record<MaintenancePriority, string> = {
+  [MaintenancePriority.HIGH]: "High",
+  [MaintenancePriority.MEDIUM]: "Medium",
+  [MaintenancePriority.LOW]: "Low",
+};
 
 export const MaintenanceTriggerType = {
   MANUAL: "MANUAL",
@@ -42,6 +58,7 @@ export const maintenanceStatusLabels: Record<MaintenanceStatus, string> = {
   [MaintenanceStatus.PENDING]: "Pending",
   [MaintenanceStatus.DUE]: "Due",
   [MaintenanceStatus.IN_PROGRESS]: "In Progress",
+  [MaintenanceStatus.DONE]: "Awaiting Review",
   [MaintenanceStatus.COMPLETED]: "Completed",
   [MaintenanceStatus.OVERDUE]: "Overdue",
   [MaintenanceStatus.CANCELLED]: "Cancelled",
@@ -68,14 +85,25 @@ export const maintenanceIntervalTypeLabels: Record<MaintenanceIntervalType, stri
 };
 
 export interface MaintenanceTask {
+  timeIntervalValue?: number | null;
+  timeIntervalUnit?: 'DAYS' | 'MONTHS' | null;
+  startDate?: string | null;
+  checklistTemplateId?: string | null;
+  dueDate?: string | null;
+  dueOdometer?: number | null;
+  cancellations?: { id: string; actorId: string; actorName: string; actorEmail: string; reason: string; previousStatus: string; createdAt: string }[];
   id: string;
+  workOrderNumber?: string;
   vehicleId: string;
   title: string;
   status: MaintenanceStatus;
+  priority?: MaintenancePriority;
   date: string;
   assignedDriver: string;
   assignedMechanicId?: string;
   assignedMechanicEmail?: string;
+  chiefMechanicId?: string;
+  chiefMechanic?: string;
   notes: string;
   garageId?: string;
   accountType?: AccountType;
@@ -89,5 +117,9 @@ export interface MaintenanceTask {
   intervalType?: MaintenanceIntervalType;
   startReferenceDate?: string;
   workOrderProgress?: unknown;
+  partsCost?: number | string;
+  laborCost?: number | string;
+  totalCost?: number | string;
+  materialCost?: number | string;
   deletedAt?: string | null;
 }

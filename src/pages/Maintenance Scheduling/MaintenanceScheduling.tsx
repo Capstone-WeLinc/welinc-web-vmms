@@ -35,23 +35,29 @@ import {
   ToastNotification,
 } from "../../components/ui";
 import CreateSchedule from "./CreateSchedule";
+import { useAuthStore } from "../../store/authStore";
+import { canEditWorkOrderPriority, canManageSchedules } from "../../lib/utils/permissions";
+import { timeIntervalFields } from '../../lib/utils/timeInterval';
 import {
   MaintenanceStatus,
+  MaintenancePriority,
   MaintenanceTriggerType,
+  maintenancePriorityLabels,
   maintenanceStatusLabels,
   maintenanceTriggerTypeLabels,
   type MaintenanceTask,
 } from "../../types/maintenance";
 import {
   getMaintenanceSchedules,
+  cancelMaintenanceSchedule,
   deleteMaintenanceSchedule,
   updateMaintenanceSchedule,
+  updateWorkOrderPriority,
 } from "../../lib/api/maintenanceService";
 import { getVehicles, type VehicleOption } from "../../lib/api/vehicleService";
 import { getGarages } from "../../lib/api/locationService";
 import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
 import {
-  formatWorkOrderNumber,
   getCalculatedMaintenanceStatus,
   isInProgressStatus,
   isDueStatus,
@@ -269,6 +275,9 @@ const getTaskStyle = (status: MaintenanceStatus) => {
 };
 
 const MaintenanceSchedulingCombined = () => {
+  const currentUser = useAuthStore((state) => state.currentUser);
+  const canSchedule = canManageSchedules(currentUser);
+  const canEditPriority = canEditWorkOrderPriority(currentUser);
   const location = useLocation();
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
@@ -278,6 +287,8 @@ const MaintenanceSchedulingCombined = () => {
   const [viewMode, setViewMode] = useState<"calendar" | "list">("list");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatusFilters, setSelectedStatusFilters] = useState<string[]>([]);
+  const [priorityFilter, setPriorityFilter] = useState<MaintenancePriority | "All">("All");
+  const [priorityOrder, setPriorityOrder] = useState<"NONE" | "HIGH_TO_LOW" | "LOW_TO_HIGH">("NONE");
   const [vehicleFilter, setVehicleFilter] = useState<string>("All");
   const [checklistTemplateFilter, setChecklistTemplateNameFilter] =
     useState<string>("All");
@@ -302,8 +313,13 @@ const MaintenanceSchedulingCombined = () => {
   const [selectedSchedulePage, setSelectedSchedulePage] = useState(0);
   const [pendingAction, setPendingAction] =
     useState<PendingScheduleAction | null>(null);
+  const [cancellationReason, setCancellationReason] = useState('');
+  const [actionSaving, setActionSaving] = useState(false);
+  const [actionError, setActionError] = useState('');
+  useEffect(() => { setCancellationReason(''); setActionError(''); }, [pendingAction]);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [savingPriorityId, setSavingPriorityId] = useState<string | null>(null);
 
   useBodyScrollLock(Boolean(pendingAction));
 
@@ -324,11 +340,11 @@ const MaintenanceSchedulingCombined = () => {
   }, []);
 
   useEffect(() => {
-    if (new URLSearchParams(location.search).get("create") !== "true") return;
+    if (!canSchedule || new URLSearchParams(location.search).get("create") !== "true") return;
     setEditingTask(null);
     setIsOdometerUpdateOpen(false);
     setIsModalOpen(true);
-  }, [location.search]);
+  }, [location.search, canSchedule]);
 
   useEffect(() => {
     const closeActionMenu = () => setOpenActionMenuId(null);
@@ -431,6 +447,8 @@ const MaintenanceSchedulingCombined = () => {
             (status === MaintenanceStatus.OVERDUE && isOverdueStatus(task.status)) ||
             status === task.status,
         );
+      const priorityMatches = priorityFilter === "All" ||
+        (task.priority ?? MaintenancePriority.MEDIUM) === priorityFilter;
       const taskVehicle = getVehicleOption(task.vehicleId);
       const vehicleMatches =
         vehicleFilter === "All" ||
@@ -441,10 +459,10 @@ const MaintenanceSchedulingCombined = () => {
       const templateMatches =
         checklistTemplateFilter === "All" ||
         task.title === checklistTemplateFilter;
-      const dateMatches =
-        dateFilter(new Date(task.date)) &&
-        (!dateFromFilter || task.date >= dateFromFilter) &&
-        (!dateToFilter || task.date <= dateToFilter);
+      const candidateDates = viewMode === 'calendar' ? [task.startDate, task.dueDate] : [task.startDate];
+      const dateMatches = (dateRangeFilter === 'All' && !dateFromFilter && !dateToFilter) ||
+        candidateDates.some((date) => date && dateFilter(new Date(`${date}T00:00:00`)) &&
+          (!dateFromFilter || date >= dateFromFilter) && (!dateToFilter || date <= dateToFilter));
       const searchMatches =
         task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         task.vehicleId.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -455,6 +473,7 @@ const MaintenanceSchedulingCombined = () => {
       return (
         isVisibleSchedule &&
         statusMatches &&
+        priorityMatches &&
         vehicleMatches &&
         templateMatches &&
         dateMatches &&
@@ -462,7 +481,18 @@ const MaintenanceSchedulingCombined = () => {
       );
     })
     .sort((left, right) => {
-      const dateComparison = left.date.localeCompare(right.date);
+      if (priorityOrder !== "NONE") {
+        const rank: Record<MaintenancePriority, number> = {
+          [MaintenancePriority.HIGH]: 3,
+          [MaintenancePriority.MEDIUM]: 2,
+          [MaintenancePriority.LOW]: 1,
+        };
+        const priorityDifference = rank[left.priority ?? MaintenancePriority.MEDIUM] - rank[right.priority ?? MaintenancePriority.MEDIUM];
+        if (priorityDifference !== 0) {
+          return priorityOrder === "HIGH_TO_LOW" ? -priorityDifference : priorityDifference;
+        }
+      }
+      const dateComparison = (left.startDate ?? '').localeCompare(right.startDate ?? '');
       if (dateComparison !== 0) {
         return dateSortDirection === "asc" ? dateComparison : -dateComparison;
       }
@@ -533,6 +563,21 @@ const MaintenanceSchedulingCombined = () => {
   const selectedSchedule =
     selectedSchedules[selectedSchedulePage] ?? selectedSchedules[0] ?? null;
 
+  const handlePriorityChange = async (task: MaintenanceTask, priority: MaintenancePriority) => {
+    if (!canEditPriority || priority === (task.priority ?? MaintenancePriority.MEDIUM)) return;
+    setSavingPriorityId(task.id);
+    try {
+      const updated = await updateWorkOrderPriority(task.id, priority);
+      setTasks((current) => current.map((entry) => entry.id === task.id ? { ...entry, ...updated } : entry));
+      setSelectedSchedules((current) => current.map((entry) => entry.id === task.id ? { ...entry, ...updated } : entry));
+      setToast({ type: "success", message: "Work-order priority updated." });
+    } catch (error) {
+      setToast({ type: "error", message: error instanceof Error ? error.message : "Could not update work-order priority." });
+    } finally {
+      setSavingPriorityId(null);
+    }
+  };
+
   const getGarageName = (garageId?: string) => {
     if (!garageId) return undefined;
     return garages.find((garage) => garage.id === garageId)?.name ?? garageId;
@@ -542,6 +587,7 @@ const MaintenanceSchedulingCombined = () => {
     isInProgressStatus(task.status);
 
   const openFullScheduleEdit = (task: MaintenanceTask) => {
+    if (!canSchedule) return;
     if (isInProgressScheduleLocked(task)) {
       setToast({
         type: "warning",
@@ -555,6 +601,7 @@ const MaintenanceSchedulingCombined = () => {
   };
 
   const openOdometerUpdate = (task: MaintenanceTask) => {
+    if (!canSchedule) return;
     if (isInProgressScheduleLocked(task)) {
       setToast({
         type: "warning",
@@ -568,6 +615,7 @@ const MaintenanceSchedulingCombined = () => {
   };
 
   const canShowScheduleUpdate = (task: MaintenanceTask) =>
+    canSchedule &&
     !isInProgressScheduleLocked(task) &&
     task.status !== MaintenanceStatus.COMPLETED &&
     task.status !== MaintenanceStatus.CANCELLED &&
@@ -575,27 +623,27 @@ const MaintenanceSchedulingCombined = () => {
       task.triggerType === MaintenanceTriggerType.MANUAL);
 
   const confirmScheduleAction = async () => {
-    if (!pendingAction) return;
+    if (!pendingAction || actionSaving) return;
     const { action, task } = pendingAction;
+    if (action === 'cancel' && !cancellationReason.trim()) return;
+    if (action !== "deactivate" && !canSchedule) return;
 
     if (action === "cancel" && isInProgressScheduleLocked(task)) {
       setToast({
         type: "warning",
-        message: "In-progress schedules cannot be cancelled.",
+        message: "Schedule cannot be cancelled once work has started. Use ‘Extension’ instead.",
       });
       setPendingAction(null);
       return;
     }
 
+    setActionSaving(true);
+    setActionError('');
     try {
       if (action === "cancel" || action === "activate") {
-        const updatedTask = await updateMaintenanceSchedule({
-          ...task,
-          status:
-            action === "cancel"
-              ? MaintenanceStatus.CANCELLED
-              : MaintenanceStatus.PENDING,
-        });
+        const updatedTask = action === 'cancel'
+          ? await cancelMaintenanceSchedule(task, cancellationReason)
+          : await updateMaintenanceSchedule({ ...task, status: MaintenanceStatus.PENDING });
         setTasks((current) =>
           current.map((currentTask) =>
             currentTask.id === task.id ? updatedTask : currentTask,
@@ -618,14 +666,16 @@ const MaintenanceSchedulingCombined = () => {
           message: "Schedule deactivated. Existing work orders and history were retained.",
         });
       }
+      setPendingAction(null);
     } catch (err) {
       console.error(`Failed to ${action} schedule`, err);
+      setActionError(err instanceof Error ? err.message : 'The schedule could not be updated. Please try again.');
       setToast({
         type: "warning",
-        message: `Schedule was not ${action === "cancel" ? "cancelled" : action === "activate" ? "activated" : "deactivated"} because the server update failed.`,
+        message: err instanceof Error ? err.message : 'The schedule could not be updated. Please try again.',
       });
     } finally {
-      setPendingAction(null);
+      setActionSaving(false);
     }
   };
 
@@ -641,7 +691,7 @@ const MaintenanceSchedulingCombined = () => {
         subtitle="Manage and track fleet maintenance schedules and tasks"
       />
 
-      <div className="flex justify-end mb-4">
+      {canSchedule && <div className="flex justify-end mb-4">
         <ActionButton
           variant="primary"
           className="flex items-center gap-2"
@@ -654,7 +704,7 @@ const MaintenanceSchedulingCombined = () => {
           <Plus className="w-4 h-4" />
           <span>{"Create Schedule"}</span>
         </ActionButton>
-      </div>
+      </div>}
 
       <div className="space-y-6">
         <div className="grid gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
@@ -784,6 +834,8 @@ const MaintenanceSchedulingCombined = () => {
                 onApply={() => setShowFilters(false)}
                 onClear={() => {
                   setSelectedStatusFilters([]);
+                  setPriorityFilter("All");
+                  setPriorityOrder("NONE");
                   setDateFromFilter("");
                   setDateToFilter("");
                   setVehicleFilter("All");
@@ -810,6 +862,36 @@ const MaintenanceSchedulingCombined = () => {
                     value={checklistTemplateFilter}
                     onChange={(e) => {
                       setChecklistTemplateNameFilter(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                  />
+                  <SelectField
+                    label="Priority"
+                    id="priorityF"
+                    options={[
+                      { value: "All", label: "All Priorities" },
+                      ...Object.values(MaintenancePriority).map((priority) => ({
+                        value: priority,
+                        label: maintenancePriorityLabels[priority],
+                      })),
+                    ]}
+                    value={priorityFilter}
+                    onChange={(e) => {
+                      setPriorityFilter(e.target.value as MaintenancePriority | "All");
+                      setCurrentPage(1);
+                    }}
+                  />
+                  <SelectField
+                    label="Priority Order"
+                    id="priorityOrderF"
+                    options={[
+                      { value: "NONE", label: "Use Start Date" },
+                      { value: "HIGH_TO_LOW", label: "High to Low" },
+                      { value: "LOW_TO_HIGH", label: "Low to High" },
+                    ]}
+                    value={priorityOrder}
+                    onChange={(e) => {
+                      setPriorityOrder(e.target.value as typeof priorityOrder);
                       setCurrentPage(1);
                     }}
                   />
@@ -851,7 +933,7 @@ const MaintenanceSchedulingCombined = () => {
                     key: "workOrderNo",
                     header: "Work Order No.",
                     width: "11%",
-                    render: (task) => formatWorkOrderNumber(task.id),
+                    render: (task) => task.workOrderNumber ?? "N/A",
                   },
                   {
                     key: "plateNo",
@@ -868,6 +950,20 @@ const MaintenanceSchedulingCombined = () => {
                     header: "Work Order",
                     width: "17%",
                     render: (task) => task.title,
+                  },
+                  {
+                    key: "priority",
+                    header: "Priority",
+                    width: "9%",
+                    render: (task) => {
+                      const priority = task.priority ?? MaintenancePriority.MEDIUM;
+                      const color = priority === MaintenancePriority.HIGH
+                        ? "bg-rose-100 text-rose-800"
+                        : priority === MaintenancePriority.LOW
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-amber-100 text-amber-800";
+                      return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${color}`}>{maintenancePriorityLabels[priority]}</span>;
+                    },
                   },
                   {
                     key: "trigger",
@@ -894,7 +990,7 @@ const MaintenanceSchedulingCombined = () => {
                         }}
                         className="inline-flex items-center gap-2 uppercase tracking-wide hover:text-white/80"
                       >
-                        <span>Date Created</span>
+                        <span>Start Date</span>
                         {dateSortDirection === "asc" ? (
                           <ArrowUp className="h-3.5 w-3.5" />
                         ) : (
@@ -903,7 +999,7 @@ const MaintenanceSchedulingCombined = () => {
                       </button>
                     ),
                     width: "12%",
-                    render: (task) => task.date,
+                    render: (task) => task.startDate || 'Not recorded',
                   },
                   {
                     key: "mechanic",
@@ -932,7 +1028,7 @@ const MaintenanceSchedulingCombined = () => {
                           );
                         }}
                         items={[
-                          ...(!isInProgressScheduleLocked(task)
+                          ...(canSchedule && !isInProgressScheduleLocked(task)
                             ? [{
                                 label: "Edit",
                                 icon: Edit2,
@@ -952,7 +1048,7 @@ const MaintenanceSchedulingCombined = () => {
                                 },
                               }]
                             : []),
-                          ...(!isInProgressScheduleLocked(task) &&
+                          ...(canSchedule && !isInProgressScheduleLocked(task) &&
                           task.status !== MaintenanceStatus.CANCELLED
                             ? [{
                                 label: "Cancel",
@@ -963,7 +1059,7 @@ const MaintenanceSchedulingCombined = () => {
                                   setPendingAction({ action: "cancel", task });
                                 },
                               }]
-                            : task.status === MaintenanceStatus.CANCELLED
+                            : canSchedule && task.status === MaintenanceStatus.CANCELLED
                             ? [{
                                 label: "Activate",
                                 icon: Power,
@@ -1045,7 +1141,7 @@ const MaintenanceSchedulingCombined = () => {
               <div className="grid grid-cols-7 gap-1 sm:gap-2">
                 {calendarCells.map((cell, idx) => {
                   const schedulesForDay = filteredTasks.filter(
-                    (task) => task.date === cell.dateStr,
+                    (task) => Boolean(cell.dateStr) && (task.startDate === cell.dateStr || task.dueDate === cell.dateStr),
                   );
                   const isToday = Boolean(cell.dateStr) && cell.dateStr === formatLocalDate(today);
                   const visibleSchedules = schedulesForDay.slice(0, 2);
@@ -1100,7 +1196,8 @@ const MaintenanceSchedulingCombined = () => {
                                 className={`block w-full rounded-md px-2 py-1.5 text-left transition hover:brightness-105 ${getTaskStyle(task.status)}`}
                               >
                                 <span className="block truncate text-[11px] font-bold">
-                                  {formatWorkOrderNumber(task.id)}
+                                  {task.startDate === cell.dateStr ? 'Start' : 'Due'}{task.startDate === cell.dateStr && task.dueDate === cell.dateStr ? ' / Due' : ''}: {' '}
+                                  {task.workOrderNumber ?? "N/A"}
                                 </span>
                                 <span className="block truncate text-[11px]">
                                   {getVehiclePlateNumber(task.vehicleId)}
@@ -1191,7 +1288,7 @@ const MaintenanceSchedulingCombined = () => {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {!isInProgressScheduleLocked(selectedSchedule) ? (
+                  {canSchedule && !isInProgressScheduleLocked(selectedSchedule) ? (
                     <Button
                       size="sm"
                       onClick={() => {
@@ -1221,13 +1318,14 @@ const MaintenanceSchedulingCombined = () => {
                 {[
               {
                 label: "Work Order No.",
-                value: formatWorkOrderNumber(selectedSchedule.id),
+                value: selectedSchedule.workOrderNumber ?? "N/A",
               },
               {
                 label: "Plate No.",
                 value: getVehiclePlateNumber(selectedSchedule.vehicleId),
               },
               { label: "Checklist Template", value: selectedSchedule.title },
+              { label: "Priority", value: selectedSchedule.priority ?? MaintenancePriority.MEDIUM },
               {
                 label: "Trigger",
                 value:
@@ -1236,7 +1334,14 @@ const MaintenanceSchedulingCombined = () => {
                     : "Not specified",
               },
               { label: "Date Created", value: selectedSchedule.date },
+              { label: "Start Date", value: selectedSchedule.startDate || 'Not recorded' },
+              { label: "Due Date", value: selectedSchedule.dueDate },
+              { label: "Due Odometer", value: selectedSchedule.dueOdometer != null ? `${selectedSchedule.dueOdometer} km` : undefined },
               { label: "Mechanic", value: selectedSchedule.assignedDriver },
+              {
+                label: "Chief Mechanic",
+                value: selectedSchedule.chiefMechanic || "Not Assigned",
+              },
               { label: "Status", value: selectedSchedule.status },
               { label: "Garage/Cluster", value: getGarageName(selectedSchedule.garageId) },
               { label: "Account Type", value: selectedSchedule.accountType },
@@ -1260,7 +1365,7 @@ const MaintenanceSchedulingCombined = () => {
                 label: "Interval Type",
                 value:
                   selectedSchedule.triggerType === MaintenanceTriggerType.TIME
-                    ? selectedSchedule.intervalType
+                    ? `${timeIntervalFields(selectedSchedule).value} ${timeIntervalFields(selectedSchedule).unit.toLowerCase()}`
                     : undefined,
               },
               {
@@ -1307,6 +1412,10 @@ const MaintenanceSchedulingCombined = () => {
                   <p className="mt-1 text-sm font-medium text-[var(--color-text-primary)]">
                     {detail.label === "Status" ? (
                       <StatusBadge status={selectedSchedule.status} />
+                    ) : detail.label === "Priority" ? (
+                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${detail.value === MaintenancePriority.HIGH ? "bg-rose-100 text-rose-800" : detail.value === MaintenancePriority.LOW ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                        {maintenancePriorityLabels[detail.value as MaintenancePriority]}
+                      </span>
                     ) : (
                       detail.value
                     )}
@@ -1314,6 +1423,30 @@ const MaintenanceSchedulingCombined = () => {
                 </div>
               ))}
 
+            {canEditPriority && selectedSchedule.status !== MaintenanceStatus.COMPLETED && selectedSchedule.status !== MaintenanceStatus.CANCELLED && (
+              <div className="border-t border-[var(--color-divider)] p-4">
+                <label htmlFor="schedule-detail-priority" className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Change priority</label>
+                <select
+                  id="schedule-detail-priority"
+                  value={selectedSchedule.priority ?? MaintenancePriority.MEDIUM}
+                  disabled={savingPriorityId === selectedSchedule.id}
+                  onChange={(event) => void handlePriorityChange(selectedSchedule, event.target.value as MaintenancePriority)}
+                  className="w-full max-w-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-2.5 text-sm text-[var(--color-text-primary)] disabled:opacity-60"
+                >
+                  {Object.values(MaintenancePriority).map((priority) => (
+                    <option key={priority} value={priority}>{maintenancePriorityLabels[priority]}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {selectedSchedule.cancellations?.map((entry) => (
+              <div key={entry.id} className="rounded-xl border border-[var(--color-border)] p-4 sm:col-span-2">
+                <p className="font-semibold">Cancellation history</p>
+                <p className="whitespace-pre-wrap">{entry.reason}</p>
+                <p className="text-sm">{entry.actorName} ({entry.actorEmail}) — {new Date(entry.createdAt).toLocaleString()}</p>
+              </div>
+            ))}
             {selectedSchedule.notes && (
               <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4 sm:col-span-2">
                 <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
@@ -1330,7 +1463,7 @@ const MaintenanceSchedulingCombined = () => {
       </Modal>
 
       <CreateSchedule
-        isOpen={isModalOpen}
+        isOpen={canSchedule && isModalOpen}
         editingTask={editingTask ?? undefined}
         odometerOnly={isOdometerUpdateOpen}
         existingSchedules={tasks}
@@ -1370,6 +1503,8 @@ const MaintenanceSchedulingCombined = () => {
 
       <ConfirmationModal
         isOpen={Boolean(pendingAction)}
+        busy={actionSaving}
+        confirmDisabled={pendingAction?.action === 'cancel' && !cancellationReason.trim()}
         variant="danger"
         message={
           pendingAction ? (
@@ -1389,6 +1524,15 @@ const MaintenanceSchedulingCombined = () => {
               <span className="mt-2 block font-bold">
                 {pendingAction.task.title} - {pendingAction.task.vehicleId}
               </span>
+              {pendingAction.action === 'cancel' && (
+                <label className="mt-4 block text-left text-sm">
+                  Cancellation reason (required)
+                  <textarea required maxLength={2000} value={cancellationReason}
+                    disabled={actionSaving} onChange={(event) => setCancellationReason(event.target.value)}
+                    className="mt-2 block w-full rounded border border-gray-300 p-2" rows={3} />
+                </label>
+              )}
+              {actionError && <p role="alert" className="mt-3 text-sm text-red-700">{actionError}</p>}
             </>
           ) : (
             ""

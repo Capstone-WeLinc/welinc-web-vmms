@@ -1,4 +1,9 @@
 import { useEffect, useState } from "react";
+import { useAuthStore } from "../../store/authStore";
+import { canManageSchedules } from "../../lib/utils/permissions";
+import { philippineToday, scheduleStartDateError } from "../../lib/utils/scheduleStartDate";
+import { scheduleMileageError } from "../../lib/utils/scheduleMileage";
+import { timeIntervalFields, timeIntervalError } from "../../lib/utils/timeInterval";
 import {
   X,
   ClipboardCheck,
@@ -11,6 +16,7 @@ import {
   createMaintenanceSchedule,
   updateMaintenanceSchedule,
   getChecklistTemplates,
+  getChecklistTemplateId,
 } from "../../lib/api/maintenanceService";
 import {
   getUsers,
@@ -28,10 +34,10 @@ import { getOdometerActivationRange } from "../../lib/utils/workOrders";
 import {
   AccountType,
   accountTypeLabels,
-  MaintenanceIntervalType,
+  MaintenancePriority,
+  maintenancePriorityLabels,
   MaintenanceStatus,
   MaintenanceTriggerType,
-  maintenanceIntervalTypeLabels,
   maintenanceTriggerTypeLabels,
   type MaintenanceTask,
 } from "../../types/maintenance";
@@ -44,20 +50,11 @@ interface ChecklistItemTemplate {
 }
 
 const OTHER_GARAGE_VALUE = "__other__";
-const NON_NEGATIVE_NUMBER_PATTERN = /^\d+(?:\.\d+)?$/;
+const NON_NEGATIVE_NUMBER_PATTERN = /^\d+$/;
 const ACCOUNT_TYPE_OPTIONS = [
   AccountType.IN_HOUSE,
   AccountType.OUTSOURCED,
 ] as const;
-
-const sanitizeNonNegativeNumber = (value: string) => {
-  const sanitized = value.replace(/[^\d.]/g, "");
-  const [wholeNumber, ...decimalParts] = sanitized.split(".");
-
-  return decimalParts.length > 0
-    ? `${wholeNumber}.${decimalParts.join("")}`
-    : wholeNumber;
-};
 
 const getTodayDateText = () => {
   const today = new Date();
@@ -82,6 +79,8 @@ export default function CreateScheduleModal({
   onClose: () => void;
   onSaved?: (task: MaintenanceTask) => void | Promise<void>;
 }) {
+  const currentUser = useAuthStore((state) => state.currentUser);
+  const canSchedule = canManageSchedules(currentUser);
   const [checklistTemplate, setChecklistTemplateName] =
     useState<ChecklistTemplateName>("");
   const [templates, setTemplates] = useState<
@@ -90,14 +89,20 @@ export default function CreateScheduleModal({
   const [isTemplatesLoading, setIsTemplatesLoading] = useState(true);
   const [vehicleId, setVehicleId] = useState("");
   const [startReferenceDate, setStartReferenceDate] = useState("");
+  const [startDate, setStartDate] = useState('');
   const [assignedMechanic, setAssignedMechanic] = useState("");
   const [mechanics, setMechanics] = useState<UserRecord[]>([]);
+  const [chiefMechanicId, setChiefMechanicId] = useState("");
+  const [chiefMechanic, setChiefMechanic] = useState("");
+  const [chiefMechanics, setChiefMechanics] = useState<UserRecord[]>([]);
+  const [isChiefMechanicsLoading, setIsChiefMechanicsLoading] = useState(true);
   const [garages, setGarages] = useState<{ id: string; name: string }[]>([]);
   const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
   const [garageId, setGarageId] = useState("");
   const [isOtherGarage, setIsOtherGarage] = useState(false);
   const [otherGarage, setOtherGarage] = useState("");
   const [accountType, setAccountType] = useState<AccountType | "">("");
+  const [priority, setPriority] = useState<MaintenancePriority>(MaintenancePriority.MEDIUM);
   const [outsourcedProvider, setOutsourcedProvider] = useState("");
   const [systemAffected, setSystemAffected] = useState("");
   const [odometerReading, setOdometerReading] = useState("");
@@ -105,15 +110,14 @@ export default function CreateScheduleModal({
   const [bufferDistanceKm, setBufferDistanceKm] = useState("");
   const [startingReferenceReadingKm, setStartingReferenceReadingKm] =
     useState("");
-  const [intervalTypeState, setIntervalTypeState] = useState<
-    MaintenanceIntervalType | ""
-  >("");
+  const [timeIntervalValue, setTimeIntervalValue] = useState('3');
+  const [timeIntervalUnit, setTimeIntervalUnit] = useState<'DAYS' | 'MONTHS'>('MONTHS');
   const [triggerType, setTriggerType] = useState<
     MaintenanceTriggerType
   >(MaintenanceTriggerType.ODOMETER);
   const [notes, setNotes] = useState("");
 
-  useBodyScrollLock(isOpen);
+  useBodyScrollLock(isOpen && canSchedule);
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState<{
     type: "success" | "error" | "warning" | "info";
@@ -135,12 +139,13 @@ export default function CreateScheduleModal({
 
     getUsers()
       .then((users) => {
-        const mechanicUsers = users.filter((user) => user.role === "MECHANIC");
-        setMechanics(mechanicUsers);
+        setMechanics(users.filter((u) => u.role === "MECHANIC"));
+        setChiefMechanics(users.filter((u) => u.role === "CHIEF_MECHANIC"));
       })
       .catch(() => {
-        console.error("Failed to load mechanic users");
-      });
+        console.error("Failed to load users");
+      })
+      .finally(() => setIsChiefMechanicsLoading(false));
 
     getGarages()
       .then((g) => setGarages(g))
@@ -156,8 +161,11 @@ export default function CreateScheduleModal({
       requestAnimationFrame(() => {
         if (editingTask) {
           setVehicleId(editingTask.vehicleId);
+          setStartDate(editingTask.startDate ?? '');
           setChecklistTemplateName(editingTask.title);
           setAssignedMechanic(editingTask.assignedDriver ?? "");
+          setChiefMechanicId(editingTask.chiefMechanicId ?? "");
+          setChiefMechanic(editingTask.chiefMechanic ?? "");
           setNotes(editingTask.notes ?? "");
           setGarageId(editingTask.garageId ?? "");
           setIsOtherGarage(false);
@@ -168,6 +176,7 @@ export default function CreateScheduleModal({
               ? (editingTask.accountType ?? "")
               : "",
           );
+          setPriority(editingTask.priority ?? MaintenancePriority.MEDIUM);
           setOutsourcedProvider(editingTask.outsourcedProvider ?? "");
           setSystemAffected(editingTask.systemAffected ?? "");
           setOdometerReading(editingTask.odometerReading ?? "");
@@ -179,23 +188,24 @@ export default function CreateScheduleModal({
             editingTask.startingReferenceReadingKm ?? "",
           );
 
-          const it = editingTask.intervalType;
-          if (it && Object.values(MaintenanceIntervalType).includes(it)) {
-            setIntervalTypeState(it);
-          } else {
-            setIntervalTypeState("");
-          }
+          const interval = timeIntervalFields(editingTask);
+          setTimeIntervalValue(String(interval.value));
+          setTimeIntervalUnit(interval.unit);
 
         } else {
           // Reset all fields for new schedule
+          setStartDate('');
           setVehicleId("");
           setChecklistTemplateName("");
           setAssignedMechanic("");
+          setChiefMechanicId("");
+          setChiefMechanic("");
           setNotes("");
           setGarageId("");
           setIsOtherGarage(false);
           setOtherGarage("");
           setAccountType("");
+          setPriority(MaintenancePriority.MEDIUM);
           setOutsourcedProvider("");
           setSystemAffected("");
           setOdometerReading("");
@@ -204,7 +214,8 @@ export default function CreateScheduleModal({
           setIntervalKm("");
           setBufferDistanceKm("");
           setStartingReferenceReadingKm("");
-          setIntervalTypeState("");
+          setTimeIntervalValue('3');
+          setTimeIntervalUnit('MONTHS');
         }
       });
     }
@@ -247,12 +258,27 @@ export default function CreateScheduleModal({
       ? [intervalKm, bufferDistanceKm, startingReferenceReadingKm]
       : []),
     ...(triggerType !== MaintenanceTriggerType.ODOMETER
-      ? [intervalTypeState, startReferenceDate]
+      ? [timeIntervalValue, timeIntervalUnit, startReferenceDate]
       : []),
   ];
-  const isFormComplete = isOdometerOnlyUpdate
+  const startDateError = scheduleStartDateError(startDate, editingTask?.startDate);
+  const mileageError = scheduleMileageError({
+    vehicleId, title: checklistTemplate, triggerType, odometerReading,
+    intervalKm: triggerType === MaintenanceTriggerType.TIME ? '' : intervalKm,
+    bufferDistanceKm: triggerType === MaintenanceTriggerType.TIME ? '' : bufferDistanceKm,
+    startingReferenceReadingKm: triggerType === MaintenanceTriggerType.TIME ? '' : startingReferenceReadingKm,
+  }, vehicles.find((vehicle) => vehicle.value === vehicleId)?.odometer, editingTask);
+  const startingReferenceReadingError = mileageError ===
+    'A non-negative starting reference reading is required for odometer scheduling.'
+    ? mileageError
+    : '';
+  const maintenanceIntervalError = mileageError === 'Maintenance interval must be greater than zero.'
+    ? mileageError
+    : '';
+  const intervalError = triggerType === MaintenanceTriggerType.TIME ? timeIntervalError(timeIntervalValue, timeIntervalUnit) : '';
+  const isFormComplete = !startDateError && !mileageError && !intervalError && (isOdometerOnlyUpdate
     ? odometerReading.trim().length > 0 &&
-      NON_NEGATIVE_NUMBER_PATTERN.test(odometerReading)
+      NON_NEGATIVE_NUMBER_PATTERN.test(odometerReading.trim())
     : requiredFieldValues.every((value) => value.trim().length > 0) &&
       isSelectedTemplateUsable &&
       [
@@ -260,47 +286,65 @@ export default function CreateScheduleModal({
         ...(triggerType !== MaintenanceTriggerType.TIME
           ? [intervalKm, bufferDistanceKm, startingReferenceReadingKm]
           : []),
-      ].every((value) => NON_NEGATIVE_NUMBER_PATTERN.test(value));
+      ].every((value) => NON_NEGATIVE_NUMBER_PATTERN.test(value.trim())));
 
-  const saveSchedule = async (scheduleToReplace?: MaintenanceTask) => {
+  const saveSchedule = async () => {
+    if (!canSchedule) return;
+    const dateError = scheduleStartDateError(startDate, editingTask?.startDate);
+    if (dateError) { setToast({ type: 'error', message: dateError }); return; }
+    if (mileageError) { setToast({ type: 'error', message: mileageError }); return; }
+    if (intervalError) { setToast({ type: 'error', message: intervalError }); return; }
     setIsSaving(true);
     try {
+      const checklistTemplateId = isOdometerOnlyUpdate && editingTask?.checklistTemplateId
+        ? editingTask.checklistTemplateId
+        : await getChecklistTemplateId(checklistTemplate);
       const savedGarageId = garageIsOther
         ? otherGarageValue.trim()
         : garageId;
       const selectedMechanic = mechanics.find(
         (mechanic) => mechanic.name === assignedMechanic,
       );
+      const selectedChiefMechanic = chiefMechanics.find(
+        (cm) => cm.id === chiefMechanicId || cm.name === chiefMechanic,
+      );
+      const resolvedChiefMechanicId = selectedChiefMechanic?.id || (chiefMechanicId ? chiefMechanicId : undefined);
+      const resolvedChiefMechanicName = selectedChiefMechanic?.name || (chiefMechanic ? chiefMechanic : undefined);
+
       const isTimeBased = triggerType === MaintenanceTriggerType.TIME;
       const submittedStartReferenceDate = isTimeBased ? startReferenceDate : "";
-      const submittedIntervalType = isTimeBased
-        ? intervalTypeState || undefined
-        : undefined;
+      const timeConfig = isTimeBased ? { timeIntervalValue: Number(timeIntervalValue), timeIntervalUnit } : {};
       const submittedIntervalKm = isTimeBased ? "" : intervalKm;
       const submittedBufferDistanceKm = isTimeBased ? "" : bufferDistanceKm;
       const submittedStartingReferenceReadingKm = isTimeBased
         ? ""
         : startingReferenceReadingKm;
 
-      if (scheduleToReplace || editingTask) {
-        const targetSchedule = scheduleToReplace ?? editingTask;
-        if (!targetSchedule) return;
+      if (editingTask) {
+        const targetSchedule = editingTask;
 
         const updated: MaintenanceTask = isOdometerOnlyUpdate
           ? {
               ...targetSchedule,
+              startDate,
               odometerReading,
+              checklistTemplateId,
             }
           : {
               ...targetSchedule,
               vehicleId,
+              startDate,
               title: checklistTemplate,
+              checklistTemplateId,
               assignedDriver: assignedMechanic,
               assignedMechanicId: selectedMechanic?.id,
               assignedMechanicEmail: selectedMechanic?.email,
+              chiefMechanicId: resolvedChiefMechanicId,
+              chiefMechanic: resolvedChiefMechanicName,
               notes,
               garageId: savedGarageId,
               accountType: accountType || undefined,
+              priority,
               outsourcedProvider:
                 accountType === AccountType.OUTSOURCED ? outsourcedProvider.trim() : "",
               systemAffected,
@@ -310,28 +354,27 @@ export default function CreateScheduleModal({
               intervalKm: submittedIntervalKm,
               bufferDistanceKm: submittedBufferDistanceKm,
               startingReferenceReadingKm: submittedStartingReferenceReadingKm,
-              intervalType: submittedIntervalType,
+              ...timeConfig,
             };
-        try {
-          const saved = await updateMaintenanceSchedule(updated);
-          await onSaved?.(saved);
-        } catch (err) {
-          console.error("Failed to update schedule", err);
-          // fallback to local update
-          await onSaved?.(updated);
-        }
+        const saved = await updateMaintenanceSchedule(updated);
+        await onSaved?.(saved);
       } else {
         const task = await createMaintenanceSchedule({
+          startDate,
           vehicleId,
           title: checklistTemplate,
+          checklistTemplateId,
           status: MaintenanceStatus.PENDING,
           date: getTodayDateText(),
           assignedDriver: assignedMechanic,
           assignedMechanicId: selectedMechanic?.id,
           assignedMechanicEmail: selectedMechanic?.email,
+          chiefMechanicId: resolvedChiefMechanicId,
+          chiefMechanic: resolvedChiefMechanicName,
           notes,
           garageId: savedGarageId,
           accountType: accountType || undefined,
+          priority,
           outsourcedProvider:
             accountType === AccountType.OUTSOURCED ? outsourcedProvider.trim() : "",
           systemAffected,
@@ -341,20 +384,24 @@ export default function CreateScheduleModal({
           intervalKm: submittedIntervalKm,
           bufferDistanceKm: submittedBufferDistanceKm,
           startingReferenceReadingKm: submittedStartingReferenceReadingKm,
-          intervalType: submittedIntervalType,
+          ...timeConfig,
         });
         await onSaved?.(task);
       }
 
       // Reset form state
+      setStartDate('');
       setVehicleId("");
       setChecklistTemplateName("");
       setAssignedMechanic("");
+      setChiefMechanicId("");
+      setChiefMechanic("");
       setNotes("");
       setGarageId("");
       setIsOtherGarage(false);
       setOtherGarage("");
       setAccountType("");
+      setPriority(MaintenancePriority.MEDIUM);
       setOutsourcedProvider("");
       setSystemAffected("");
       setOdometerReading("");
@@ -363,12 +410,14 @@ export default function CreateScheduleModal({
       setIntervalKm("");
       setBufferDistanceKm("");
       setStartingReferenceReadingKm("");
-      setIntervalTypeState("");
+      setTimeIntervalValue('3');
+      setTimeIntervalUnit('MONTHS');
       setDuplicateSchedule(null);
 
       onClose();
     } catch (error) {
       console.error("Failed to save schedule", error);
+      setToast({ type: "error", message: error instanceof Error ? error.message : "Schedule was not saved. Refresh and try again." });
     } finally {
       setIsSaving(false);
     }
@@ -377,10 +426,13 @@ export default function CreateScheduleModal({
   const handleSaveSchedule = async () => {
     if (!isFormComplete) return;
 
-    const duplicate = isOdometerOnlyUpdate
+    // The server also checks persisted Pending status (display status may be
+    // calculated as Due Soon/Overdue) and protects against concurrent saves.
+    const duplicate = isOdometerOnlyUpdate || (editingTask && editingTask.status !== MaintenanceStatus.PENDING)
       ? null
       : existingSchedules.find(
       (schedule) =>
+        schedule.status === MaintenanceStatus.PENDING &&
         schedule.id !== editingTask?.id &&
         schedule.vehicleId.trim().toLowerCase() ===
           vehicleId.trim().toLowerCase() &&
@@ -485,7 +537,7 @@ export default function CreateScheduleModal({
   };
 
   */
-  if (!isOpen) return null;
+  if (!isOpen || !canSchedule) return null;
 
   return (
     <div className="modal-overlay p-4 backdrop-blur-sm">
@@ -515,6 +567,32 @@ export default function CreateScheduleModal({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
+          <section>
+            <label htmlFor="schedule-start-date" className="mb-1.5 block text-sm font-medium">Start date (required)</label>
+            <input id="schedule-start-date" type="date" required value={startDate}
+              min={startDate === editingTask?.startDate ? undefined : philippineToday()}
+              onChange={(event) => setStartDate(event.target.value)}
+              aria-invalid={Boolean(startDateError)} aria-describedby="schedule-start-date-error"
+              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-3" />
+            {startDateError && <p id="schedule-start-date-error" role="alert" className="mt-1 text-sm text-red-600">{startDateError}</p>}
+          </section>
+          {!isOdometerOnlyUpdate && (
+            <section>
+              <label htmlFor="schedule-priority" className="mb-1.5 block text-sm font-medium">Work-order priority</label>
+              <select
+                id="schedule-priority"
+                value={priority}
+                onChange={(event) => setPriority(event.target.value as MaintenancePriority)}
+                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-3"
+              >
+                {Object.values(MaintenancePriority).map((value) => (
+                  <option key={value} value={value}>{maintenancePriorityLabels[value]}</option>
+                ))}
+              </select>
+            </section>
+          )}
+          {mileageError && !startingReferenceReadingError && !maintenanceIntervalError && <p role="alert" className="text-sm text-red-600">{mileageError}</p>}
+          {intervalError && <p role="alert" className="text-sm text-red-600">{intervalError}</p>}
           {isOdometerOnlyUpdate ? (
             <section className="space-y-4 border-b border-[var(--color-border)] pb-6">
               <div className="mb-4 flex items-center gap-3">
@@ -565,12 +643,12 @@ export default function CreateScheduleModal({
                   </label>
                   <input
                     type="text"
-                    inputMode="decimal"
+                    inputMode="numeric"
                     placeholder="e.g., 12000"
                     value={odometerReading}
                     onChange={(e) =>
                       setOdometerReading(
-                        sanitizeNonNegativeNumber(e.target.value),
+                        e.target.value,
                       )
                     }
                     className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
@@ -643,12 +721,12 @@ export default function CreateScheduleModal({
                   </label>
                   <input
                     type="text"
-                    inputMode="decimal"
+                    inputMode="numeric"
                     placeholder="e.g., 12000"
                     value={odometerReading}
                     onChange={(e) =>
                       setOdometerReading(
-                        sanitizeNonNegativeNumber(e.target.value),
+                        e.target.value,
                       )
                     }
                     className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
@@ -816,12 +894,15 @@ export default function CreateScheduleModal({
                   INTERVAL (km)
                 </label>
                 <input
+                  id="schedule-interval-km"
                   type="text"
-                  inputMode="decimal"
+                  inputMode="numeric"
                   placeholder="e.g., 5000"
                   value={intervalKm}
+                  aria-invalid={Boolean(maintenanceIntervalError)}
+                  aria-describedby={maintenanceIntervalError ? "schedule-interval-km-error" : undefined}
                   onChange={(e) =>
-                    setIntervalKm(sanitizeNonNegativeNumber(e.target.value))
+                    setIntervalKm(e.target.value)
                   }
                   disabled={triggerType === MaintenanceTriggerType.TIME}
                   className={`w-full rounded-md border px-3 py-2 text-sm placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 ${
@@ -830,6 +911,11 @@ export default function CreateScheduleModal({
                       : "border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-primary)]"
                   }`}
                 />
+                {maintenanceIntervalError && (
+                  <p id="schedule-interval-km-error" role="alert" className="mt-1 text-sm text-red-600">
+                    {maintenanceIntervalError}
+                  </p>
+                )}
               </div>
               <div
                 className="flex h-full flex-col"
@@ -844,12 +930,12 @@ export default function CreateScheduleModal({
                 </label>
                 <input
                   type="text"
-                  inputMode="decimal"
+                  inputMode="numeric"
                   placeholder="e.g., 500"
                   value={bufferDistanceKm}
                   onChange={(e) =>
                     setBufferDistanceKm(
-                      sanitizeNonNegativeNumber(e.target.value),
+                      e.target.value,
                     )
                   }
                   disabled={triggerType === MaintenanceTriggerType.TIME}
@@ -872,13 +958,16 @@ export default function CreateScheduleModal({
                   STARTING REFERENCE READING(km)
                 </label>
                 <input
+                  id="schedule-starting-reference-reading"
                   type="text"
-                  inputMode="decimal"
+                  inputMode="numeric"
                   placeholder="e.g., 12000"
                   value={startingReferenceReadingKm}
+                  aria-invalid={Boolean(startingReferenceReadingError)}
+                  aria-describedby={startingReferenceReadingError ? "schedule-starting-reference-reading-error" : undefined}
                   onChange={(e) =>
                     setStartingReferenceReadingKm(
-                      sanitizeNonNegativeNumber(e.target.value),
+                      e.target.value,
                     )
                   }
                   disabled={triggerType === MaintenanceTriggerType.TIME}
@@ -888,6 +977,11 @@ export default function CreateScheduleModal({
                       : "border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-primary)]"
                   }`}
                 />
+                {startingReferenceReadingError && (
+                  <p id="schedule-starting-reference-reading-error" role="alert" className="mt-1 text-sm text-red-600">
+                    {startingReferenceReadingError}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -900,7 +994,7 @@ export default function CreateScheduleModal({
                 }}
               >
                 <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-                  INTERVAL TYPE
+                  TIME INTERVAL
                 </label>
                 <div
                   className="relative"
@@ -910,12 +1004,16 @@ export default function CreateScheduleModal({
                     }
                   }}
                 >
+                  <input aria-label="Time interval value" type="text" inputMode="numeric"
+                    value={timeIntervalValue} onChange={(event) => setTimeIntervalValue(event.target.value)}
+                    disabled={triggerType !== MaintenanceTriggerType.TIME} className="mb-2 w-full rounded border border-[var(--color-border)] bg-[var(--color-input-bg)] p-2" />
                   <select
                     disabled={triggerType === MaintenanceTriggerType.ODOMETER}
-                    value={intervalTypeState}
+                    aria-label="Time interval unit"
+                    value={timeIntervalUnit}
                     onChange={(e) =>
-                      setIntervalTypeState(
-                        e.target.value as MaintenanceIntervalType | "",
+                      setTimeIntervalUnit(
+                        e.target.value as 'DAYS' | 'MONTHS',
                       )
                     }
                     className={`select-control w-full appearance-none rounded-md border px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 ${
@@ -924,27 +1022,8 @@ export default function CreateScheduleModal({
                         : "border-[var(--color-border)] bg-[var(--color-input-bg)]"
                     }`}
                   >
-                    <option value="" disabled>
-                      Select type
-                    </option>
-                    <option value={MaintenanceIntervalType.DAILY}>
-                      {maintenanceIntervalTypeLabels[MaintenanceIntervalType.DAILY]}
-                    </option>
-                    <option value={MaintenanceIntervalType.WEEKLY}>
-                      {maintenanceIntervalTypeLabels[MaintenanceIntervalType.WEEKLY]}
-                    </option>
-                    <option value={MaintenanceIntervalType.MONTHLY}>
-                      {maintenanceIntervalTypeLabels[MaintenanceIntervalType.MONTHLY]}
-                    </option>
-                    <option value={MaintenanceIntervalType.QUARTERLY}>
-                      {maintenanceIntervalTypeLabels[MaintenanceIntervalType.QUARTERLY]}
-                    </option>
-                    <option value={MaintenanceIntervalType.SEMI_ANNUALLY}>
-                      {maintenanceIntervalTypeLabels[MaintenanceIntervalType.SEMI_ANNUALLY]}
-                    </option>
-                    <option value={MaintenanceIntervalType.ANNUALLY}>
-                      {maintenanceIntervalTypeLabels[MaintenanceIntervalType.ANNUALLY]}
-                    </option>
+                    <option value="DAYS">Days</option>
+                    <option value="MONTHS">Months</option>
                   </select>
                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--color-text-secondary)]">
                     <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
@@ -1099,6 +1178,71 @@ export default function CreateScheduleModal({
                 </div>
               </div>
             </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
+                CHIEF MECHANIC
+              </label>
+              <div
+                className="relative"
+                onPointerDownCapture={() => {
+                  if (chiefMechanics.length === 0 && !chiefMechanic) {
+                    notifyDisabledField("Chief mechanic is disabled because no chief mechanic users are available.");
+                  }
+                }}
+              >
+                <select
+                  value={chiefMechanicId || chiefMechanic}
+                  disabled={isChiefMechanicsLoading || (chiefMechanics.length === 0 && !chiefMechanic)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const selected = chiefMechanics.find((cm) => cm.id === val || cm.name === val);
+                    if (selected) {
+                      setChiefMechanicId(selected.id);
+                      setChiefMechanic(selected.name);
+                    } else {
+                      setChiefMechanicId(val);
+                      setChiefMechanic(val);
+                    }
+                  }}
+                  className="select-control w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
+                >
+                  {isChiefMechanicsLoading ? (
+                    <option value="" disabled>
+                      Loading chief mechanics...
+                    </option>
+                  ) : chiefMechanics.length > 0 || chiefMechanic ? (
+                    <>
+                      <option value="" disabled>
+                        Select chief mechanic
+                      </option>
+                      {chiefMechanic &&
+                      !chiefMechanics.some(
+                        (cm) => cm.id === chiefMechanicId || cm.name === chiefMechanic,
+                      ) ? (
+                        <option value={chiefMechanicId || chiefMechanic}>
+                          {chiefMechanic}
+                        </option>
+                      ) : null}
+                      {chiefMechanics.map((cm) => (
+                        <option key={cm.id} value={cm.id}>
+                          {cm.name}
+                        </option>
+                      ))}
+                    </>
+                  ) : (
+                    <option value="" disabled>
+                      No chief mechanics available
+                    </option>
+                  )}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--color-text-secondary)]">
+                  <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
+                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
             </div>
           </section>
 
@@ -1172,7 +1316,9 @@ export default function CreateScheduleModal({
               Existing Maintenance Schedule
             </h3>
             <p className="text-sm text-[var(--color-text-secondary)]">
-              A schedule already exists for{" "}
+              A pending schedule of this type already exists for this truck
+            </p>
+            <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
               <span className="font-semibold text-[var(--color-text-primary)]">
                 {duplicateSchedule.vehicleId}
               </span>{" "}
@@ -1205,14 +1351,6 @@ export default function CreateScheduleModal({
                 className="rounded-xl px-4 py-2 text-sm font-medium border border-[var(--color-border)] text-[var(--color-text-primary)] transition hover:bg-[var(--color-card-bg-hover)] disabled:opacity-50"
               >
                 Continue Editing
-              </button>
-              <button
-                type="button"
-                onClick={() => void saveSchedule(duplicateSchedule)}
-                disabled={isSaving}
-                className="rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-medium text-[var(--color-brand-surface)] transition hover:bg-[var(--color-brand-primary)]/90 disabled:opacity-50"
-              >
-                {isSaving ? "Replacing..." : "Replace"}
               </button>
             </div>
           </div>

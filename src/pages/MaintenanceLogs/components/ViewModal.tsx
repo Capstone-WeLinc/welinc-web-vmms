@@ -15,10 +15,12 @@ interface MaintenanceLog {
   odometerReading: number;
   status: MaintenanceStatus;
   mechanic: string;
+  remarks: string;
   cost: number;
   costBreakdown: Array<{
     item: string;
     partsUsed: string;
+    quantity: string;
     cost: number;
   }>;
 }
@@ -157,6 +159,7 @@ export default function ViewModal({ isOpen, log, onClose }: ViewModalProps) {
                 <tr>
                   <th className="px-4 py-3">Execution Item</th>
                   <th className="px-4 py-3">Parts Used</th>
+                  <th className="px-4 py-3 text-right">Quantity</th>
                   <th className="px-4 py-3 text-right">Cost</th>
                 </tr>
               </thead>
@@ -169,6 +172,9 @@ export default function ViewModal({ isOpen, log, onClose }: ViewModalProps) {
                     <td className="px-4 py-3 text-[var(--color-text-secondary)]">
                       {line.partsUsed}
                     </td>
+                    <td className="px-4 py-3 text-right text-[var(--color-text-secondary)]">
+                      {line.quantity}
+                    </td>
                     <td className="px-4 py-3 text-right font-semibold text-[var(--color-text-primary)]">
                       ₱{line.cost.toLocaleString()}
                     </td>
@@ -176,7 +182,7 @@ export default function ViewModal({ isOpen, log, onClose }: ViewModalProps) {
                 ))}
                 {log.costBreakdown.length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="px-4 py-8 text-center text-[var(--color-text-secondary)]">
+                    <td colSpan={4} className="px-4 py-8 text-center text-[var(--color-text-secondary)]">
                       No material costs recorded.
                     </td>
                   </tr>
@@ -184,6 +190,11 @@ export default function ViewModal({ isOpen, log, onClose }: ViewModalProps) {
               </tbody>
             </table>
           </div>
+        </div>
+
+        <div className="mt-5">
+          <span className={labelClasses}>Maintenance Remarks</span>
+          <p className={`${valueClasses} whitespace-pre-wrap break-words`}>{log.remarks}</p>
         </div>
 
         <div className="mt-7 flex justify-end border-t border-[var(--color-divider)] pt-4">

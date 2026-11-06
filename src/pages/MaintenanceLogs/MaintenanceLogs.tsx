@@ -8,6 +8,7 @@ import { getMaintenanceSchedules } from "../../lib/api/maintenanceService";
 import type { MaintenanceTask } from "../../lib/api/maintenanceService";
 import { getVehicles, type VehicleOption } from "../../lib/api/vehicleService";
 import { getGarages } from "../../lib/api/locationService";
+import { getTaskTotalCost } from "../../lib/utils/maintenanceCosts";
 import { isMechanicRole } from "../../lib/utils/permissions";
 import { formatLogNumber } from "../../lib/utils/workOrders";
 import {
@@ -53,6 +54,7 @@ interface MaintenanceLog {
   costBreakdown: Array<{
     item: string;
     partsUsed: string;
+    quantity: string;
     cost: number;
   }>;
   cost: number;
@@ -100,11 +102,28 @@ const readProgress = (task: MaintenanceTask) => {
   if (!progress || typeof progress !== "object") return null;
   return progress as {
     checklist?: Array<{ status?: string }>;
+    maintenanceRemarks?: string;
+    executionItems?: Array<{
+      id?: string;
+      label?: string;
+      text?: string;
+      status?: string;
+      partsUsed?: string;
+      partsCost?: string;
+    }>;
+    partDetails?: Record<string, {
+      partsUsed?: string;
+      quantity?: string | number;
+      materialCost?: string | number;
+    }>;
     execution?: {
       done?: boolean;
       remarks?: string;
+      maintenanceRemarks?: string;
       technicianSignature?: string;
       items?: Array<{
+        id?: string;
+        label?: string;
         text?: string;
         status?: string;
         partsUsed?: string;
@@ -151,23 +170,32 @@ const mapScheduleToLog = (
   const progress = readProgress(task);
   const checklist = progress?.checklist ?? [];
   const execution = progress?.execution;
-  const executionItems = execution?.items ?? [];
-  const materialCost = executionItems.reduce(
-    (total, item) => total + parseCost(item.partsCost),
-    0,
-  );
-  const costBreakdown = executionItems
-    .filter(
-      (item) =>
-        item.status === "changed" ||
-        Boolean(item.partsUsed?.trim()) ||
-        parseCost(item.partsCost) > 0,
-    )
-    .map((item) => ({
-      item: item.text?.trim() || "Checklist item",
-      partsUsed: item.partsUsed?.trim() || "Not specified",
-      cost: parseCost(item.partsCost),
-    }));
+  const executionItems = progress?.executionItems ?? execution?.items ?? [];
+  const materialCost = getTaskTotalCost(task);
+  const costBreakdown = progress?.partDetails
+    ? executionItems.flatMap((item) => {
+        const details = item.id ? progress.partDetails?.[item.id] : undefined;
+        if (!details?.partsUsed?.trim()) return [];
+        return [{
+          item: item.label?.trim() || item.text?.trim() || "Checklist item",
+          partsUsed: details.partsUsed.trim(),
+          quantity: String(details.quantity ?? "N/A"),
+          cost: parseCost(String(details.materialCost ?? "0")),
+        }];
+      })
+    : executionItems
+        .filter(
+          (item) =>
+            item.status === "changed" ||
+            Boolean(item.partsUsed?.trim()) ||
+            parseCost(item.partsCost) > 0,
+        )
+        .map((item) => ({
+          item: item.text?.trim() || "Checklist item",
+          partsUsed: item.partsUsed?.trim() || "Not specified",
+          quantity: "N/A",
+          cost: parseCost(item.partsCost),
+        }));
 
   return {
     id: task.id,
@@ -193,8 +221,8 @@ const mapScheduleToLog = (
     changedParts: executionItems.filter((item) => item.status === "changed").length,
     materialCost,
     costBreakdown,
-    cost: materialCost || readNumber(task, ["materialCost"]),
-    remarks: execution?.remarks || "N/A",
+    cost: materialCost,
+    remarks: progress?.maintenanceRemarks || execution?.maintenanceRemarks || execution?.remarks || "N/A",
     technicianSignature: execution?.technicianSignature || "N/A",
   };
 };
