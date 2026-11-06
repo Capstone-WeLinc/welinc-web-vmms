@@ -769,6 +769,11 @@ export async function getLoginActivity(userId: string) {
   );
 }
 
+export async function getMyLoginActivity() {
+  if (!useBackend) return [] as LoginActivityRecord[];
+  return fetchJSON<LoginActivityRecord[]>("/auth/me/login-activity");
+}
+
 export async function saveChecklistTemplates(
   templates: Record<ChecklistTemplateName, ChecklistItemTemplate[]>,
 ) {
@@ -1215,4 +1220,3 @@ export async function deleteGarageRecord(id: string): Promise<void> {
     method: "DELETE",
   });
 }
-

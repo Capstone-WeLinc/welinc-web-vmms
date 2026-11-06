@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ArrowRight, Circle, User } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import {
@@ -7,7 +7,11 @@ import {
   ToastNotification,
 } from "../../components/ui";
 import { getCurrentUser, type UserRecord } from "../../lib/api/authService";
-import { fetchJSON } from "../../lib/api/httpClient";
+import { fetchJSON, useBackend } from "../../lib/api/httpClient";
+import {
+  getMyLoginActivity,
+  type LoginActivityRecord,
+} from "../../lib/api/vmmsApi";
 
 const strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
 const internationalPhonePattern = /^\+\d{7,14}$/;
@@ -71,31 +75,32 @@ const readString = (source: unknown, key: string, fallback = "") => {
   return typeof value === "string" && value.trim() ? value : fallback;
 };
 
-type AccountActivityEntry = {
-  id: string;
-  title: string;
-  detail: string;
-  timestamp: string;
-};
-
-const createSessionLabel = () => {
-  const userAgent = navigator.userAgent;
-  if (/Windows/i.test(userAgent)) return "Windows";
-  if (/Mac/i.test(userAgent)) return "macOS";
-  if (/Linux/i.test(userAgent)) return "Linux";
-  if (/Android/i.test(userAgent)) return "Android";
-  if (/iPhone|iPad|iPod/i.test(userAgent)) return "iOS";
-  return "Current device";
-};
-
-const formatActivityTimestamp = (date: Date) =>
-  date.toLocaleString(undefined, {
+const formatActivityTimestamp = (timestamp: string) => {
+  const date = new Date(timestamp);
+  if (!Number.isFinite(date.getTime())) return "Date unavailable";
+  return date.toLocaleString(undefined, {
     month: "short",
     day: "numeric",
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
   });
+};
+
+const getActivityDescription = (activity: LoginActivityRecord) => {
+  switch (activity.event) {
+    case "SUCCESSFUL_LOGIN":
+      return `Signed in from ${activity.deviceType}`;
+    case "LOGOUT":
+      return `Signed out from ${activity.deviceType}`;
+    case "FAILED_LOGIN":
+      return "Unsuccessful sign-in attempt";
+    case "ACCOUNT_LOCKOUT":
+      return "Account locked after unsuccessful sign-in attempts";
+    case "PLATFORM_ACCESS_DENIED":
+      return "Sign-in blocked for this platform";
+  }
+};
 
 export default function Profile() {
   const [currentUser, setCurrentUser] = useState<UserRecord | null>(null);
@@ -127,63 +132,11 @@ export default function Profile() {
     type: "success" | "error" | "warning" | "info";
     message: string;
   } | null>(null);
-  const [activityLog, setActivityLog] = useState<AccountActivityEntry[]>(() => {
-    try {
-      const stored = window.localStorage.getItem("vmms-account-activity");
-      if (!stored) {
-        return [
-          {
-            id: `session-${Date.now()}`,
-            title: `Login - ${createSessionLabel()}`,
-            detail: "Current session started",
-            timestamp: formatActivityTimestamp(new Date()),
-          },
-        ];
-      }
+  const [activityLog, setActivityLog] = useState<LoginActivityRecord[]>([]);
+  const [isLoadingActivity, setIsLoadingActivity] = useState(true);
+  const [activityError, setActivityError] = useState("");
 
-      const parsed = JSON.parse(stored) as AccountActivityEntry[];
-      return Array.isArray(parsed) && parsed.length > 0
-        ? parsed.slice(0, 5)
-        : [
-            {
-              id: `session-${Date.now()}`,
-              title: `Login - ${createSessionLabel()}`,
-              detail: "Current session started",
-              timestamp: formatActivityTimestamp(new Date()),
-            },
-          ];
-    } catch {
-      return [
-        {
-          id: `session-${Date.now()}`,
-          title: `Login - ${createSessionLabel()}`,
-          detail: "Current session started",
-          timestamp: formatActivityTimestamp(new Date()),
-        },
-      ];
-    }
-  });
-
-  const addAccountActivity = (title: string, detail = "Current session") => {
-    const nextEntry: AccountActivityEntry = {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      title,
-      detail,
-      timestamp: formatActivityTimestamp(new Date()),
-    };
-
-    setActivityLog((current) => [nextEntry, ...current].slice(0, 5));
-  };
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem("vmms-account-activity", JSON.stringify(activityLog));
-    } catch {
-      // Ignore storage issues in restricted environments.
-    }
-  }, [activityLog]);
-
-  const hydrateProfile = (user: UserRecord | null) => {
+  const hydrateProfile = useCallback((user: UserRecord | null) => {
     if (!user) return;
     const { firstName, lastName } = splitName(user.name);
     const storedPhone = readString(
@@ -206,28 +159,67 @@ export default function Profile() {
       phoneCountryCode,
       phone,
     });
-  };
+  }, []);
 
-  const loadProfile = () => {
-    setIsLoading(true);
+  useEffect(() => {
+    let active = true;
     getCurrentUser()
       .then((user) => {
+        if (!active) return;
         setCurrentUser(user);
         hydrateProfile(user);
       })
       .catch(() => {
+        if (!active) return;
         setCurrentUser(null);
+        setIsLoadingActivity(false);
         setToast({
           type: "error",
           message: "Unable to load profile from the backend.",
         });
       })
-      .finally(() => setIsLoading(false));
-  };
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [hydrateProfile]);
 
   useEffect(() => {
-    loadProfile();
-  }, []);
+    if (!currentUser) return;
+    let active = true;
+    let refreshing = false;
+    const refreshActivity = async () => {
+      if (refreshing) return;
+      refreshing = true;
+      try {
+        const activity = await getMyLoginActivity();
+        if (active) {
+          setActivityLog(activity.slice(0, 5));
+          setActivityError("");
+        }
+      } catch (error) {
+        if (active) {
+          console.error("Failed to load account sign-in activity", error);
+          setActivityError("Unable to load recent sign-in activity.");
+        }
+      } finally {
+        refreshing = false;
+        if (active) setIsLoadingActivity(false);
+      }
+    };
+
+    void refreshActivity();
+    const intervalId = window.setInterval(refreshActivity, 60_000);
+    window.addEventListener("focus", refreshActivity);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshActivity);
+    };
+  }, [currentUser]);
 
   useEffect(() => {
     if (!toast) return;
@@ -347,7 +339,6 @@ export default function Profile() {
       });
       setCurrentUser(updatedUser);
       hydrateProfile(updatedUser);
-      addAccountActivity("Profile updated", "Changes were saved successfully");
       setToast({
         type: "success",
         message: "Profile changes saved successfully.",
@@ -388,7 +379,6 @@ export default function Profile() {
       });
       setCurrentUser(updatedUser ?? verifiedUser);
       hydrateProfile(updatedUser ?? verifiedUser);
-      addAccountActivity("Phone verified", "Two-factor verification completed successfully");
       setPhoneVerification(null);
       setIsEditingProfile(false);
       setToast({ type: "success", message: "Phone number verified and profile saved." });
@@ -436,7 +426,6 @@ export default function Profile() {
         }),
       });
       setPasswordForm({ current: "", next: "", confirm: "" });
-      addAccountActivity("Password changed", "Security credentials were updated successfully");
       setToast({
         type: "success",
         message: "Password updated successfully.",
@@ -588,7 +577,7 @@ export default function Profile() {
             <div className="mt-7 flex justify-end gap-3">
               {isEditingProfile ? (
                 <>
-                  <ActionButton variant="secondary" onClick={() => { loadProfile(); setPhoneVerification(null); setIsEditingProfile(false); }}>
+                  <ActionButton variant="secondary" onClick={() => { hydrateProfile(currentUser); setPhoneVerification(null); setIsEditingProfile(false); }}>
                     Cancel
                   </ActionButton>
                   <ActionButton onClick={handleSaveProfile} disabled={isSavingProfile}>
@@ -722,21 +711,30 @@ export default function Profile() {
 
           <section className="rounded-xl border border-[#dce3ed] bg-white">
             <h3 className="border-b border-[#edf1f7] px-6 py-4 text-sm font-extrabold text-[#141827]">
-              Recent account activity
+              Recent sign-in activity
             </h3>
             <div className="divide-y divide-[#edf1f7]">
-              {activityLog.map((item, index) => (
-                <div key={item.id} className="flex items-center gap-4 px-6 py-3">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#eef2ff] text-[#070b45]">
-                    {index === 0 ? <Circle className="h-3 w-3 fill-current" /> : <ArrowRight className="h-4 w-4" />}
-                  </span>
-                  <div>
-                    <p className="text-sm font-semibold text-[#141827]">{item.title}</p>
-                    <p className="text-xs text-[#8a98ad]">{item.detail}</p>
-                    <p className="text-[11px] text-[#8a98ad]">{item.timestamp}</p>
+              {isLoadingActivity ? (
+                <p className="px-6 py-4 text-sm text-[#667085]">Loading sign-in activity…</p>
+              ) : activityError ? (
+                <p className="px-6 py-4 text-sm text-[#b42318]">{activityError}</p>
+              ) : !useBackend ? (
+                <p className="px-6 py-4 text-sm text-[#667085]">Sign-in activity is unavailable in demo mode.</p>
+              ) : activityLog.length === 0 ? (
+                <p className="px-6 py-4 text-sm text-[#667085]">No sign-in activity recorded.</p>
+              ) : (
+                activityLog.map((item, index) => (
+                  <div key={item.id} className="flex items-center gap-4 px-6 py-3">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#eef2ff] text-[#070b45]">
+                      {index === 0 ? <Circle className="h-3 w-3 fill-current" /> : <ArrowRight className="h-4 w-4" />}
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-[#141827]">{getActivityDescription(item)}</p>
+                      <p className="text-[11px] text-[#8a98ad]">{formatActivityTimestamp(item.createdAt)}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </section>
         </div>
@@ -753,7 +751,6 @@ export default function Profile() {
         onConfirm={() => {
           setShowDeleteConfirm(false);
           setDeletePassword("");
-          addAccountActivity("Account deletion requested", "Administrator review is pending");
           setToast({
             type: "warning",
             message: "Account deletion request submitted.",

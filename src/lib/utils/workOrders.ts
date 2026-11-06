@@ -3,8 +3,8 @@ import {
   MaintenanceStatus,
   MaintenanceTriggerType,
   type MaintenanceTask,
-} from "../../types/maintenance";
-import { timeIntervalDueDate } from './timeInterval';
+} from "../../types/maintenance.ts";
+import { timeIntervalDueDate } from './timeInterval.ts';
 
 export const normalizeMaintenanceStatus = (status?: string | null) =>
   (status ?? "").trim().toLowerCase().replace(/[\s_]+/g, "-");
@@ -162,22 +162,24 @@ export const getCalculatedMaintenanceStatus = (
   task: MaintenanceTask,
   currentDate = new Date(),
 ): MaintenanceTask["status"] => {
-  if (task.status) {
-    const normalized = normalizeMaintenanceStatus(task.status);
-    if (normalized === "completed") return MaintenanceStatus.COMPLETED;
-    if (normalized === "cancelled") return MaintenanceStatus.CANCELLED;
-    if (normalized === "done") return MaintenanceStatus.DONE;
-    if (normalized === "in-progress" || normalized === "in_progress") return MaintenanceStatus.IN_PROGRESS;
-    if (normalized === "overdue") return MaintenanceStatus.OVERDUE;
-    if (normalized === "due") return MaintenanceStatus.DUE;
-    if (normalized === "pending") return MaintenanceStatus.PENDING;
-  }
+  const normalized = normalizeMaintenanceStatus(task.status);
+  if (normalized === "completed") return MaintenanceStatus.COMPLETED;
+  if (normalized === "cancelled") return MaintenanceStatus.CANCELLED;
+  if (normalized === "done") return MaintenanceStatus.DONE;
+  if (normalized === "in-progress") return MaintenanceStatus.IN_PROGRESS;
+
+  const fallbackStatus =
+    normalized === "overdue"
+      ? MaintenanceStatus.OVERDUE
+      : normalized === "due"
+        ? MaintenanceStatus.DUE
+        : MaintenanceStatus.PENDING;
 
   if (task.triggerType === MaintenanceTriggerType.ODOMETER) {
     const odometerReading = parseKm(task.odometerReading);
     const milestones = getOdometerMilestones(task);
 
-    if (odometerReading === null || !milestones) return MaintenanceStatus.PENDING;
+    if (odometerReading === null || !milestones) return fallbackStatus;
     if (odometerReading < milestones.activationMileage) return MaintenanceStatus.PENDING;
     if (odometerReading <= milestones.dueMileage) return MaintenanceStatus.DUE;
     return MaintenanceStatus.OVERDUE;
@@ -185,7 +187,7 @@ export const getCalculatedMaintenanceStatus = (
 
   if (task.triggerType === MaintenanceTriggerType.TIME) {
     const activationDate = getTimeBasedActivationDate(task);
-    if (!activationDate) return MaintenanceStatus.PENDING;
+    if (!activationDate) return fallbackStatus;
 
     const today = new Date(currentDate);
     today.setHours(0, 0, 0, 0);
@@ -195,7 +197,7 @@ export const getCalculatedMaintenanceStatus = (
     return MaintenanceStatus.OVERDUE;
   }
 
-  return MaintenanceStatus.PENDING;
+  return fallbackStatus;
 };
 
 export const isScheduleReadyForMechanic = (
