@@ -19,7 +19,7 @@ import {
   BrainCircuit,
   FileBarChart2,
   Fuel,
-  DollarSign,
+  CircleDollarSign,
   Truck,
   Warehouse,
   ChevronDown,
@@ -91,7 +91,7 @@ const navGroups: NavGroup[] = [
     icon: Layers,
     items: [
       { label: "Fuel Management", icon: Fuel, path: "/fuel-management" },
-      { label: "Expense & Profitability", icon: DollarSign, path: "/expense-profitability" },
+      { label: "Maintenance Costing", icon: CircleDollarSign, path: "/maintenance-costing" },
     ],
   },
   {

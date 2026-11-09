@@ -59,6 +59,7 @@ const OPERATIONS_NAV_PATHS = new Set([
   "/work-orders",
   "/maintenance-logs",
   "/maintenance-reports",
+  "/maintenance-costing",
   "/fuel-management",
   "/ai-analytics",
 ]);
@@ -70,7 +71,7 @@ export function canSeeVmmsNavigationPath(
     roles?: Array<{ role?: string | null; system?: string | null }> | null;
   } | null,
 ): boolean {
-  if (!user || path === "/expense-profitability") return false;
+  if (!user) return false;
   const vmmsRoles = Array.isArray(user.roles)
     ? user.roles.filter((entry) => entry?.system === "VMMS")
     : [];

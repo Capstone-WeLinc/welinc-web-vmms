@@ -13,7 +13,6 @@ import Dashboard from "./pages/Dashboard/Dashboard";
 import SchedulingPage from "./pages/Maintenance Scheduling/MaintenanceScheduling";
 import ChecklistTemplates from "./pages/ChecklistTemplates/ChecklistTemplates";
 import WorkOrders from "./pages/WorkOrders/WorkOrders";
-import ExpenseTrackingPage from "./pages/Expense/ExpenseTrackingPage";
 import MaintenanceLogs from "./pages/MaintenanceLogs/MaintenanceLogs";
 import FuelManagement from "./pages/FuelManagement/FuelManagement";
 import UserManagement from "./pages/UserManagement/UserManagement";
@@ -30,6 +29,7 @@ import { setLastActivity, msUntilAbsoluteExpiry, msUntilInactivityExpiry, clearS
 import { isMechanicRole, isOperationsRole, isChiefMechanicRole } from "./lib/utils/permissions";
 import { useAuthStore } from "./store/authStore";
 import MaintenanceReports from "./pages/MaintenanceReports/MaintenanceReports";
+import MaintenanceCosting from "./pages/MaintenanceCosting/MaintenanceCosting";
 import AuditLogs from "./pages/AuditLogs/AuditLogs";
 
 function RequireAuthWrapper({
@@ -107,43 +107,24 @@ function App() {
     if (!isAuthenticated || !currentUser) return;
 
     if (isMechanic) {
-      if (
-        location.pathname !== "/dashboard" &&
-        location.pathname !== "/work-orders" &&
-        location.pathname !== "/maintenance-logs" &&
-        location.pathname !== "/profile"
-      ) {
-        navigate("/dashboard", { replace: true });
-      }
+      handleLogout();
       return;
     }
 
     if (isChiefMechanic) {
-      const allowedChiefMechanicPaths = [
-        "/dashboard",
-        "/maintenance-scheduling",
-        "/work-orders",
-        "/maintenance-logs",
-        "/maintenance-reports",
-        "/vehicles",
-        "/garages",
-        "/profile",
-      ];
-      if (!allowedChiefMechanicPaths.includes(location.pathname)) {
-        navigate("/dashboard", { replace: true });
-      }
+      handleLogout();
       return;
     }
 
     if (isOperations) {
       const allowedOperationsPaths = [
         "/dashboard",
-        "/users",
         "/maintenance-scheduling",
         "/work-orders",
         "/maintenance-logs",
         "/profile",
         "/maintenance-reports",
+        "/maintenance-costing",
         "/ai-analytics",
         "/fuel-management",
         "/vehicles",
@@ -364,6 +345,17 @@ function App() {
             }
           />
           <Route
+            path="/maintenance-costing"
+            element={
+              <RequireAuthWrapper
+                isAuthenticated={isAuthenticated}
+                location={location}
+              >
+                <MaintenanceCosting />
+              </RequireAuthWrapper>
+            }
+          />
+          <Route
             path="/fuel-management"
             element={
               <RequireAuthWrapper
@@ -371,17 +363,6 @@ function App() {
                 location={location}
               >
                 <FuelManagement />
-              </RequireAuthWrapper>
-            }
-          />
-          <Route
-            path="/expense-profitability"
-            element={
-              <RequireAuthWrapper
-                isAuthenticated={isAuthenticated}
-                location={location}
-              >
-                <ExpenseTrackingPage />
               </RequireAuthWrapper>
             }
           />
@@ -411,7 +392,7 @@ function App() {
             path="*"
             element={
               isAuthenticated ? (
-                <Navigate to="/users" replace />
+                <Navigate to="/dashboard" replace />
               ) : (
                 <Navigate to="/login" replace />
               )

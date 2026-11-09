@@ -3,9 +3,7 @@ import {
   mockDashboardStats,
   mockRecentActivity,
   mockUpcomingMaintenance,
-  mockTransactions,
   mockWorkOrders,
-  defaultProfitabilitySummary,
   mockUsers,
   mockGarages,
   mockSystems,
@@ -984,14 +982,6 @@ export async function deleteMaintenanceSchedule(id: string) {
   });
 }
 
-export async function getProfitabilitySummary() {
-  return defaultProfitabilitySummary;
-}
-
-export async function getTransactions() {
-  return mockTransactions;
-}
-
 export async function getVehicles(): Promise<VehicleOption[]> {
   if (!useBackend) {
     const statuses = loadMockVehicleStatuses();
@@ -1036,28 +1026,6 @@ export async function updateVehicleStatus(vehicleId: string, status: string) {
   );
 }
 
-export async function createExpense(expense: {
-  vehicle: string;
-  date: string;
-  description: string;
-  cost: string;
-}) {
-  console.log("Mock createExpense", expense);
-  return expense;
-}
-
-export async function createIncome(income: {
-  vehicle: string;
-  bookingRef: string;
-  checklistTemplate: string;
-  tripDate: string;
-  clientType: string;
-  revenueAmount: string;
-}) {
-  console.log("Mock createIncome", income);
-  return income;
-}
-
 export type {
   MaintenanceTask,
   MaintenanceStatus,
@@ -1072,7 +1040,6 @@ export type {
   DashboardStat,
   ActivityItem,
   MaintenanceItem,
-  Transaction,
   UserStatus,
   UserRecord,
   UserRole,
