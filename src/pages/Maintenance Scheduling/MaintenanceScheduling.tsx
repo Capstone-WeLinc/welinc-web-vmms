@@ -18,7 +18,8 @@ import {
   RefreshCw,
   Ban,
   Power,
-  PowerOff,
+  CheckCircle2 as ApproveIcon,
+  X as RejectIcon,
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import {
@@ -50,7 +51,8 @@ import {
 import {
   getMaintenanceSchedules,
   cancelMaintenanceSchedule,
-  deleteMaintenanceSchedule,
+  reviewMaintenanceScheduleCancellation,
+  updateMaintenanceOdometerThreshold,
   updateMaintenanceSchedule,
   updateWorkOrderPriority,
 } from "../../lib/api/maintenanceService";
@@ -71,10 +73,11 @@ type ToastState = {
   message: string;
 };
 
-type ScheduleStatusAction = "cancel" | "activate" | "deactivate";
+type ScheduleStatusAction = "request-cancel" | "approve-cancel" | "reject-cancel" | "activate";
 type PendingScheduleAction = {
   action: ScheduleStatusAction;
   task: MaintenanceTask;
+  requestId?: string;
 };
 
 interface KPIStatCardProps {
@@ -274,9 +277,15 @@ const getTaskStyle = (status: MaintenanceStatus) => {
   }
 };
 
+const getPendingCancellationRequest = (task: MaintenanceTask) =>
+  task.logNumber
+    ? undefined
+    : task.cancellations?.find((entry) => entry.reviewStatus === "PENDING");
+
 const MaintenanceSchedulingCombined = () => {
   const currentUser = useAuthStore((state) => state.currentUser);
   const canSchedule = canManageSchedules(currentUser);
+  const isAdmin = currentUser?.role === "ADMIN";
   const canEditPriority = canEditWorkOrderPriority(currentUser);
   const location = useLocation();
   const [currentDate, setCurrentDate] = useState(() => {
@@ -313,10 +322,20 @@ const MaintenanceSchedulingCombined = () => {
   const [selectedSchedulePage, setSelectedSchedulePage] = useState(0);
   const [pendingAction, setPendingAction] =
     useState<PendingScheduleAction | null>(null);
+  const [thresholdEditTask, setThresholdEditTask] = useState<MaintenanceTask | null>(null);
+  const [thresholdValue, setThresholdValue] = useState("");
+  const [thresholdReason, setThresholdReason] = useState("");
+  const [isSavingThreshold, setIsSavingThreshold] = useState(false);
+  const [thresholdError, setThresholdError] = useState("");
   const [cancellationReason, setCancellationReason] = useState('');
   const [actionSaving, setActionSaving] = useState(false);
   const [actionError, setActionError] = useState('');
   useEffect(() => { setCancellationReason(''); setActionError(''); }, [pendingAction]);
+  useEffect(() => {
+    setThresholdValue(thresholdEditTask?.dueOdometer != null ? String(thresholdEditTask.dueOdometer) : "");
+    setThresholdReason("");
+    setThresholdError("");
+  }, [thresholdEditTask]);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [savingPriorityId, setSavingPriorityId] = useState<string | null>(null);
@@ -426,7 +445,6 @@ const MaintenanceSchedulingCombined = () => {
     MaintenanceStatus.DUE,
     MaintenanceStatus.IN_PROGRESS,
     MaintenanceStatus.OVERDUE,
-    MaintenanceStatus.CANCELLED,
   ];
 
   const filteredTasks = tasks
@@ -435,8 +453,7 @@ const MaintenanceSchedulingCombined = () => {
         isPendingStatus(task.status) ||
         isDueStatus(task.status) ||
         isInProgressStatus(task.status) ||
-        isOverdueStatus(task.status) ||
-        task.status === MaintenanceStatus.CANCELLED;
+        isOverdueStatus(task.status);
       const statusMatches =
         selectedStatusFilters.length === 0 ||
         selectedStatusFilters.some(
@@ -624,11 +641,14 @@ const MaintenanceSchedulingCombined = () => {
 
   const confirmScheduleAction = async () => {
     if (!pendingAction || actionSaving) return;
-    const { action, task } = pendingAction;
-    if (action === 'cancel' && !cancellationReason.trim()) return;
-    if (action !== "deactivate" && !canSchedule) return;
+    const { action, task, requestId } = pendingAction;
+    const isCancellationRequest = action === "request-cancel";
+    const isCancellationReview = action === "approve-cancel" || action === "reject-cancel";
+    if ((isCancellationRequest || action === "activate") && !canSchedule) return;
+    if (isCancellationReview && !isAdmin) return;
+    if ((isCancellationRequest || action === "reject-cancel") && !cancellationReason.trim()) return;
 
-    if (action === "cancel" && isInProgressScheduleLocked(task)) {
+    if (isCancellationRequest && isInProgressScheduleLocked(task)) {
       setToast({
         type: "warning",
         message: "Schedule cannot be cancelled once work has started. Use ‘Extension’ instead.",
@@ -640,10 +660,8 @@ const MaintenanceSchedulingCombined = () => {
     setActionSaving(true);
     setActionError('');
     try {
-      if (action === "cancel" || action === "activate") {
-        const updatedTask = action === 'cancel'
-          ? await cancelMaintenanceSchedule(task, cancellationReason)
-          : await updateMaintenanceSchedule({ ...task, status: MaintenanceStatus.PENDING });
+      if (isCancellationRequest) {
+        const updatedTask = await cancelMaintenanceSchedule(task, cancellationReason);
         setTasks((current) =>
           current.map((currentTask) =>
             currentTask.id === task.id ? updatedTask : currentTask,
@@ -651,19 +669,33 @@ const MaintenanceSchedulingCombined = () => {
         );
         setToast({
           type: "success",
-          message:
-            action === "cancel"
-              ? "Schedule cancelled. Its history remains available."
-              : "Schedule activated and returned to active scheduling.",
+          message: "Cancellation request sent. The schedule stays active until an Admin approves it.",
+        });
+      } else if (isCancellationReview && requestId) {
+        const reviewedTask = await reviewMaintenanceScheduleCancellation(
+          task.id,
+          requestId,
+          action === "approve-cancel" ? "APPROVE" : "REJECT",
+          action === "reject-cancel" ? cancellationReason : undefined,
+        );
+        const updatedTask = { ...task, ...reviewedTask };
+        setTasks((current) => current.map((currentTask) =>
+          currentTask.id === task.id ? updatedTask : currentTask,
+        ));
+        setToast({
+          type: "success",
+          message: action === "approve-cancel"
+            ? "Cancellation approved. The schedule is now retained as CANCELLED."
+            : "Cancellation request rejected. The schedule remains active.",
         });
       } else {
-        await deleteMaintenanceSchedule(task.id);
+        const updatedTask = await updateMaintenanceSchedule({ ...task, status: MaintenanceStatus.PENDING });
         setTasks((current) =>
-          current.filter((currentTask) => currentTask.id !== task.id),
+          current.map((currentTask) => currentTask.id === task.id ? updatedTask : currentTask),
         );
         setToast({
           type: "success",
-          message: "Schedule deactivated. Existing work orders and history were retained.",
+          message: "Schedule activated and returned to active scheduling.",
         });
       }
       setPendingAction(null);
@@ -676,6 +708,46 @@ const MaintenanceSchedulingCombined = () => {
       });
     } finally {
       setActionSaving(false);
+    }
+  };
+
+  const saveOdometerThreshold = async () => {
+    if (!thresholdEditTask || !isAdmin || isSavingThreshold) return;
+    const thresholdKm = Number(thresholdValue);
+    const vehicleReading = vehicles.find((vehicle) => vehicle.value === thresholdEditTask.vehicleId)?.odometer ?? 0;
+    const currentOdometer = Math.max(vehicleReading, Number(thresholdEditTask.odometerReading ?? 0));
+    if (!Number.isSafeInteger(thresholdKm) || thresholdKm <= 0) {
+      setThresholdError("Enter a positive whole-number odometer threshold.");
+      return;
+    }
+    if (thresholdKm <= currentOdometer) {
+      setThresholdError(`The target must be in the future. This truck is at ${currentOdometer.toLocaleString()} km; choose a higher threshold or schedule its maintenance immediately.`);
+      return;
+    }
+    if (!thresholdReason.trim()) {
+      setThresholdError("A reason for changing the threshold is required.");
+      return;
+    }
+
+    setIsSavingThreshold(true);
+    setThresholdError("");
+    try {
+      const result = await updateMaintenanceOdometerThreshold(
+        thresholdEditTask.id,
+        thresholdKm,
+        thresholdReason,
+      );
+      const updatedTask = { ...thresholdEditTask, ...result };
+      setTasks((current) => current.map((task) => task.id === updatedTask.id ? updatedTask : task));
+      setSelectedSchedules((current) => current.map((task) => task.id === updatedTask.id ? updatedTask : task));
+      setThresholdEditTask(null);
+      setToast({ type: "success", message: `Odometer threshold updated to ${thresholdKm.toLocaleString()} km and audited.` });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not update the odometer threshold.";
+      setThresholdError(message);
+      setToast({ type: "error", message });
+    } finally {
+      setIsSavingThreshold(false);
     }
   };
 
@@ -1011,7 +1083,14 @@ const MaintenanceSchedulingCombined = () => {
                     key: "status",
                     header: "Status",
                     width: "15%",
-                    render: (task) => <StandardStatusBadge status={task.status} />,
+                    render: (task) => (
+                      <div className="flex flex-col items-start gap-1">
+                        <StandardStatusBadge status={task.status} />
+                        {getPendingCancellationRequest(task) && (
+                          <span className="text-xs font-medium text-amber-700">Cancellation awaiting Admin review</span>
+                        )}
+                      </div>
+                    ),
                   },
                   {
                     key: "actions",
@@ -1028,6 +1107,20 @@ const MaintenanceSchedulingCombined = () => {
                           );
                         }}
                         items={[
+                          ...(isAdmin &&
+                          !task.logNumber &&
+                          task.triggerType === MaintenanceTriggerType.ODOMETER &&
+                          ([MaintenanceStatus.PENDING, MaintenanceStatus.DUE, MaintenanceStatus.OVERDUE] as MaintenanceStatus[]).includes(task.status) &&
+                          !getPendingCancellationRequest(task)
+                            ? [{
+                                label: "Edit Odometer Threshold",
+                                icon: Edit2,
+                                onClick: () => {
+                                  setOpenActionMenuId(null);
+                                  setThresholdEditTask(task);
+                                },
+                              }]
+                            : []),
                           ...(canSchedule && !isInProgressScheduleLocked(task)
                             ? [{
                                 label: "Edit",
@@ -1049,14 +1142,15 @@ const MaintenanceSchedulingCombined = () => {
                               }]
                             : []),
                           ...(canSchedule && !isInProgressScheduleLocked(task) &&
-                          task.status !== MaintenanceStatus.CANCELLED
+                          ([MaintenanceStatus.PENDING, MaintenanceStatus.DUE, MaintenanceStatus.OVERDUE] as MaintenanceStatus[]).includes(task.status) &&
+                          !getPendingCancellationRequest(task)
                             ? [{
-                                label: "Cancel",
+                                label: "Request Cancellation",
                                 icon: Ban,
                                 danger: true,
                                 onClick: () => {
                                   setOpenActionMenuId(null);
-                                  setPendingAction({ action: "cancel", task });
+                                  setPendingAction({ action: "request-cancel", task });
                                 },
                               }]
                             : canSchedule && task.status === MaintenanceStatus.CANCELLED
@@ -1069,15 +1163,35 @@ const MaintenanceSchedulingCombined = () => {
                                 },
                               }]
                             : []),
-                          {
-                            label: "Deactivate",
-                            icon: PowerOff,
-                            danger: true,
-                            onClick: () => {
-                              setOpenActionMenuId(null);
-                              setPendingAction({ action: "deactivate", task });
-                            },
-                          },
+                          ...(isAdmin && getPendingCancellationRequest(task)
+                            ? [
+                                {
+                                  label: "Approve Cancellation Request",
+                                  icon: ApproveIcon,
+                                  onClick: () => {
+                                    setOpenActionMenuId(null);
+                                    setPendingAction({
+                                      action: "approve-cancel",
+                                      task,
+                                      requestId: getPendingCancellationRequest(task)?.id,
+                                    });
+                                  },
+                                },
+                                {
+                                  label: "Reject Cancellation Request",
+                                  icon: RejectIcon,
+                                  danger: true,
+                                  onClick: () => {
+                                    setOpenActionMenuId(null);
+                                    setPendingAction({
+                                      action: "reject-cancel",
+                                      task,
+                                      requestId: getPendingCancellationRequest(task)?.id,
+                                    });
+                                  },
+                                },
+                              ]
+                            : []),
                         ]}
                       />
                     ),
@@ -1442,9 +1556,22 @@ const MaintenanceSchedulingCombined = () => {
 
             {selectedSchedule.cancellations?.map((entry) => (
               <div key={entry.id} className="rounded-xl border border-[var(--color-border)] p-4 sm:col-span-2">
-                <p className="font-semibold">Cancellation history</p>
+                <p className="font-semibold">
+                  {entry.reviewStatus === "PENDING"
+                    ? "Cancellation request awaiting Admin review"
+                    : entry.reviewStatus === "LEGACY" || !entry.reviewedByName
+                      ? "Cancellation history (no Admin review recorded)"
+                      : "Reviewed cancellation request"}
+                </p>
                 <p className="whitespace-pre-wrap">{entry.reason}</p>
-                <p className="text-sm">{entry.actorName} ({entry.actorEmail}) — {new Date(entry.createdAt).toLocaleString()}</p>
+                <p className="text-sm">Requested by {entry.actorName} ({entry.actorEmail}) — {new Date(entry.createdAt).toLocaleString()}</p>
+                {entry.reviewedByName && (
+                  <p className="text-sm">
+                    {entry.reviewStatus === "APPROVED" ? "Approved" : "Rejected"} by {entry.reviewedByName}
+                    {entry.reviewedAt ? ` — ${new Date(entry.reviewedAt).toLocaleString()}` : ""}
+                  </p>
+                )}
+                {entry.reviewReason && <p className="text-sm">Admin note: {entry.reviewReason}</p>}
               </div>
             ))}
             {selectedSchedule.notes && (
@@ -1502,31 +1629,91 @@ const MaintenanceSchedulingCombined = () => {
       />
 
       <ConfirmationModal
+        isOpen={Boolean(thresholdEditTask)}
+        busy={isSavingThreshold}
+        title="Edit Odometer Threshold"
+        variant="primary"
+        confirmLabel="Save Threshold"
+        confirmDisabled={!thresholdValue.trim() || !thresholdReason.trim()}
+        message={thresholdEditTask ? (
+          <div className="space-y-3 text-left">
+            <p>
+              The threshold is the odometer reading that triggers the next maintenance event. It must remain ahead of the truck's current reading; if the truck is already at the target, use the existing due work order rather than moving the target into the past.
+            </p>
+            <p className="font-semibold">{thresholdEditTask.title} — {thresholdEditTask.vehicleId}</p>
+            <p className="text-sm">
+              Current odometer: {Math.max(
+                vehicles.find((vehicle) => vehicle.value === thresholdEditTask.vehicleId)?.odometer ?? 0,
+                Number(thresholdEditTask.odometerReading ?? 0),
+              ).toLocaleString()} km
+            </p>
+            <label className="block text-sm font-medium">
+              New threshold (km)
+              <input
+                type="number"
+                min="1"
+                step="1"
+                inputMode="numeric"
+                value={thresholdValue}
+                disabled={isSavingThreshold}
+                onChange={(event) => setThresholdValue(event.target.value)}
+                className="mt-2 block w-full rounded-lg border border-[#c8ced8] bg-white p-3 text-sm outline-none focus:border-[#070b45]"
+              />
+            </label>
+            <label className="block text-sm font-medium">
+              Reason (required)
+              <textarea
+                required
+                maxLength={2000}
+                rows={3}
+                value={thresholdReason}
+                disabled={isSavingThreshold}
+                onChange={(event) => setThresholdReason(event.target.value)}
+                className="mt-2 block w-full rounded-lg border border-[#c8ced8] bg-white p-3 text-sm outline-none focus:border-[#070b45]"
+              />
+            </label>
+            {thresholdError && <p role="alert" className="text-sm text-red-700">{thresholdError}</p>}
+          </div>
+        ) : ""}
+        onConfirm={() => void saveOdometerThreshold()}
+        onCancel={() => { if (!isSavingThreshold) setThresholdEditTask(null); }}
+      />
+
+      <ConfirmationModal
         isOpen={Boolean(pendingAction)}
         busy={actionSaving}
-        confirmDisabled={pendingAction?.action === 'cancel' && !cancellationReason.trim()}
+        confirmDisabled={
+          (pendingAction?.action === "request-cancel" || pendingAction?.action === "reject-cancel") &&
+          !cancellationReason.trim()
+        }
         variant="danger"
         message={
           pendingAction ? (
             <>
-              {pendingAction.action === "cancel"
-                ? "Cancel this maintenance schedule?"
+              {pendingAction.action === "request-cancel"
+                ? "Request cancellation for this maintenance schedule?"
                 : pendingAction.action === "activate"
                   ? "Activate this maintenance schedule?"
-                  : "Deactivate this maintenance schedule?"}
+                  : pendingAction.action === "approve-cancel"
+                    ? "Approve this cancellation request?"
+                    : pendingAction.action === "reject-cancel"
+                      ? "Reject this cancellation request?"
+                      : "Review this cancellation request?"}
               <span className="mt-2 block font-normal">
-                {pendingAction.action === "cancel"
-                  ? "It will be marked as cancelled and removed from active scheduling. Its maintenance history will remain available."
+                {pendingAction.action === "request-cancel"
+                  ? "The schedule remains active and unchanged until an Admin approves the request. The reason and decision will be retained in its history."
                   : pendingAction.action === "activate"
                     ? "It will return to active scheduling and its status will be recalculated from the schedule trigger."
-                    : "It will be soft deleted and removed from Maintenance Scheduling, but existing work orders and maintenance history will remain available."}
+                    : pendingAction.action === "approve-cancel"
+                      ? "The schedule will then be marked CANCELLED and retained in Maintenance History."
+                      : "The schedule will remain active. A reason for rejection will be recorded."}
               </span>
               <span className="mt-2 block font-bold">
                 {pendingAction.task.title} - {pendingAction.task.vehicleId}
               </span>
-              {pendingAction.action === 'cancel' && (
+              {(pendingAction.action === "request-cancel" || pendingAction.action === "reject-cancel") && (
                 <label className="mt-4 block text-left text-sm">
-                  Cancellation reason (required)
+                  {pendingAction.action === "request-cancel" ? "Cancellation request reason" : "Rejection reason"} (required)
                   <textarea required maxLength={2000} value={cancellationReason}
                     disabled={actionSaving} onChange={(event) => setCancellationReason(event.target.value)}
                     className="mt-2 block w-full rounded border border-gray-300 p-2" rows={3} />
@@ -1539,11 +1726,15 @@ const MaintenanceSchedulingCombined = () => {
           )
         }
         confirmLabel={
-          pendingAction?.action === "cancel"
-            ? "Cancel Schedule"
+          pendingAction?.action === "request-cancel"
+            ? "Send Cancellation Request"
             : pendingAction?.action === "activate"
               ? "Activate Schedule"
-              : "Deactivate Schedule"
+              : pendingAction?.action === "approve-cancel"
+                ? "Approve and Cancel"
+                : pendingAction?.action === "reject-cancel"
+                  ? "Reject Request"
+                  : "Confirm"
         }
         onConfirm={confirmScheduleAction}
         onCancel={() => setPendingAction(null)}

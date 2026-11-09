@@ -1,22 +1,32 @@
 import { useEffect, useMemo, useState } from "react";
-import { Eye, FileText } from "lucide-react";
+import { Ban, Eye, FileText, KeyRound, Pencil, Trash2 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import ViewModal from "./components/ViewModal";
+import EditModal from "./components/EditModal";
 import { getCurrentUser } from "../../lib/api/authService";
 import type { UserRecord } from "../../lib/api/authService";
-import { getMaintenanceSchedules } from "../../lib/api/maintenanceService";
+import {
+  getMaintenanceSchedules,
+  reviewMaintenanceScheduleCancellation,
+  reviewMaintenanceLogUnlock,
+  unlockMaintenanceLog,
+  updateMaintenanceLog,
+  voidMaintenanceLog,
+  deleteMaintenanceSchedule,
+  type MaintenanceLogEditValues,
+} from "../../lib/api/maintenanceService";
 import type { MaintenanceTask } from "../../lib/api/maintenanceService";
 import { getVehicles, type VehicleOption } from "../../lib/api/vehicleService";
 import { getGarages } from "../../lib/api/locationService";
 import { getTaskTotalCost } from "../../lib/utils/maintenanceCosts";
 import { isMechanicRole } from "../../lib/utils/permissions";
-import { formatLogNumber } from "../../lib/utils/workOrders";
 import {
   MaintenanceStatus as MaintenanceStatusEnum,
   maintenanceStatusLabels,
 } from "../../types/maintenance";
 import {
-  ActionButton,
+  ActionMenu,
+  ConfirmationModal,
   DataTable,
   ExportButton,
   FilterDropdown,
@@ -26,12 +36,15 @@ import {
   ToastNotification,
 } from "../../components/ui";
 
-type MaintenanceClass = "Maintenance" | "Repair";
-type MaintenanceStatus = "Completed" | "Flagged";
+type MaintenanceClass = "Preventive" | "Repair";
+type MaintenanceStatus = "Completed" | "Cancelled" | "Flagged";
 
 interface MaintenanceLog {
   id: string;
+  isFormalLog: boolean;
   logNumber: string;
+  cancellations: NonNullable<MaintenanceTask["cancellations"]>;
+  maintenanceLogUnlockRequests: NonNullable<MaintenanceTask["maintenanceLogUnlockRequests"]>;
   plateNo: string;
   workOrder: string;
   class: MaintenanceClass;
@@ -43,6 +56,8 @@ interface MaintenanceLog {
   bufferDistanceKm: string;
   startReferenceDate: string;
   odometerReading: number;
+  laborCost: number;
+  partsCost: number;
   status: MaintenanceStatus;
   mechanic: string;
   checklistCompleted: number;
@@ -67,21 +82,31 @@ interface ToastState {
   message: string;
 }
 
-const logStatusOptions: MaintenanceStatus[] = ["Completed", "Flagged"];
+type LogConfirmation = {
+  action: "unlock" | "delete" | "void" | "approve-void" | "reject-void" | "approve-unlock" | "reject-unlock";
+  log: MaintenanceLog;
+  requestId?: string;
+};
+
+const logStatusOptions: MaintenanceStatus[] = ["Completed", "Cancelled", "Flagged"];
 const statusOptions = [...logStatusOptions];
 
 const formatCurrency = (value: number) => `₱${value.toLocaleString()}`;
 const formatOdometer = (value: number) => `${value.toLocaleString()} km`;
 
+const getPendingVoidRequest = (log: MaintenanceLog) =>
+  log.cancellations.find((entry) => entry.reviewStatus === "PENDING");
+
 const normalizeStatus = (status?: string): MaintenanceStatus | null => {
   const normalized = status?.trim().toUpperCase().replace(/[\s-]+/g, "_");
   if (normalized === MaintenanceStatusEnum.COMPLETED) return "Completed";
+  if (normalized === MaintenanceStatusEnum.CANCELLED) return "Cancelled";
   if (normalized === "FLAGGED") return "Flagged";
   return null;
 };
 
-const classifyMaintenance = (status: MaintenanceStatus): MaintenanceClass => {
-  return status === "Flagged" ? "Repair" : "Maintenance";
+const classifyMaintenance = (maintenanceClass?: string): MaintenanceClass => {
+  return maintenanceClass === "REPAIR" ? "Repair" : "Preventive";
 };
 
 const readNumber = (task: MaintenanceTask, keys: string[]) => {
@@ -101,6 +126,7 @@ const readProgress = (task: MaintenanceTask) => {
   const progress = task.workOrderProgress;
   if (!progress || typeof progress !== "object") return null;
   return progress as {
+    maintenanceClass?: string;
     checklist?: Array<{ status?: string }>;
     maintenanceRemarks?: string;
     executionItems?: Array<{
@@ -139,10 +165,6 @@ const parseCost = (value?: string) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const buildLogNumber = (task: MaintenanceTask) => {
-  return formatLogNumber(task.id);
-};
-
 const getVehiclePlateNumber = (
   vehicleId: string | undefined,
   vehicles: VehicleOption[],
@@ -163,7 +185,8 @@ const mapScheduleToLog = (
   vehicles: VehicleOption[],
 ): MaintenanceLog | null => {
   const status = normalizeStatus(task.status);
-  if (!status) return null;
+  if (!status || (!task.logNumber?.trim() && status !== "Cancelled")) return null;
+  const isFormalLog = Boolean(task.logNumber?.trim());
   const relatedPlateNumber = (
     task as MaintenanceTask & { vehicle?: { plateNumber?: string } }
   ).vehicle?.plateNumber;
@@ -199,11 +222,14 @@ const mapScheduleToLog = (
 
   return {
     id: task.id,
-    logNumber: buildLogNumber(task),
+    isFormalLog,
+    maintenanceLogUnlockRequests: task.maintenanceLogUnlockRequests ?? [],
+    logNumber: task.logNumber?.trim() || task.workOrderNumber || "Cancelled Schedule",
+    cancellations: task.cancellations ?? [],
     plateNo:
       relatedPlateNumber || getVehiclePlateNumber(task.vehicleId, vehicles),
     workOrder: task.title || "Untitled work order",
-    class: classifyMaintenance(status),
+    class: classifyMaintenance(progress?.maintenanceClass),
     date: task.date || "",
     garage: task.garageId ? garageNames[task.garageId] ?? task.garageId : "Unassigned",
     accountType: task.accountType || "N/A",
@@ -212,6 +238,8 @@ const mapScheduleToLog = (
     bufferDistanceKm: task.bufferDistanceKm || "N/A",
     startReferenceDate: task.startReferenceDate || "N/A",
     odometerReading: readNumber(task, ["odometerReading", "startingReferenceReadingKm"]),
+    laborCost: readNumber(task, ["laborCost"]),
+    partsCost: readNumber(task, ["partsCost"]),
     status,
     mechanic: task.assignedDriver || "Unassigned",
     checklistCompleted: checklist.filter((item) => item.status && item.status !== "pending").length,
@@ -249,6 +277,13 @@ export default function MaintenanceLogs() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [viewingLog, setViewingLog] = useState<MaintenanceLog | null>(null);
+  const [editingLog, setEditingLog] = useState<MaintenanceLog | null>(null);
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [pendingLogConfirmation, setPendingLogConfirmation] = useState<LogConfirmation | null>(null);
+  const [logActionReason, setLogActionReason] = useState("");
+  const [logActionError, setLogActionError] = useState("");
+  const [isSavingLogAction, setIsSavingLogAction] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -256,8 +291,131 @@ export default function MaintenanceLogs() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const isMechanic = isMechanicRole(currentUser);
+  const isAdmin = currentUser?.role === "ADMIN";
+  const isOperations = currentUser?.role === "OPERATIONS";
+
+  useEffect(() => {
+    setLogActionReason("");
+    setLogActionError("");
+  }, [pendingLogConfirmation]);
 
   const showToast = (nextToast: ToastState) => setToast(nextToast);
+
+  const handleUnlock = async (log: MaintenanceLog, reason: string) => {
+    const unlock = await unlockMaintenanceLog(log.id, reason);
+    const updatedLog = { ...log, maintenanceLogUnlockRequests: [...log.maintenanceLogUnlockRequests, unlock] };
+    setLogs((current) => current.map((entry) => entry.id === log.id ? updatedLog : entry));
+    setPendingLogConfirmation(null);
+    showToast({ type: "success", message: "Unlock request sent to Admin for approval." });
+  };
+
+  const handleReviewUnlock = async (log: MaintenanceLog, requestId: string, decision: "APPROVE" | "REJECT", reason?: string) => {
+    await reviewMaintenanceLogUnlock(log.id, requestId, decision, reason);
+    setLogs((current) => current.map((entry) => entry.id === log.id ? {
+      ...entry,
+      maintenanceLogUnlockRequests: entry.maintenanceLogUnlockRequests?.map((request) => request.id === requestId
+        ? { ...request, reviewStatus: decision === "APPROVE" ? "APPROVED" : "REJECTED" } : request),
+    } : entry));
+    setPendingLogConfirmation(null);
+    showToast({ type: "success", message: decision === "APPROVE" ? "Unlock approved. Operations has 15 minutes to make the audited correction." : "Unlock request rejected." });
+  };
+
+  const handleSaveEdit = async (changes: MaintenanceLogEditValues) => {
+    if (!editingLog) return;
+    setIsSavingEdit(true);
+    try {
+      const updated = await updateMaintenanceLog(editingLog.id, changes);
+      const updatedLog: MaintenanceLog = {
+        ...editingLog,
+        class: changes.maintenanceClass === "REPAIR" ? "Repair" : changes.maintenanceClass === "PREVENTIVE" ? "Preventive" : editingLog.class,
+        remarks: changes.maintenanceRemarks ?? editingLog.remarks,
+        odometerReading: changes.serviceOdometerReading ?? editingLog.odometerReading,
+        laborCost: updated.laborCost,
+        partsCost: updated.partsCost,
+        cost: updated.totalCost,
+      };
+      setLogs((current) => current.map((log) => log.id === updatedLog.id ? updatedLog : log));
+      setEditingLog(null);
+      showToast({ type: "success", message: "Maintenance log saved, audited, and relocked." });
+    } catch (error) {
+      showToast({ type: "error", message: error instanceof Error ? error.message : "Could not save maintenance-log changes." });
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const handleVoidLog = async (log: MaintenanceLog, reason: string) => {
+    const requested = await voidMaintenanceLog(log.id, reason);
+    const updatedLog = { ...log, status: normalizeStatus(requested.status) ?? log.status, cancellations: requested.cancellations ?? log.cancellations };
+    setLogs((current) => current.map((entry) => entry.id === log.id ? updatedLog : entry));
+    setViewingLog((current) => current?.id === log.id ? updatedLog : current);
+    setPendingLogConfirmation(null);
+    showToast({ type: "success", message: "Void request sent. The log remains Completed until an Admin approves it." });
+  };
+
+  const handleDeleteLog = async (log: MaintenanceLog) => {
+    await deleteMaintenanceSchedule(log.id);
+    setLogs((current) => current.filter((entry) => entry.id !== log.id));
+    setViewingLog((current) => current?.id === log.id ? null : current);
+    setPendingLogConfirmation(null);
+    showToast({ type: "success", message: "Maintenance log deleted." });
+  };
+
+  const handleReviewVoidRequest = async (
+    log: MaintenanceLog,
+    requestId: string,
+    decision: "APPROVE" | "REJECT",
+    reason?: string,
+  ) => {
+    const reviewed = await reviewMaintenanceScheduleCancellation(log.id, requestId, decision, reason);
+    const updatedLog = {
+      ...log,
+      status: normalizeStatus(reviewed.status) ?? log.status,
+      cancellations: reviewed.cancellations ?? log.cancellations,
+    };
+    setLogs((current) => current.map((entry) => entry.id === log.id ? updatedLog : entry));
+    setViewingLog((current) => current?.id === log.id ? updatedLog : current);
+    setPendingLogConfirmation(null);
+    showToast({
+      type: "success",
+      message: decision === "APPROVE"
+        ? "Void approved. The log is now Cancelled and excluded from completed cost totals."
+        : "Void request rejected. The log remains Completed.",
+    });
+  };
+
+  const confirmLogAction = () => {
+    if (!pendingLogConfirmation || isSavingLogAction) return;
+    const { action, log, requestId } = pendingLogConfirmation;
+    const needsReason = ["unlock", "void", "reject-void", "reject-unlock"].includes(action);
+    if (needsReason && !logActionReason.trim()) {
+      setLogActionError("A reason is required.");
+      return;
+    }
+    if ((action === "approve-void" || action === "reject-void") && !requestId) return;
+
+    setIsSavingLogAction(true);
+    setLogActionError("");
+    const operation = action === "unlock"
+      ? handleUnlock(log, logActionReason)
+      : action === "void"
+        ? handleVoidLog(log, logActionReason)
+        : action === "delete"
+          ? handleDeleteLog(log)
+          : action === "approve-unlock" || action === "reject-unlock"
+            ? handleReviewUnlock(log, requestId!, action === "approve-unlock" ? "APPROVE" : "REJECT", action === "reject-unlock" ? logActionReason : undefined)
+            : handleReviewVoidRequest(
+              log,
+              requestId!,
+              action === "approve-void" ? "APPROVE" : "REJECT",
+              action === "reject-void" ? logActionReason : undefined,
+            );
+    void operation.catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : "The log action could not be completed.";
+      setLogActionError(message);
+      showToast({ type: "error", message });
+    }).finally(() => setIsSavingLogAction(false));
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -362,6 +520,10 @@ export default function MaintenanceLogs() {
   const activePage = Math.min(currentPage, totalPages);
   const startIndex = (activePage - 1) * itemsPerPage;
   const paginatedLogs = filteredLogs.slice(startIndex, startIndex + itemsPerPage);
+  const hasActiveApprovedUnlock = (log: MaintenanceLog) => log.maintenanceLogUnlockRequests.some((request) =>
+    request.reviewStatus === "APPROVED" && !request.consumedAt && Boolean(request.activatedAt) &&
+    new Date(request.activatedAt!).getTime() > Date.now() - 15 * 60 * 1000,
+  );
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
@@ -610,13 +772,18 @@ export default function MaintenanceLogs() {
               header: "Status",
               width: "9%",
               render: (log) => (
-                <StatusBadge
-                  status={
-                    log.status === "Completed"
-                      ? maintenanceStatusLabels[MaintenanceStatusEnum.COMPLETED]
-                      : log.status
-                  }
-                />
+                <div className="flex flex-col items-start gap-1">
+                  <StatusBadge
+                    status={
+                      log.status === "Completed"
+                        ? maintenanceStatusLabels[MaintenanceStatusEnum.COMPLETED]
+                        : log.status
+                    }
+                  />
+                  {getPendingVoidRequest(log) && (
+                    <span className="text-xs font-medium text-amber-700">Void awaiting Admin approval</span>
+                  )}
+                </div>
               ),
             },
             { key: "mechanic", header: "Mechanic", width: "13%", render: (log) => log.mechanic },
@@ -632,17 +799,101 @@ export default function MaintenanceLogs() {
               width: "8%",
               align: "center",
               render: (log) => (
-                <ActionButton
-                  variant="secondary"
-                  className="h-9 px-3"
-                  onClick={(event) => {
+                <ActionMenu
+                  open={openActionMenuId === log.id}
+                  onToggle={(event) => {
                     event.stopPropagation();
-                    setViewingLog(log);
+                    setOpenActionMenuId((current) => current === log.id ? null : log.id);
                   }}
-                >
-                  <Eye className="h-4 w-4" />
-                  View
-                </ActionButton>
+                  items={[
+                    {
+                      label: "View",
+                      icon: Eye,
+                      onClick: () => {
+                        setOpenActionMenuId(null);
+                        setViewingLog(log);
+                      },
+                    },
+                    ...(log.isFormalLog && isOperations && !getPendingVoidRequest(log) && !log.maintenanceLogUnlockRequests.some((request) => request.reviewStatus === "PENDING") && !hasActiveApprovedUnlock(log) && (log.status === "Completed" || log.status === "Cancelled")
+                      ? [{
+                          label: "Request Unlock",
+                          icon: KeyRound,
+                          onClick: () => {
+                            setOpenActionMenuId(null);
+                            setPendingLogConfirmation({ action: "unlock", log });
+                          },
+                        }]
+                      : []),
+                    ...(log.isFormalLog && isOperations && !getPendingVoidRequest(log) && (log.status === "Completed" || log.status === "Cancelled")
+                      ? [
+                          ...(log.status !== "Cancelled" && !log.maintenanceLogUnlockRequests.some((request) => request.reviewStatus === "PENDING")
+                            ? [{
+                                label: "Void",
+                                icon: Ban,
+                                danger: true,
+                                onClick: () => {
+                                  setOpenActionMenuId(null);
+                                  setPendingLogConfirmation({ action: "void", log });
+                                },
+                              }]
+                            : []),
+                          ...(hasActiveApprovedUnlock(log) ? [{
+                            label: "Edit",
+                            icon: Pencil,
+                            onClick: () => {
+                              setOpenActionMenuId(null);
+                              setEditingLog(log);
+                            },
+                          }] : []),
+                        ]
+                      : []),
+                    ...(log.isFormalLog && isAdmin && log.maintenanceLogUnlockRequests?.some((request) => request.reviewStatus === "PENDING")
+                      ? [
+                          { label: "Approve Unlock Request", icon: KeyRound, onClick: () => { setOpenActionMenuId(null); const request = log.maintenanceLogUnlockRequests?.find((item) => item.reviewStatus === "PENDING"); if (request) setPendingLogConfirmation({ action: "approve-unlock", log, requestId: request.id }); } },
+                          { label: "Reject Unlock Request", icon: Ban, danger: true, onClick: () => { setOpenActionMenuId(null); const request = log.maintenanceLogUnlockRequests?.find((item) => item.reviewStatus === "PENDING"); if (request) setPendingLogConfirmation({ action: "reject-unlock", log, requestId: request.id }); } },
+                        ] : []),
+                    ...(log.isFormalLog && isAdmin && getPendingVoidRequest(log)
+                      ? [
+                          {
+                            label: "Approve Void Request",
+                            icon: KeyRound,
+                            onClick: () => {
+                              setOpenActionMenuId(null);
+                              setPendingLogConfirmation({
+                                action: "approve-void",
+                                log,
+                                requestId: getPendingVoidRequest(log)?.id,
+                              });
+                            },
+                          },
+                          {
+                            label: "Reject Void Request",
+                            icon: Ban,
+                            danger: true,
+                            onClick: () => {
+                              setOpenActionMenuId(null);
+                              setPendingLogConfirmation({
+                                action: "reject-void",
+                                log,
+                                requestId: getPendingVoidRequest(log)?.id,
+                              });
+                            },
+                          },
+                        ]
+                      : []),
+                    ...(log.isFormalLog && isAdmin && !getPendingVoidRequest(log)
+                      ? [{
+                          label: "Delete",
+                          icon: Trash2,
+                          danger: true,
+                          onClick: () => {
+                            setOpenActionMenuId(null);
+                            setPendingLogConfirmation({ action: "delete", log });
+                          },
+                        }]
+                      : []),
+                  ]}
+                />
               ),
             },
           ]}
@@ -661,10 +912,83 @@ export default function MaintenanceLogs() {
         />
       </section>
 
+      <ConfirmationModal
+        isOpen={Boolean(pendingLogConfirmation)}
+        busy={isSavingLogAction}
+        title={
+          pendingLogConfirmation?.action === "unlock" ? "Request Maintenance Log Unlock"
+            : pendingLogConfirmation?.action === "delete" ? "Delete Maintenance Log"
+              : pendingLogConfirmation?.action === "void" ? "Request Log Void"
+              : pendingLogConfirmation?.action === "approve-void" ? "Approve Log Void"
+                : pendingLogConfirmation?.action === "approve-unlock" ? "Approve Log Unlock"
+                  : pendingLogConfirmation?.action === "reject-unlock" ? "Reject Log Unlock Request"
+                    : "Reject Log Void Request"
+        }
+        variant={pendingLogConfirmation?.action === "unlock" || pendingLogConfirmation?.action === "approve-void" || pendingLogConfirmation?.action === "approve-unlock" ? "primary" : "danger"}
+        confirmDisabled={
+          (pendingLogConfirmation?.action === "unlock" || pendingLogConfirmation?.action === "void" || pendingLogConfirmation?.action === "reject-void" || pendingLogConfirmation?.action === "reject-unlock") &&
+          !logActionReason.trim()
+        }
+        confirmLabel={
+          pendingLogConfirmation?.action === "unlock" ? "Request Unlock"
+            : pendingLogConfirmation?.action === "delete" ? "Delete Log"
+              : pendingLogConfirmation?.action === "void" ? "Submit Void Request"
+              : pendingLogConfirmation?.action === "approve-void" ? "Approve Void"
+                : pendingLogConfirmation?.action === "approve-unlock" ? "Approve Unlock"
+                  : "Reject Request"
+        }
+        message={pendingLogConfirmation ? (
+          <div className="space-y-3 text-left">
+            <p>
+              {pendingLogConfirmation.action === "unlock"
+                ? "Request Admin approval to unlock this log for an audited correction? The edit window starts only after approval."
+                : pendingLogConfirmation.action === "delete"
+                  ? "Remove this log from active maintenance history? The record will be soft-deleted, not physically erased."
+                  : pendingLogConfirmation.action === "void"
+                    ? "Submit this completed log for Admin void approval? It remains Completed and included in completed cost totals until approved."
+                    : pendingLogConfirmation.action === "approve-void"
+                      ? "Approve voiding this log? It will be retained as Cancelled and excluded from completed maintenance cost totals."
+                      : pendingLogConfirmation.action === "approve-unlock"
+                        ? "Approve this Operations request? It will create a 15-minute edit window after approval."
+                        : pendingLogConfirmation.action === "reject-unlock"
+                          ? "Reject this unlock request? The maintenance log will remain locked."
+                          : "Reject this void request? The log will remain Completed."}
+            </p>
+            <p className="font-semibold">{pendingLogConfirmation.log.logNumber} — {pendingLogConfirmation.log.plateNo}</p>
+            {(pendingLogConfirmation.action === "unlock" || pendingLogConfirmation.action === "void" || pendingLogConfirmation.action === "reject-void" || pendingLogConfirmation.action === "reject-unlock") && (
+              <label className="block text-sm font-medium">
+                {pendingLogConfirmation.action === "unlock" ? "Operations unlock request reason"
+                  : pendingLogConfirmation.action === "void" ? "Operations void reason"
+                    : "Admin rejection reason"} (required)
+                <textarea
+                  required
+                  maxLength={2000}
+                  rows={3}
+                  value={logActionReason}
+                  disabled={isSavingLogAction}
+                  onChange={(event) => setLogActionReason(event.target.value)}
+                  className="mt-2 block w-full rounded-lg border border-[#c8ced8] bg-white p-3 text-sm outline-none focus:border-[#070b45]"
+                />
+              </label>
+            )}
+            {logActionError && <p role="alert" className="text-sm text-red-700">{logActionError}</p>}
+          </div>
+        ) : ""}
+        onConfirm={confirmLogAction}
+        onCancel={() => { if (!isSavingLogAction) setPendingLogConfirmation(null); }}
+      />
+
       <ViewModal
         isOpen={!!viewingLog}
         log={viewingLog}
         onClose={() => setViewingLog(null)}
+      />
+      <EditModal
+        key={editingLog?.id ?? "closed"}
+        log={editingLog}
+        isSaving={isSavingEdit}
+        onClose={() => { if (!isSavingEdit) setEditingLog(null); }}
+        onSave={handleSaveEdit}
       />
     </div>
   );

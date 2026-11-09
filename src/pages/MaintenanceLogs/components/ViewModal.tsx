@@ -1,8 +1,8 @@
 import { X } from "lucide-react";
 import { useBodyScrollLock } from "../../../lib/hooks/useBodyScrollLock";
 
-type MaintenanceStatus = "Completed" | "Flagged";
-type MaintenanceClass = "Maintenance" | "Repair";
+type MaintenanceStatus = "Completed" | "Cancelled" | "Flagged";
+type MaintenanceClass = "Preventive" | "Repair";
 
 interface MaintenanceLog {
   logNumber: string;
@@ -40,7 +40,9 @@ const LogStatusBadge = ({ status }: { status: MaintenanceStatus }) => (
     className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-wider ${
       status === "Completed"
         ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
-        : "border-red-500/30 bg-red-500/10 text-red-600"
+        : status === "Cancelled"
+          ? "border-slate-500/30 bg-slate-500/10 text-slate-700"
+          : "border-red-500/30 bg-red-500/10 text-red-600"
     }`}
   >
     {status}

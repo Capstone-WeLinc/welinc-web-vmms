@@ -35,6 +35,7 @@ import {
 } from "../../data/ChecklistData";
 import {
   createMaintenanceSchedule,
+  cancelMaintenanceLog,
   getChecklistTemplates,
   getWorkOrders,
   updateWorkOrder,
@@ -230,6 +231,7 @@ export default function WorkOrders() {
   const [initialProgress] = useState<WorkOrderProgress>(loadWorkOrderProgress);
   const isMechanic = isMechanicRole(currentUser);
   const canEditPriority = canEditWorkOrderPriority(currentUser);
+  const isAdmin = currentUser?.role === "ADMIN";
   // These state setters are used by the work-order loader below, so declare
   // both maps before registering that effect.
   const [checklists, setChecklists] = useState<Map<string, ChecklistItem[]>>(
@@ -297,6 +299,7 @@ export default function WorkOrders() {
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [savingPriorityId, setSavingPriorityId] = useState<string | null>(null);
+  const [cancellingTaskId, setCancellingTaskId] = useState<string | null>(null);
   const [pendingWorkOrderAction, setPendingWorkOrderAction] =
     useState<PendingWorkOrderAction>(null);
   const [pendingStartChange, setPendingStartChange] = useState<(() => void) | null>(null);
@@ -522,6 +525,28 @@ export default function WorkOrders() {
     }
   };
 
+  const handleMaintenanceLogCancellation = async (task: MaintenanceTask) => {
+    if (!isAdmin || task.status === MaintenanceStatus.CANCELLED || cancellingTaskId) return;
+    const reason = window.prompt("Enter the required reason for cancelling this maintenance log:");
+    if (reason == null) return;
+    if (!reason.trim()) {
+      setToast({ type: "error", message: "A cancellation reason is required." });
+      return;
+    }
+
+    setCancellingTaskId(task.id);
+    try {
+      const cancelled = await cancelMaintenanceLog(task, reason);
+      setTasks((current) => current.map((entry) => entry.id === task.id ? { ...entry, ...cancelled } : entry));
+      setSelectedTask((current) => current?.id === task.id ? { ...current, ...cancelled } : current);
+      setToast({ type: "success", message: "Maintenance log cancelled and locked." });
+    } catch (error) {
+      setToast({ type: "error", message: error instanceof Error ? error.message : "Could not cancel maintenance log." });
+    } finally {
+      setCancellingTaskId(null);
+    }
+  };
+
   const currentChecklist = selectedTask
     ? checklists.get(selectedTask.id) || []
     : [];
@@ -580,6 +605,7 @@ export default function WorkOrders() {
   const canModifySelectedTask =
     isMechanic &&
     Boolean(selectedTask) &&
+    selectedTask?.status !== MaintenanceStatus.CANCELLED &&
     selectedTask?.status !== MaintenanceStatus.DONE &&
     selectedTask?.status !== MaintenanceStatus.COMPLETED &&
     canMechanicStartTask;
@@ -618,6 +644,7 @@ export default function WorkOrders() {
     checklist: ChecklistItem[],
     execution: ExecutionRecord,
   ): MaintenanceStatus => {
+    if (task.status === MaintenanceStatus.CANCELLED) return MaintenanceStatus.CANCELLED;
     if (task.status === MaintenanceStatus.COMPLETED) return MaintenanceStatus.COMPLETED;
     if (checklist.some((item) => item.status === "fail")) return MaintenanceStatus.IN_PROGRESS;
     if (
@@ -635,7 +662,7 @@ export default function WorkOrders() {
     status: MaintenanceStatus,
   ) => {
     const task = tasks.find((task) => task.id === taskId);
-    if (!task || task.status === status || task.status === MaintenanceStatus.COMPLETED) return;
+    if (!task || task.status === status || task.status === MaintenanceStatus.COMPLETED || task.status === MaintenanceStatus.CANCELLED) return;
 
     const updatedTask = { ...task, status };
     setTasks((prev) => prev.map((current) => (current.id === taskId ? updatedTask : current)));
@@ -1880,7 +1907,16 @@ export default function WorkOrders() {
           </button>
 
           {!isMechanic && (
-            <div className="mb-6 flex justify-end">
+            <div className="mb-6 flex flex-wrap justify-end gap-3">
+              {isAdmin && selectedTask.status !== MaintenanceStatus.CANCELLED && (
+                <ActionButton
+                  onClick={() => void handleMaintenanceLogCancellation(selectedTask)}
+                  variant="secondary"
+                  disabled={cancellingTaskId === selectedTask.id}
+                >
+                  {cancellingTaskId === selectedTask.id ? "Cancelling…" : "Cancel Maintenance Log"}
+                </ActionButton>
+              )}
               <ActionButton
                 onClick={exportPdf}
                 variant="primary"

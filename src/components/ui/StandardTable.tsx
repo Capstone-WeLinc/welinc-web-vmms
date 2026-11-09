@@ -555,6 +555,8 @@ export const StatusBadge = ({ status }: { status: StandardStatus }) => {
         ? "border-[#168cff] bg-[#dff0ff] text-[#168cff]"
       : normalized === "due"
         ? "border-[#7c3aed] bg-[#ede9fe] text-[#6d28d9]"
+      : normalized === "overdue"
+        ? "border-[#ef4444] bg-[#fee2e2] text-[#b91c1c]"
       : normalized.includes("flag")
         ? "border-[#ef4444] bg-[#fee2e2] text-[#ef4444]"
         : normalized.includes("pending") || normalized.includes("hold")
@@ -598,9 +600,11 @@ export const ActionMenu = ({
 }: ActionMenuProps) => {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [position, setPosition] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
+  const itemCount = items?.length ?? [onView, onEdit, onDelete].filter(Boolean).length;
+  const hasActions = itemCount > 0;
 
   useEffect(() => {
-    if (!open) {
+    if (!open || !hasActions) {
       setPosition(null);
       return;
     }
@@ -611,7 +615,6 @@ export const ActionMenu = ({
 
       const rect = button.getBoundingClientRect();
       const menuWidth = 160;
-      const itemCount = items?.length ?? [onView, onEdit, onDelete].filter(Boolean).length;
       const estimatedHeight = itemCount * 42 + 12;
       const left = Math.min(
         Math.max(8, rect.right - menuWidth),
@@ -632,7 +635,9 @@ export const ActionMenu = ({
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [items?.length, onDelete, onEdit, onView, open]);
+  }, [hasActions, itemCount, onDelete, onEdit, onView, open]);
+
+  if (!hasActions) return null;
 
   const menu = position ? (
     <div

@@ -1,6 +1,12 @@
 export {
   createMaintenanceSchedule,
   cancelMaintenanceSchedule,
+  reviewMaintenanceScheduleCancellation,
+  cancelMaintenanceLog,
+  unlockMaintenanceLog,
+  reviewMaintenanceLogUnlock,
+  updateMaintenanceLog,
+  voidMaintenanceLog,
   deleteMaintenanceSchedule,
   getChecklistTemplates,
   getChecklistTemplateId,
@@ -9,6 +15,7 @@ export {
   saveChecklistTemplates,
   updateMaintenanceSchedule,
   updateWorkOrderPriority,
+  updateMaintenanceOdometerThreshold,
   updateWorkOrder,
   updateWorkOrderProgress,
   uploadWorkOrderAttachment,
@@ -16,7 +23,7 @@ export {
   openWorkOrderAttachment,
 } from "./vmmsApi";
 
-export type { WorkOrderAttachment } from "./vmmsApi";
+export type { WorkOrderAttachment, MaintenanceLogEditValues } from "./vmmsApi";
 
 export type {
   ChecklistItemTemplate,

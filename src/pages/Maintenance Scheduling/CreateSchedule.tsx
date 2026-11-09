@@ -90,6 +90,7 @@ export default function CreateScheduleModal({
   const [vehicleId, setVehicleId] = useState("");
   const [startReferenceDate, setStartReferenceDate] = useState("");
   const [startDate, setStartDate] = useState('');
+  const [targetDueDate, setTargetDueDate] = useState('');
   const [assignedMechanic, setAssignedMechanic] = useState("");
   const [mechanics, setMechanics] = useState<UserRecord[]>([]);
   const [chiefMechanicId, setChiefMechanicId] = useState("");
@@ -162,6 +163,7 @@ export default function CreateScheduleModal({
         if (editingTask) {
           setVehicleId(editingTask.vehicleId);
           setStartDate(editingTask.startDate ?? '');
+          setTargetDueDate(editingTask.targetDueDate ?? editingTask.dueDate ?? '');
           setChecklistTemplateName(editingTask.title);
           setAssignedMechanic(editingTask.assignedDriver ?? "");
           setChiefMechanicId(editingTask.chiefMechanicId ?? "");
@@ -195,6 +197,7 @@ export default function CreateScheduleModal({
         } else {
           // Reset all fields for new schedule
           setStartDate('');
+          setTargetDueDate('');
           setVehicleId("");
           setChecklistTemplateName("");
           setAssignedMechanic("");
@@ -248,6 +251,7 @@ export default function CreateScheduleModal({
     selectableTemplateNames.includes(checklistTemplate);
   const requiredFieldValues = [
     vehicleId,
+    targetDueDate,
     odometerReading,
     garageIsOther ? otherGarageValue : garageId,
     accountType,
@@ -262,6 +266,11 @@ export default function CreateScheduleModal({
       : []),
   ];
   const startDateError = scheduleStartDateError(startDate, editingTask?.startDate);
+  const targetDueDateError = !targetDueDate
+    ? 'Target due date is required.'
+    : targetDueDate < startDate
+      ? 'Target due date cannot be earlier than the schedule start date.'
+      : '';
   const mileageError = scheduleMileageError({
     vehicleId, title: checklistTemplate, triggerType, odometerReading,
     intervalKm: triggerType === MaintenanceTriggerType.TIME ? '' : intervalKm,
@@ -276,7 +285,7 @@ export default function CreateScheduleModal({
     ? mileageError
     : '';
   const intervalError = triggerType === MaintenanceTriggerType.TIME ? timeIntervalError(timeIntervalValue, timeIntervalUnit) : '';
-  const isFormComplete = !startDateError && !mileageError && !intervalError && (isOdometerOnlyUpdate
+  const isFormComplete = !startDateError && !targetDueDateError && !mileageError && !intervalError && (isOdometerOnlyUpdate
     ? odometerReading.trim().length > 0 &&
       NON_NEGATIVE_NUMBER_PATTERN.test(odometerReading.trim())
     : requiredFieldValues.every((value) => value.trim().length > 0) &&
@@ -292,6 +301,7 @@ export default function CreateScheduleModal({
     if (!canSchedule) return;
     const dateError = scheduleStartDateError(startDate, editingTask?.startDate);
     if (dateError) { setToast({ type: 'error', message: dateError }); return; }
+    if (targetDueDateError) { setToast({ type: 'error', message: targetDueDateError }); return; }
     if (mileageError) { setToast({ type: 'error', message: mileageError }); return; }
     if (intervalError) { setToast({ type: 'error', message: intervalError }); return; }
     setIsSaving(true);
@@ -327,6 +337,7 @@ export default function CreateScheduleModal({
           ? {
               ...targetSchedule,
               startDate,
+              targetDueDate,
               odometerReading,
               checklistTemplateId,
             }
@@ -361,6 +372,7 @@ export default function CreateScheduleModal({
       } else {
         const task = await createMaintenanceSchedule({
           startDate,
+          targetDueDate,
           vehicleId,
           title: checklistTemplate,
           checklistTemplateId,
@@ -391,6 +403,7 @@ export default function CreateScheduleModal({
 
       // Reset form state
       setStartDate('');
+      setTargetDueDate('');
       setVehicleId("");
       setChecklistTemplateName("");
       setAssignedMechanic("");
@@ -575,6 +588,15 @@ export default function CreateScheduleModal({
               aria-invalid={Boolean(startDateError)} aria-describedby="schedule-start-date-error"
               className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-3" />
             {startDateError && <p id="schedule-start-date-error" role="alert" className="mt-1 text-sm text-red-600">{startDateError}</p>}
+          </section>
+          <section>
+            <label htmlFor="schedule-target-due-date" className="mb-1.5 block text-sm font-medium">Target due date (required)</label>
+            <input id="schedule-target-due-date" type="date" required value={targetDueDate}
+              min={startDate || philippineToday()}
+              onChange={(event) => setTargetDueDate(event.target.value)}
+              aria-invalid={Boolean(targetDueDateError)} aria-describedby="schedule-target-due-date-error"
+              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-3" />
+            {targetDueDateError && <p id="schedule-target-due-date-error" role="alert" className="mt-1 text-sm text-red-600">{targetDueDateError}</p>}
           </section>
           {!isOdometerOnlyUpdate && (
             <section>

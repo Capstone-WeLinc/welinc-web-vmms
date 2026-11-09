@@ -20,6 +20,13 @@ export interface VehicleOption {
   odometer?: number;
 }
 
+export interface MaintenanceLogEditValues {
+  maintenanceClass?: 'REPAIR' | 'PREVENTIVE';
+  maintenanceRemarks?: string;
+  serviceOdometerReading?: number;
+  laborCost?: number;
+}
+
 const fallbackVehicleOptions: VehicleOption[] = [
   { value: "ABC 1234", label: "ABC 1234 - Truck Alpha", status: "AVAILABLE" },
   { value: "DEF 5678", label: "DEF 5678 - Truck Bravo", status: "AVAILABLE" },
@@ -166,7 +173,11 @@ function formatLocalDateText(date = new Date()) {
 }
 
 function normalizeMaintenanceTask(task: MaintenanceTask): MaintenanceTask {
-  const rawTask = task as MaintenanceTask & { createdAt?: string | null };
+  const rawTask = task as MaintenanceTask & {
+    createdAt?: string | null;
+    log_number?: string | null;
+    target_due_date?: string | null;
+  };
   const date =
     task.date ||
     (typeof rawTask.createdAt === "string" ? rawTask.createdAt.slice(0, 10) : "") ||
@@ -176,6 +187,8 @@ function normalizeMaintenanceTask(task: MaintenanceTask): MaintenanceTask {
     workOrderNumber:
       task.workOrderNumber ??
       (task as MaintenanceTask & { work_order_number?: string }).work_order_number,
+    logNumber: task.logNumber ?? rawTask.log_number ?? null,
+    targetDueDate: task.targetDueDate ?? rawTask.target_due_date ?? null,
     date,
     status: normalizeMaintenanceStatusValue(task.status),
     priority: Object.values(MaintenancePriority).includes(task.priority as MaintenancePriority)
@@ -208,17 +221,21 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function normalizeUserRecord(user: unknown): UserRecord {
   const userObj = isPlainObject(user) ? user : {};
-  const roleFromArray = Array.isArray(userObj.roles)
-    ? userObj.roles
-        .map((entry) => (isPlainObject(entry) ? entry.role : undefined))
-        .find(
-          (role): role is string => typeof role === "string" && role.trim().length > 0,
-        )
-    : undefined;
-
-  const fallbackRole =
-    roleFromArray ??
-    (typeof userObj.role === "string" ? userObj.role : undefined);
+  const roleAssignments = Array.isArray(userObj.roles)
+    ? userObj.roles.filter(isPlainObject)
+    : [];
+  const roleFromVmmsAssignment = roleAssignments.find(
+    (entry) =>
+      typeof entry.system === "string" &&
+      entry.system.trim().toUpperCase() === "VMMS" &&
+      typeof entry.role === "string" &&
+      entry.role.trim().length > 0,
+  )?.role;
+  const fallbackRole = typeof roleFromVmmsAssignment === "string"
+    ? roleFromVmmsAssignment
+    : roleAssignments.length === 0 && typeof userObj.role === "string"
+      ? userObj.role
+      : undefined;
 
   return {
     ...userObj,
@@ -859,6 +876,7 @@ export async function createMaintenanceSchedule(
     timeIntervalValue: schedule.timeIntervalValue,
     timeIntervalUnit: schedule.timeIntervalUnit,
     startDate: schedule.startDate,
+    targetDueDate: schedule.targetDueDate,
     checklistTemplateId: schedule.checklistTemplateId,
     vehicleId: schedule.vehicleId,
     title: schedule.title,
@@ -903,6 +921,7 @@ export async function updateMaintenanceSchedule(schedule: MaintenanceTask) {
     timeIntervalValue: schedule.timeIntervalValue,
     timeIntervalUnit: schedule.timeIntervalUnit,
     startDate: schedule.startDate,
+    targetDueDate: schedule.targetDueDate,
     checklistTemplateId: schedule.checklistTemplateId,
     vehicleId: schedule.vehicleId,
     title: schedule.title,
@@ -953,6 +972,18 @@ export async function updateWorkOrderPriority(
   return result;
 }
 
+export async function updateMaintenanceOdometerThreshold(
+  id: string,
+  thresholdKm: number,
+  reason: string,
+) {
+  if (!useMaintenanceScheduleBackend) throw new Error('Changing a schedule threshold requires the connected backend and audit trail.');
+  return fetchJSON<Pick<MaintenanceTask, 'id' | 'status' | 'odometerReading' | 'startingReferenceReadingKm' | 'intervalKm' | 'bufferDistanceKm' | 'dueOdometer'>>(
+    `/maintenance-schedules/${encodeURIComponent(id)}/odometer-threshold`,
+    { method: 'PATCH', body: JSON.stringify({ thresholdKm, reason: reason.trim() }) },
+  );
+}
+
 export async function cancelMaintenanceSchedule(schedule: MaintenanceTask, reason: string): Promise<MaintenanceTask> {
   if (!useMaintenanceScheduleBackend) throw new Error('Cancellation requires a connected backend to record the Operations audit trail.');
   const result = await fetchJSON<Pick<MaintenanceTask, 'id' | 'status' | 'cancellations'>>(
@@ -960,6 +991,69 @@ export async function cancelMaintenanceSchedule(schedule: MaintenanceTask, reaso
     { method: 'POST', body: JSON.stringify({ reason: reason.trim() }) },
   );
   return { ...schedule, ...result };
+}
+
+export async function reviewMaintenanceScheduleCancellation(
+  scheduleId: string,
+  requestId: string,
+  decision: 'APPROVE' | 'REJECT',
+  reason?: string,
+): Promise<Pick<MaintenanceTask, 'id' | 'status' | 'cancellations'>> {
+  if (!useMaintenanceScheduleBackend) throw new Error('Cancellation review requires the connected backend.');
+  const result = await fetchJSON<Pick<MaintenanceTask, 'id' | 'status' | 'cancellations'>>(
+    `/maintenance-schedules/${encodeURIComponent(scheduleId)}/cancellation-requests/${encodeURIComponent(requestId)}/review`,
+    { method: 'POST', body: JSON.stringify({ decision, reason: reason?.trim() }) },
+  );
+  return result;
+}
+
+export async function cancelMaintenanceLog(schedule: MaintenanceTask, reason: string): Promise<MaintenanceTask> {
+  if (!useMaintenanceScheduleBackend) throw new Error('Maintenance log cancellation requires the backend audit trail.');
+  const result = await fetchJSON<Pick<MaintenanceTask, 'id' | 'status' | 'cancellations'>>(
+    `/maintenance-schedules/${encodeURIComponent(schedule.id)}/cancel-log`,
+    { method: 'POST', body: JSON.stringify({ reason: reason.trim() }) },
+  );
+  return { ...schedule, ...result };
+}
+
+export async function unlockMaintenanceLog(id: string, reason: string) {
+  if (!useMaintenanceScheduleBackend) throw new Error('Maintenance-log unlock requires the backend audit trail.');
+  return fetchJSON<{ id: string; scheduleId: string; createdAt: string; reviewStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'LEGACY'; actorId: string; actorName: string; reason: string; reviewedAt: string | null; activatedAt: string | null; consumedAt: string | null }>(
+    `/maintenance-schedules/${encodeURIComponent(id)}/unlock-log`,
+    { method: 'POST', body: JSON.stringify({ reason: reason.trim() }) },
+  );
+}
+
+export async function reviewMaintenanceLogUnlock(
+  scheduleId: string, requestId: string, decision: 'APPROVE' | 'REJECT', reason?: string,
+) {
+  return fetchJSON<{ id: string; scheduleId: string; reviewStatus: string; activatedAt: string | null }>(
+    `/maintenance-schedules/${encodeURIComponent(scheduleId)}/unlock-requests/${encodeURIComponent(requestId)}/review`,
+    { method: 'POST', body: JSON.stringify({ decision, reason: reason?.trim() }) },
+  );
+}
+
+export async function updateMaintenanceLog(id: string, changes: MaintenanceLogEditValues) {
+  if (!useMaintenanceScheduleBackend) throw new Error('Maintenance-log editing requires the backend audit trail.');
+  return fetchJSON<{
+    id: string;
+    status: MaintenanceStatus;
+    workOrderProgress: Record<string, unknown>;
+    partsCost: number;
+    laborCost: number;
+    totalCost: number;
+    relocked: true;
+  }>(`/maintenance-schedules/${encodeURIComponent(id)}/log-edit`, {
+    method: 'PATCH', body: JSON.stringify(changes),
+  });
+}
+
+export async function voidMaintenanceLog(id: string, reason: string) {
+  if (!useMaintenanceScheduleBackend) throw new Error('Maintenance-log voiding requires the backend audit trail.');
+  return fetchJSON<Pick<MaintenanceTask, 'id' | 'status' | 'cancellations'>>(
+    `/maintenance-schedules/${encodeURIComponent(id)}/void-log`,
+    { method: 'POST', body: JSON.stringify({ reason: reason.trim() }) },
+  );
 }
 
 export async function deleteMaintenanceSchedule(id: string) {

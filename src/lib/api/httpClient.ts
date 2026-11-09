@@ -138,7 +138,9 @@ export async function apiRequest<T>(
       const refreshedToken = await refreshAccessToken();
       if (refreshedToken) return apiRequest<T>(path, init, false);
     }
-    if (response.status === 401 || response.status === 403) {
+    // 403 means the session is valid but the user lacks permission for this
+    // request. Only 401 should clear the token and trigger reauthentication.
+    if (response.status === 401) {
       dispatchUnauthorizedEvent(response.status);
     }
     const responseText = await response.text().catch(() => "");

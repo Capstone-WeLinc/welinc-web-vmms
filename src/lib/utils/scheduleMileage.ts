@@ -24,5 +24,7 @@ export function scheduleMileageError(data: MileageSchedule, vehicleReading?: num
     previous.title.trim().toLowerCase() !== data.title.trim().toLowerCase() ||
     Number(previous.intervalKm) !== interval || Number(previous.startingReferenceReadingKm) !== reference;
   const current = Math.max(vehicleReading, Number(data.odometerReading || 0), sameTruck ? Number(previous?.odometerReading || 0) : 0);
-  return changed && threshold <= current ? "Odometer threshold must be greater than the truck's current odometer reading." : '';
+  return changed && threshold <= current
+    ? "Odometer threshold must be greater than the truck's current odometer reading. It is the next future service trigger; if service is due now, use the existing due work order instead."
+    : '';
 }
