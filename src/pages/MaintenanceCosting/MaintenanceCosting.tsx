@@ -68,6 +68,7 @@ export default function MaintenanceCosting() {
   const [periodType, setPeriodType] = useState<MaintenanceCostPeriodType>('monthly');
   const [periodYear, setPeriodYear] = useState(now.getFullYear());
   const [periodMonth, setPeriodMonth] = useState(now.getMonth() + 1);
+  const [twoMonthBlock, setTwoMonthBlock] = useState(Math.floor(now.getMonth() / 2) + 1);
   const [periodHalf, setPeriodHalf] = useState<MaintenanceCostHalf>(now.getMonth() < 6 ? 'first' : 'second');
   const [appliedPeriod, setAppliedPeriod] = useState(initialPeriod);
   const [data, setData] = useState<MaintenanceCostingDashboard | null>(null);
@@ -132,7 +133,7 @@ export default function MaintenanceCosting() {
 
   const applyPeriod = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const period = getMaintenanceCostPeriod(periodType, periodYear, periodMonth, periodHalf, from, to);
+    const period = getMaintenanceCostPeriod(periodType, periodYear, periodMonth, periodHalf, from, to, twoMonthBlock);
     if (!period) {
       setError('Choose a valid date range.');
       return;
@@ -157,6 +158,7 @@ export default function MaintenanceCosting() {
             Period
             <select aria-label="Maintenance cost period" value={periodType} onChange={(event) => setPeriodType(event.target.value as MaintenanceCostPeriodType)} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]">
               <option value="monthly">Monthly</option>
+              <option value="bimonthly">Every 2 months</option>
               <option value="semiannual">Semi-annually</option>
               <option value="annual">Annually</option>
               <option value="custom">Custom range</option>
@@ -178,6 +180,21 @@ export default function MaintenanceCosting() {
                 <select aria-label="Cost half-year" value={periodHalf} onChange={(event) => setPeriodHalf(event.target.value as MaintenanceCostHalf)} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]">
                   <option value="first">First half (Jan–Jun)</option>
                   <option value="second">Second half (Jul–Dec)</option>
+                </select>
+              </label>
+              <label className="grid gap-1 text-xs font-semibold text-[var(--color-text-secondary)]">
+                Year
+                <input aria-label="Cost year" type="number" min="1900" max="9999" value={periodYear} onChange={(event) => setPeriodYear(Number(event.target.value))} className="w-28 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]" />
+              </label>
+            </>
+          )}
+          {periodType === 'bimonthly' && (
+            <>
+              <label className="grid gap-1 text-xs font-semibold text-[var(--color-text-secondary)]">
+                Two-month period
+                <select aria-label="Cost two-month period" value={twoMonthBlock} onChange={(event) => setTwoMonthBlock(Number(event.target.value))} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]">
+                  <option value={1}>Jan–Feb</option><option value={2}>Mar–Apr</option><option value={3}>May–Jun</option>
+                  <option value={4}>Jul–Aug</option><option value={5}>Sep–Oct</option><option value={6}>Nov–Dec</option>
                 </select>
               </label>
               <label className="grid gap-1 text-xs font-semibold text-[var(--color-text-secondary)]">

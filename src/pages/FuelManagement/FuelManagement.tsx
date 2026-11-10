@@ -1,20 +1,16 @@
-import { useState, type ReactNode } from 'react';
-import { Droplet, TrendingUp, AlertTriangle, BarChart3, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Droplet, TrendingUp, AlertTriangle, BarChart3 } from 'lucide-react';
 import PageHeader from '../../components/PageHeader/PageHeader';
 import FuelLog from './components/FuelLog';
 import EfficiencyTrendsWithFilters from './components/EfficiencyTrendsWithFilters';
-import AnomalyDetection from './components/AnomalyDetection';
 import LogFuelFillUp from './components/LogFuelFillUp';
 import FuelCostSummary from './components/FuelCostSummary';
-import AnomalyDetectionLog from './components/AnomalyDetectionLog';
 import FleetWideFuelReport from './components/FleetWideFuelReport';
-import EditFuelFillUpModal from './components/EditFuelFillUpModal';
-import {
-  mockFuelFillUps,
-  mockVehicleEfficiency,
-  mockAnomalies,
-  mockAnomalyLogs,
-} from "../../lib/mocks/fuelMocks";
+import { useAuthStore } from '../../store/authStore';
+import { useBackend } from '../../lib/api/httpClient';
+import { getMaintenanceCostPeriod, type MaintenanceCostHalf, type MaintenanceCostPeriodType } from '../../lib/utils/maintenanceCostingPeriod';
+import { getVehicles } from '../../lib/api/vmmsApi';
+import { acknowledgeFuelAnomaly, createFuelEntry, createFuelStation, getFuelAnomalies, getFuelAnomalyAttachment, getFuelAnomalyThreshold, getFuelEntries, getFuelStations, recordFuelReportExport, updateFuelAnomaly, updateFuelAnomalyThreshold, uploadFuelAnomalyAttachment, voidFuelEntry, type FuelAnomalyRecord, type FuelStation, type FuelVehicle } from '../../lib/api/fuelService';
 import type { FuelFillUp } from './types';
 
 type KPIStatCardProps = {
@@ -57,26 +53,43 @@ function KPIStatCard({ icon, value, label, subtitle, iconBgColor, iconColor }: K
 type Tab = 'fuel-log' | 'efficiency-trends' | 'anomaly-detection';
 type ReportTab = 'fleet-wide' | 'per-vehicle' | 'anomaly-log';
 
+function currentMonthPeriod() {
+  const now = new Date();
+  return getMaintenanceCostPeriod('monthly', now.getFullYear(), now.getMonth() + 1, now.getMonth() < 6 ? 'first' : 'second', '', '')!;
+}
+
 export default function FuelManagement() {
+  const role = useAuthStore((state) => state.currentUser?.role);
+  const canView = role === 'ADMIN' || role === 'OPERATIONS';
+  const canWrite = role === 'OPERATIONS';
+  const canAcknowledge = role === 'ADMIN';
   const [activeTab, setActiveTab] = useState<Tab>('fuel-log');
   const [activeReport, setActiveReport] = useState<ReportTab>('fleet-wide');
   const [showLogForm, setShowLogForm] = useState(false);
-  const [fillUps, setFillUps] = useState<FuelFillUp[]>(mockFuelFillUps);
-  const [editingFillUp, setEditingFillUp] = useState<FuelFillUp | null>(null);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [fillUps, setFillUps] = useState<FuelFillUp[]>([]);
+  const [fuelLogFilteredFillUps, setFuelLogFilteredFillUps] = useState<FuelFillUp[]>([]);
+  const [hasFuelLogFilterSnapshot, setHasFuelLogFilterSnapshot] = useState(false);
+  const [stations, setStations] = useState<FuelStation[]>([]);
+  const [vehicles, setVehicles] = useState<FuelVehicle[]>([]);
+  const [anomalies, setAnomalies] = useState<FuelAnomalyRecord[]>([]);
+  const [anomalyThreshold, setAnomalyThreshold] = useState(20);
+  const [thresholdDraft, setThresholdDraft] = useState('20');
+  const [savingThreshold, setSavingThreshold] = useState(false);
+  const [pageError, setPageError] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  const [isPickerOpen, setIsPickerOpen] = useState(false);
-
-  // Confirmed filter ranges used by KPIs
-  const [appliedFrom, setAppliedFrom] = useState<string>('2026-05-26');
-  const [appliedTo, setAppliedTo] = useState<string>('2026-05-30');
-
-  // Hardcoded matrix values 
-  const mayDays = Array.from({ length: 31 }, (_, i) => i + 1);
-  const mayStartOffset = 5;
-
-  const juneDays = Array.from({ length: 30 }, (_, i) => i + 1);
-  const juneStartOffset = 1;
+  const initialPeriod = useMemo(currentMonthPeriod, []);
+  const now = new Date();
+  const [periodType, setPeriodType] = useState<MaintenanceCostPeriodType>('monthly');
+  const [periodYear, setPeriodYear] = useState(now.getFullYear());
+  const [periodMonth, setPeriodMonth] = useState(now.getMonth() + 1);
+  const [twoMonthBlock, setTwoMonthBlock] = useState(Math.floor(now.getMonth() / 2) + 1);
+  const [periodHalf, setPeriodHalf] = useState<MaintenanceCostHalf>(now.getMonth() < 6 ? 'first' : 'second');
+  const [from, setFrom] = useState(initialPeriod.from);
+  const [to, setTo] = useState(initialPeriod.to);
+  const [appliedPeriod, setAppliedPeriod] = useState(initialPeriod);
+  const appliedFrom = appliedPeriod.from;
+  const appliedTo = appliedPeriod.to;
 
   const tabs = [
     { id: 'fuel-log' as const, label: 'Fuel Log', icon: Droplet },
@@ -84,14 +97,28 @@ export default function FuelManagement() {
     { id: 'anomaly-detection' as const, label: 'Anomaly Detection', icon: AlertTriangle }
   ];
 
+  const load = useCallback(async (period: { from: string; to: string }, showLoading = true) => {
+    if (!canView) { setPageError('Fuel Management is available to Admin and Operations on the web.'); setLoading(false); return; }
+    if (!useBackend) { setPageError('Fuel management requires the VMMS backend. Configure VITE_API_BASE_URL to use persisted fuel records.'); setLoading(false); return; }
+    if (showLoading) setLoading(true);
+    setPageError('');
+    try {
+      const [entries, stationRows, vehicleRows, anomalyRows, threshold] = await Promise.all([getFuelEntries(period.from, period.to), getFuelStations(), getVehicles(), getFuelAnomalies(), getFuelAnomalyThreshold()]);
+      setFillUps(entries); setStations(stationRows); setVehicles(vehicleRows as FuelVehicle[]); setAnomalies(anomalyRows); setAnomalyThreshold(threshold.thresholdPercent); setThresholdDraft(String(threshold.thresholdPercent));
+      setAppliedPeriod(period);
+    } catch (error) { setPageError(error instanceof Error ? error.message : 'Unable to load fuel records.'); }
+    finally { if (showLoading) setLoading(false); }
+  }, [canView]);
+  const refresh = useCallback((showLoading = false) => load(appliedPeriod, showLoading), [appliedPeriod, load]);
+  useEffect(() => { if (canView) void load(initialPeriod); else setLoading(false); }, [canView, initialPeriod, load]);
+  useEffect(() => {
+    if (!canView) return undefined;
+    const intervalId = window.setInterval(() => { void load(appliedPeriod, false); }, 60_000);
+    return () => window.clearInterval(intervalId);
+  }, [appliedPeriod, canView, load]);
+
   // Layout className constants (interaction/layout only)
   const containerClasses = 'space-y-6 relative';
-  const bannerLayoutClasses = 'flex justify-between items-center';
-  const pickerButtonClasses = 'flex items-center gap-4 rounded-xl border px-3 py-2 text-xs font-medium transition cursor-pointer';
-  const calendarGridClasses = 'grid grid-cols-2 gap-8 relative';
-  const monthHeaderClasses = 'flex items-center justify-between mb-4 px-1';
-  const monthDaysGridClasses = 'grid grid-cols-7 text-center text-[11px] font-medium gap-y-2';
-  const pickerPanelLayoutClasses = 'absolute top-full right-0 mt-3 z-50';
   const kpiGridClasses = 'grid gap-4 xl:grid-cols-4 lg:grid-cols-2';
   const tabsLayoutClasses = 'border-b border-[var(--color-border)]';
   const tabButtonBaseClasses = 'flex items-center gap-2 border-b-2 px-4 py-3 font-medium transition-colors cursor-pointer text-sm';
@@ -99,65 +126,53 @@ export default function FuelManagement() {
   const reportSwitcherClasses = 'flex flex-wrap gap-1 rounded-xl p-1 border';
   const reportPanelClasses = 'bg-[var(--color-card-bg)] border border-[var(--color-border)] rounded-2xl p-4 shadow-card transition-all duration-200 min-h-62.5';
 
-  // Layout class constants for calendar buttons
-  const dayButtonBaseClasses = 'h-8 w-8 text-xs font-medium relative mx-auto flex items-center justify-center transition-all';
-
-  const handleDayClick = (year: number, month: number, day: number) => {
-    const formattedDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-
-    if (!appliedFrom || (appliedFrom && appliedTo)) {
-      setAppliedFrom(formattedDate);
-      setAppliedTo('');
-    } else {
-      if (new Date(formattedDate) < new Date(appliedFrom)) {
-        setAppliedFrom(formattedDate);
-      } else {
-        setAppliedTo(formattedDate);
-      }
-    }
-  };
-
-  const getDateState = (year: number, month: number, day: number) => {
-    const currentStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    if (currentStr === appliedFrom || currentStr === appliedTo) return 'endpoint';
-    if (appliedFrom && appliedTo && currentStr > appliedFrom && currentStr < appliedTo) return 'range';
-    return 'idle';
-  };
-
-  const kpiFilteredFillUps = fillUps.filter(item => {
-    if (appliedFrom && item.date < appliedFrom) return false;
-    if (appliedTo && item.date > appliedTo) return false;
-    return true;
-  });
+  const handleFilteredFillUpsChange = useCallback((filtered: FuelFillUp[]) => {
+    setFuelLogFilteredFillUps(filtered);
+    setHasFuelLogFilterSnapshot(true);
+  }, []);
+  const kpiFilteredFillUps = (hasFuelLogFilterSnapshot ? fuelLogFilteredFillUps : fillUps).filter((item) => !item.isVoided);
 
   const totalFillUps = kpiFilteredFillUps.length;
   const totalLiters = kpiFilteredFillUps.reduce((sum, item) => sum + item.liters, 0);
   const totalCost = kpiFilteredFillUps.reduce((sum, item) => sum + item.totalCost, 0);
-  const avgEfficiency = parseFloat(
-    (kpiFilteredFillUps.reduce((sum, item) => sum + item.efficiency, 0) / kpiFilteredFillUps.length || 0).toFixed(1)
-  );
+  const efficiencyValues = kpiFilteredFillUps.map((item) => item.efficiency).filter((value): value is number => value != null && Number.isFinite(value));
+  const avgEfficiency = efficiencyValues.length ? Number((efficiencyValues.reduce((sum, value) => sum + value, 0) / efficiencyValues.length).toFixed(1)) : 0;
 
-  // Standard modal functions
-  const handleEditTrigger = (fillUp: FuelFillUp) => {
-    setEditingFillUp(fillUp);
-    setIsEditModalOpen(true);
+  const handleVoid = async (id: string, reason: string) => {
+    await voidFuelEntry(id, reason); await refresh();
   };
 
-  const handleEditSave = (updated: FuelFillUp) => {
-    setFillUps(prev => prev.map(f => f.id === updated.id ? updated : f));
-    setIsEditModalOpen(false);
-    setEditingFillUp(null);
+  const handleAdd = async (input: unknown) => {
+    await createFuelEntry(input); await refresh();
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this fuel record?')) {
-      setFillUps(prev => prev.filter(f => f.id !== id));
-    }
+  const handleSaveThreshold = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const parsed = Number(thresholdDraft);
+    if (!Number.isFinite(parsed) || parsed < 1 || parsed > 99) { setPageError('Choose a threshold from 1% to 99%.'); return; }
+    setSavingThreshold(true); setPageError('');
+    try { const saved = await updateFuelAnomalyThreshold(parsed); setAnomalyThreshold(saved.thresholdPercent); setThresholdDraft(String(saved.thresholdPercent)); }
+    catch (error) { setPageError(error instanceof Error ? error.message : 'Only Admin can change the anomaly threshold.'); }
+    finally { setSavingThreshold(false); }
   };
 
-  const handleAdd = (newEntry: FuelFillUp) => {
-    setFillUps(prev => [newEntry, ...prev]);
+  const applyPeriod = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const period = getMaintenanceCostPeriod(periodType, periodYear, periodMonth, periodHalf, from, to, twoMonthBlock);
+    if (!period) { setPageError('Choose a valid date range.'); return; }
+    void load(period);
   };
+
+  const efficiencyByVehicle = useMemo(() => [...new Set(kpiFilteredFillUps.filter((entry) => entry.vehicleId).map((entry) => entry.vehicleId))].map((vehicleId) => {
+    const rows = kpiFilteredFillUps.filter((entry) => entry.vehicleId === vehicleId && entry.efficiency != null);
+    const first = kpiFilteredFillUps.find((entry) => entry.vehicleId === vehicleId)!;
+    return { vehicleId, vehicleName: first.vehicleName, model: first.vehicleModel, avgEfficiency: rows.length ? rows.reduce((sum, row) => sum + (row.efficiency ?? 0), 0) / rows.length : 0, fillUps: rows.length, trend: 'normal' as const };
+  }), [kpiFilteredFillUps]);
+  const anomalyCards = useMemo(() => anomalies.filter((item) => item.status === 'OPEN').map((item) => ({ vehicleId: item.vehicle.plateNumber, vehicleName: item.vehicle.plateNumber, model: item.vehicle.model, efficiency: item.efficiency, status: 'Anomaly' as const, fleetAvg: item.rollingAverage, recommendation: item.note ?? 'Review the fuel entry and add an operations resolution note.' })), [anomalies]);
+
+  if (!canView) {
+    return <div className="space-y-6"><PageHeader icon={Droplet} title="Fuel Management" subtitle="Fuel tracking and reports" /><p role="status" className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 text-sm text-[var(--color-text-secondary)]">Fuel Management on the web is available to Admin and Operations.</p></div>;
+  }
 
   return (
     <div className={containerClasses}>
@@ -166,114 +181,54 @@ export default function FuelManagement() {
         title="Fuel Management"
         subtitle="Consumption tracking, efficiency analysis, and anomaly detection"
       />
-      <div className={`${bannerLayoutClasses} rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-3 shadow-card` }>
-          <span className="text-xs text-[var(--color-text-secondary)] font-medium">
-          Dashboard Stats Timeframe:
-        </span>
-
-        <div className="relative">
-          <button
-            onClick={() => setIsPickerOpen(!isPickerOpen)}
-            className={`${pickerButtonClasses} ${isPickerOpen ? 'active-filter' : 'bg-[var(--color-input-bg)] border-[var(--color-border)] text-[var(--color-text-secondary)]'}`}
-          >
-            <Calendar size={14} className="text-[var(--color-brand-primary)]" />
-            <span className="font-mono text-xs">
-              {appliedFrom ? `${appliedFrom}${appliedTo ? ` — ${appliedTo}` : ''}` : 'Select Timeline'}
-            </span>
-          </button>
-
-          {isPickerOpen && (
-            <div className={`${pickerPanelLayoutClasses} w-[40rem] rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-lg`}>
-
-              <div className="flex justify-end mb-4">
-                <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-1 text-xs text-[var(--color-text-secondary)] font-mono">
-                  <Calendar size={13} className="text-[var(--color-brand-primary)]" />
-                  <span>{appliedFrom || 'YYYY-MM-DD'} — {appliedTo || 'YYYY-MM-DD'}</span>
-                </div>
-              </div>
-
-              <div className={calendarGridClasses}>
-                <div className="absolute top-0 bottom-0 left-1/2 w-px bg-[var(--color-divider)] -translate-x-1/2" />
-
-                <div>
-                  <div className={monthHeaderClasses}>
-                    <button className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition"><ChevronLeft size={16} /></button>
-                    <h4 className="text-xs font-bold text-[var(--color-text-primary)] tracking-tight">May 2026</h4>
-                    <div style={{ width: 16 }} />
-                  </div>
-                  <div className={monthDaysGridClasses + ' text-[var(--color-text-secondary)]'}>
-                    <span className="text-[var(--color-brand-danger)] font-bold">Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
-                    {Array.from({ length: mayStartOffset }).map((_, i) => <div key={`empty-may-${i}`} />)}
-                    {mayDays.map((day) => {
-                      const state = getDateState(2026, 5, day);
-                      const isSunday = (day + mayStartOffset - 1) % 7 === 0;
-                      const stateClass = state === 'endpoint' ? 'bg-[var(--color-brand-warning)] text-[var(--color-brand-black)] font-extrabold rounded-full scale-105 shadow-lg' : state === 'range' ? 'bg-[var(--color-card-bg)] text-[var(--color-brand-primary)] font-semibold w-full' : isSunday ? 'text-[var(--color-brand-danger)]' : 'text-[var(--color-text-secondary)]';
-                      return (
-                        <button
-                          key={`may-${day}`}
-                          onClick={() => handleDayClick(2026, 5, day)}
-                          className={`${dayButtonBaseClasses} ${stateClass}`}
-                        >
-                          {day}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div>
-                  <div className={monthHeaderClasses}>
-                    <div style={{ width: 16 }} />
-                    <h4 className="text-xs font-bold text-[var(--color-text-primary)] tracking-tight">June 2026</h4>
-                    <button className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition"><ChevronRight size={16} /></button>
-                  </div>
-                  <div className={monthDaysGridClasses + ' text-[var(--color-text-secondary)]'}>
-                    <span className="text-[var(--color-brand-danger)] font-bold">Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
-                    {Array.from({ length: juneStartOffset }).map((_, i) => <div key={`empty-june-${i}`} />)}
-                    {juneDays.map((day) => {
-                      const state = getDateState(2026, 6, day);
-                      const isSunday = (day + juneStartOffset - 1) % 7 === 0;
-                      const stateClass = state === 'endpoint' ? 'bg-[var(--color-brand-warning)] text-[var(--color-brand-black)] font-extrabold rounded-full scale-105 shadow-lg' : state === 'range' ? 'bg-[var(--color-card-bg)] text-[var(--color-brand-primary)] font-semibold w-full' : isSunday ? 'text-[var(--color-brand-danger)]' : 'text-[var(--color-text-secondary)]';
-                      return (
-                        <button
-                          key={`june-${day}`}
-                          onClick={() => handleDayClick(2026, 6, day)}
-                          className={`${dayButtonBaseClasses} ${stateClass}`}
-                        >
-                          {day}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 border-t border-[var(--color-border)] mt-5 pt-4">
-                <button
-                  onClick={() => { setAppliedFrom(''); setAppliedTo(''); }}
-                  className="h-9 px-4 rounded-xl text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition"
-                >
-                  Reset
-                </button>
-                <button
-                  onClick={() => setIsPickerOpen(false)}
-                  className="h-9 px-5 rounded-xl bg-[var(--color-brand-primary)] text-xs font-semibold text-white hover:bg-[var(--color-brand-primary)]/90 transition shadow-lg"
-                >
-                  Select dates
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+      {pageError && <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">{pageError}</div>}
+      {loading && <div className="text-sm text-[var(--color-text-secondary)]">Loading fuel records...</div>}
+      {canWrite && <button className="rounded-lg border px-3 py-2 text-sm" onClick={async () => { const name = window.prompt('Add a registered fuel station'); if (name?.trim()) { try { await createFuelStation(name.trim()); await refresh(); } catch (error) { setPageError(error instanceof Error ? error.message : 'Unable to add station.'); } } }}>Configure fuel stations</button>}
+      <form onSubmit={handleSaveThreshold} className="flex flex-wrap items-end gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
+        <div><div className="text-sm font-semibold">Fuel anomaly threshold</div><p className="text-xs text-[var(--color-text-secondary)]">Flag efficiency when it falls this far below the truck's rolling average.</p></div>
+        {role === 'ADMIN' ? <label className="text-sm">Percent<input required type="number" min="1" max="99" step="0.01" value={thresholdDraft} onChange={(event) => setThresholdDraft(event.target.value)} className="ml-2 w-24 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2 py-1.5" /></label> : <strong>{anomalyThreshold}%</strong>}
+        {role === 'ADMIN' && <button disabled={savingThreshold} className="rounded-lg bg-[var(--color-brand-primary)] px-3 py-2 text-sm text-white">{savingThreshold ? 'Saving...' : 'Save threshold'}</button>}
+      </form>
+      <div className="flex flex-wrap items-end justify-between gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
+        <form className="flex flex-wrap items-end gap-3" onSubmit={applyPeriod}>
+          <label className="grid gap-1 text-xs font-semibold text-[var(--color-text-secondary)]">Period
+            <select aria-label="Fuel period" value={periodType} onChange={(event) => setPeriodType(event.target.value as MaintenanceCostPeriodType)} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]">
+              <option value="monthly">Monthly</option><option value="bimonthly">Every 2 months</option><option value="semiannual">Semi-annually</option><option value="annual">Annually</option><option value="custom">Custom range</option>
+            </select>
+          </label>
+          {periodType === 'monthly' && <label className="grid gap-1 text-xs font-semibold text-[var(--color-text-secondary)]">Month
+            <input aria-label="Fuel month" type="month" value={`${periodYear}-${String(periodMonth).padStart(2, '0')}`} onChange={(event) => { const [year, month] = event.target.value.split('-').map(Number); if (year && month) { setPeriodYear(year); setPeriodMonth(month); } }} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]" />
+          </label>}
+          {periodType === 'bimonthly' && <>
+            <label className="grid gap-1 text-xs font-semibold text-[var(--color-text-secondary)]">Two-month period
+              <select aria-label="Fuel two-month period" value={twoMonthBlock} onChange={(event) => setTwoMonthBlock(Number(event.target.value))} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]">
+                <option value={1}>Jan-Feb</option><option value={2}>Mar-Apr</option><option value={3}>May-Jun</option><option value={4}>Jul-Aug</option><option value={5}>Sep-Oct</option><option value={6}>Nov-Dec</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-xs font-semibold text-[var(--color-text-secondary)]">Year<input aria-label="Fuel year" type="number" min="1900" max="9999" value={periodYear} onChange={(event) => setPeriodYear(Number(event.target.value))} className="w-28 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]" /></label>
+          </>}
+          {periodType === 'semiannual' && <>
+            <label className="grid gap-1 text-xs font-semibold text-[var(--color-text-secondary)]">Half-year
+              <select aria-label="Fuel half-year" value={periodHalf} onChange={(event) => setPeriodHalf(event.target.value as MaintenanceCostHalf)} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]"><option value="first">First half (Jan-Jun)</option><option value="second">Second half (Jul-Dec)</option></select>
+            </label>
+            <label className="grid gap-1 text-xs font-semibold text-[var(--color-text-secondary)]">Year<input aria-label="Fuel year" type="number" min="1900" max="9999" value={periodYear} onChange={(event) => setPeriodYear(Number(event.target.value))} className="w-28 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]" /></label>
+          </>}
+          {periodType === 'annual' && <label className="grid gap-1 text-xs font-semibold text-[var(--color-text-secondary)]">Year<input aria-label="Fuel year" type="number" min="1900" max="9999" value={periodYear} onChange={(event) => setPeriodYear(Number(event.target.value))} className="w-28 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]" /></label>}
+          {periodType === 'custom' && <>
+            <label className="grid gap-1 text-xs font-semibold text-[var(--color-text-secondary)]">From<input aria-label="Fuel period start" type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]" /></label>
+            <label className="grid gap-1 text-xs font-semibold text-[var(--color-text-secondary)]">To<input aria-label="Fuel period end" type="date" value={to} onChange={(event) => setTo(event.target.value)} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]" /></label>
+          </>}
+          <button type="submit" disabled={loading} className="rounded-lg bg-[#070b45] px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Apply Period</button>
+        </form>
+        <div className="text-sm text-[var(--color-text-secondary)]">Showing {appliedFrom} to {appliedTo}</div>
       </div>
-
       {/* KPI Cards */}
       <div className={kpiGridClasses}>
         <KPIStatCard
           icon={<Droplet size={20} strokeWidth={1.8} />}
           value={totalFillUps.toString()}
           label="Total Fill-ups"
-          subtitle={`${appliedFrom} to ${appliedTo || '...'}`}
+          subtitle={`${appliedFrom} to ${appliedTo}`}
           iconBgColor="rgba(59, 130, 246, 0.12)"
           iconColor="#3b82f6"
         />
@@ -302,6 +257,7 @@ export default function FuelManagement() {
           iconColor="#10b981"
         />
       </div>
+      {!loading && !pageError && kpiFilteredFillUps.length === 0 && <div role="status" className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 text-sm text-[var(--color-text-secondary)]">No fuel records for {appliedFrom} to {appliedTo}. Choose another period or have Operations log a fill-up.</div>}
 
       {/* Tabs Layout */}
       <div className={tabsLayoutClasses}>
@@ -327,15 +283,19 @@ export default function FuelManagement() {
         {activeTab === 'fuel-log' && (
           <FuelLog
             fillUps={fillUps}
-            onEdit={handleEditTrigger}
-            onDelete={handleDelete}
-            onLogFillUp={() => setShowLogForm(true)}
+            onDelete={canWrite ? handleVoid : undefined}
+            onLogFillUp={canWrite ? () => setShowLogForm(true) : undefined}
+            onFilteredFillUpsChange={handleFilteredFillUpsChange}
+            onExport={(format) => { void recordFuelReportExport(format, appliedFrom || undefined, appliedTo || undefined).catch((error) => setPageError(error instanceof Error ? error.message : 'Unable to record export.')); }}
           />
         )}
         {activeTab === 'efficiency-trends' && (
-          <EfficiencyTrendsWithFilters vehicles={mockVehicleEfficiency} fleetAvg={avgEfficiency} />
+          <EfficiencyTrendsWithFilters vehicles={efficiencyByVehicle} fleetAvg={avgEfficiency} />
         )}
-        {activeTab === 'anomaly-detection' && <AnomalyDetection anomalies={mockAnomalies} />}
+        {activeTab === 'anomaly-detection' && <div className="space-y-3">{anomalyCards.length === 0 ? <p className="text-sm text-[var(--color-text-secondary)]">No open fuel anomalies.</p> : anomalyCards.map((anomaly) => {
+          const record = anomalies.find((item) => item.vehicle.plateNumber === anomaly.vehicleId && item.status === 'OPEN')!;
+          return <div key={record.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4"><div><strong>{anomaly.vehicleName}  -  {anomaly.efficiency.toFixed(1)} km/L</strong><div className="text-sm">Rolling average {anomaly.fleetAvg.toFixed(1)} km/L  -  {record.severity}</div><div className="text-sm">{record.note || 'No resolution note recorded'}</div><div className="mt-2 flex flex-wrap gap-2">{record.attachments?.map((attachment) => <button key={attachment.id} className="text-xs underline" onClick={async () => { const file = await getFuelAnomalyAttachment(record.id, attachment.id); const url = URL.createObjectURL(file); const link = document.createElement('a'); link.href = url; link.download = attachment.name; link.click(); URL.revokeObjectURL(url); }}>{attachment.name}</button>)}</div></div><div className="flex flex-wrap gap-2">{canWrite && <><button onClick={async () => { const note = window.prompt('Add or update resolution note'); if (note !== null) { try { await updateFuelAnomaly(record.id, note); await refresh(); } catch (error) { setPageError(error instanceof Error ? error.message : 'Unable to save note.'); } } }} className="rounded-lg border px-3 py-2 text-sm">Save note</button>{record.severity === 'ESCALATED' || record.severity === 'CRITICAL' ? <label className="cursor-pointer rounded-lg border px-3 py-2 text-sm">Attach report<input type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" className="hidden" onChange={async (event) => { const file = event.target.files?.[0]; if (file) { try { await uploadFuelAnomalyAttachment(record.id, file); await refresh(); } catch (error) { setPageError(error instanceof Error ? error.message : 'Unable to upload report.'); } } }} /></label> : null}<button onClick={async () => { try { await updateFuelAnomaly(record.id); await refresh(); } catch (error) { setPageError(error instanceof Error ? error.message : 'Unable to resolve anomaly.'); } }} className="rounded-lg border px-3 py-2 text-sm">Resolve</button></>}{canAcknowledge && record.severity === 'CRITICAL' && !record.acknowledgedAt && <button onClick={async () => { const remark = window.prompt('Optional acknowledgment remark') ?? ''; try { await acknowledgeFuelAnomaly(record.id, remark); await refresh(); } catch (error) { setPageError(error instanceof Error ? error.message : 'Unable to acknowledge anomaly.'); } }} className="rounded-lg border px-3 py-2 text-sm">Acknowledge</button>}</div></div>;
+        })}</div>}
       </div>
 
       {/* Switcher Reports Section */}
@@ -368,27 +328,27 @@ export default function FuelManagement() {
         <div className={reportPanelClasses}>
           {activeReport === 'fleet-wide' && (
             <div className="space-y-3">
-              <div className="text-xs text-[var(--color-text-secondary)] font-mono tracking-wider uppercase">Active View · Fleet-Wide Fuel Cost Report</div>
-              <FleetWideFuelReport />
+              <div className="text-xs text-[var(--color-text-secondary)] font-mono tracking-wider uppercase">Active View  -  Fleet-Wide Fuel Cost Report</div>
+              <FleetWideFuelReport fillUps={kpiFilteredFillUps} onExport={(format) => { void recordFuelReportExport(format, appliedFrom || undefined, appliedTo || undefined).catch((error) => setPageError(error instanceof Error ? error.message : 'Unable to record export.')); }} />
             </div>
           )}
 
           {activeReport === 'per-vehicle' && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <div className="text-xs text-[var(--color-text-secondary)] font-mono tracking-wider uppercase">Active View · Fuel Cost Summary — Per Vehicle</div>
+                <div className="text-xs text-[var(--color-text-secondary)] font-mono tracking-wider uppercase">Active View  -  Fuel Cost Summary  -  Per Vehicle</div>
                 <div className="text-xs text-[var(--color-text-secondary)] font-mono bg-[var(--color-card-bg-hover)] px-2 py-0.5 rounded">
-                  {appliedFrom} — {appliedTo || '...'}
+                  {appliedFrom}  -  {appliedTo || '...'}
                 </div>
               </div>
-              <FuelCostSummary fillUps={fillUps} />
+              <FuelCostSummary fillUps={kpiFilteredFillUps} onExport={(format) => { void recordFuelReportExport(format, appliedFrom || undefined, appliedTo || undefined).catch((error) => setPageError(error instanceof Error ? error.message : 'Unable to record export.')); }} />
             </div>
           )}
 
           {activeReport === 'anomaly-log' && (
               <div className="space-y-3">
-              <div className="text-xs text-[var(--color-text-secondary)] font-mono tracking-wider uppercase">Active View · Anomaly Detection Log</div>
-              <AnomalyDetectionLog logs={mockAnomalyLogs} />
+              <div className="text-xs text-[var(--color-text-secondary)] font-mono tracking-wider uppercase">Active View  -  Anomaly Detection Log</div>
+              <div className="space-y-2">{anomalies.length ? anomalies.map((item) => <div key={item.id} className="rounded border p-3">{item.vehicle.plateNumber}  -  {item.severity}  -  {item.status}  -  {item.note || 'No note'}</div>) : <p>No anomaly history.</p>}</div>
             </div>
           )}
         </div>
@@ -399,18 +359,11 @@ export default function FuelManagement() {
         <LogFuelFillUp
           onClose={() => setShowLogForm(false)}
           onAdd={handleAdd}
+          vehicles={vehicles}
+          stations={stations}
         />
       )}
 
-      <EditFuelFillUpModal
-        isOpen={isEditModalOpen}
-        onClose={() => {
-          setIsEditModalOpen(false);
-          setEditingFillUp(null);
-        }}
-        fillUp={editingFillUp}
-        onSave={handleEditSave}
-      />
     </div>
   );
 }

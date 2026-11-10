@@ -165,10 +165,14 @@ export default function Sidebar({ currentUser }: SidebarProps) {
   }, [currentUser]);
 
   useEffect(() => {
-    if (isNotificationsOpen) {
-      void loadNotifications();
+    if (!currentUser) {
+      setNotifications([]);
+      return;
     }
-  }, [isNotificationsOpen, loadNotifications]);
+    void loadNotifications();
+    const interval = window.setInterval(() => { void loadNotifications(); }, 30_000);
+    return () => window.clearInterval(interval);
+  }, [currentUser, loadNotifications]);
 
   const markNotificationAsRead = async (notificationId: string) => {
     try {

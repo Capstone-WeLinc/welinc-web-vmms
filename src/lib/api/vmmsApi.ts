@@ -1158,7 +1158,7 @@ export type VehicleAuditEntry = {
   createdAt: string;
 };
 
-export type AuditLogSource = "all" | "login" | "vehicle" | "work-order" | "schedule";
+export type AuditLogSource = "all" | "login" | "vehicle" | "work-order" | "schedule" | "fuel";
 export type AuditLogRecord = {
   id: string;
   source: Exclude<AuditLogSource, "all">;

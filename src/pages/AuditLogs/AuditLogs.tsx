@@ -9,6 +9,7 @@ const sourceLabels: Record<AuditLogSource, string> = {
   vehicle: "Vehicles",
   "work-order": "Work orders",
   schedule: "Schedules",
+  fuel: "Fuel",
 };
 
 const dateTime = (value: string) => new Date(value).toLocaleString("en-PH", {

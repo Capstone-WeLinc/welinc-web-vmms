@@ -2,9 +2,11 @@ import type { FuelFillUp } from '../types';
 import { Download, Calendar, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { printToPDF } from "../../../lib/utils/fuelExport";
+import { exportRowsAsXlsx } from '../../../lib/utils/excelExport';
 
 interface FuelCostSummaryProps {
   fillUps: FuelFillUp[];
+  onExport?: (format: string) => void;
 }
 
 interface VehicleSummary {
@@ -17,13 +19,13 @@ interface VehicleSummary {
   totalEfficiencyPoints: number;
 }
 
-export default function FuelCostSummary({ fillUps = [] }: FuelCostSummaryProps) {
+export default function FuelCostSummary({ fillUps = [], onExport }: FuelCostSummaryProps) {
   const [selectedVehicle, setSelectedVehicle] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
 
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
-  const [startDate, setStartDate] = useState<string>('2026-05-26');
-  const [endDate, setEndDate] = useState<string>('2026-05-30');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const datePickerRef = useRef<HTMLDivElement>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -40,39 +42,9 @@ export default function FuelCostSummary({ fillUps = [] }: FuelCostSummaryProps) 
   }, []);
 
   const uniqueVehicles = useMemo(() => {
-    const vehicles = new Set(fillUps.map(f => f.vehicleId).filter(Boolean));
-    return ['All', ...Array.from(vehicles)];
+    const vehicles = new Map(fillUps.filter((fillUp) => fillUp.vehicleId).map((fillUp) => [fillUp.vehicleId, fillUp.vehicleName || fillUp.vehicleId]));
+    return [{ id: 'All', label: 'All Vehicles' }, ...Array.from(vehicles, ([id, label]) => ({ id, label }))];
   }, [fillUps]);
-
-  const mayDays = Array.from({ length: 31 }, (_, i) => i + 1);
-  const mayStartOffset = 5;
-
-  const juneDays = Array.from({ length: 30 }, (_, i) => i + 1);
-  const juneStartOffset = 1;
-
-  const handleDayClick = (year: number, month: number, day: number) => {
-    const formattedDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-
-    setCurrentPage(1);
-
-    if (!startDate || (startDate && endDate)) {
-      setStartDate(formattedDate);
-      setEndDate('');
-    } else {
-      if (new Date(formattedDate) < new Date(startDate)) {
-        setStartDate(formattedDate);
-      } else {
-        setEndDate(formattedDate);
-      }
-    }
-  };
-
-  const getDateState = (year: number, month: number, day: number) => {
-    const currentStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    if (currentStr === startDate || currentStr === endDate) return 'endpoint';
-    if (startDate && endDate && currentStr > startDate && currentStr < endDate) return 'range';
-    return 'idle';
-  };
 
   const filteredFillUps = useMemo(() => {
     return fillUps.filter(f => {
@@ -121,7 +93,23 @@ export default function FuelCostSummary({ fillUps = [] }: FuelCostSummaryProps) 
   const totalPages = Math.ceil(summaryData.length / itemsPerPage);
 
   const handleExportPDF = () => {
+    onExport?.('pdf');
     printToPDF('fuel-cost-summary-table', 'fuel-cost-summary');
+  };
+  const handleExportExcel = () => {
+    onExport?.('excel');
+    if (summaryData.length === 0) return;
+    const headers = ['Vehicle', 'Model', 'Total Fill-Ups', 'Total Liters', 'Average Price per Liter (PHP)', 'Total Fuel Cost (PHP)', 'Average Efficiency (km/L)'];
+    const rows = summaryData.map((item) => [
+      item.vehicleName || item.vehicleId,
+      item.model,
+      item.fillUpsCount,
+      item.totalLiters,
+      item.totalLiters > 0 ? item.totalCost / item.totalLiters : 0,
+      item.totalCost,
+      item.fillUpsCount > 0 ? item.totalEfficiencyPoints / item.fillUpsCount : 0,
+    ]);
+    exportRowsAsXlsx(`fuel_cost_summary_${new Date().toISOString().split('T')[0]}.xlsx`, 'Fuel Cost Summary', [headers, ...rows]);
   };
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedSummaryData = useMemo(() => {
@@ -180,134 +168,40 @@ export default function FuelCostSummary({ fillUps = [] }: FuelCostSummaryProps) 
               }}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer appearance-none"
             >
-              {uniqueVehicles.map((vId) => (
-                <option key={vId} value={vId} className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)] text-sm">
-                  {vId === 'All' ? 'All Vehicles' : vId}
+              {uniqueVehicles.map((vehicle) => (
+                <option key={vehicle.id} value={vehicle.id} className="bg-[var(--color-input-bg)] text-[var(--color-text-primary)] text-sm">
+                  {vehicle.label}
                 </option>
               ))}
             </select>
           </div>
 
           <div className="relative" ref={datePickerRef}>
-            <button
-              onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
-              className={`flex items-center gap-2.5 h-11 rounded-xl border px-3.5 text-sm font-medium transition active:scale-[0.98] cursor-pointer whitespace-nowrap ${isDatePickerOpen
-                ? 'active-filter text-[var(--color-text-primary)]'
-                : 'border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)]'
-                }`}
-            >
+            <button type="button" onClick={() => setIsDatePickerOpen(!isDatePickerOpen)} className="flex items-center gap-2.5 h-11 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3.5 text-sm font-medium text-[var(--color-text-secondary)]">
               <Calendar size={16} className="text-[var(--color-brand-primary)]" strokeWidth={1.8} />
-              <span className="font-mono text-sm text-[var(--color-text-secondary)]">
-                {startDate ? `${startDate}${endDate ? ` — ${endDate}` : ''}` : 'Select Timeline'}
-              </span>
+              <span>{startDate || 'From'} - {endDate || 'To'}</span>
             </button>
-
             {isDatePickerOpen && (
-              <div className="absolute top-full left-0 mt-3 z-50 w-160 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-2xl space-y-4">
-                <div className="flex justify-end">
-                  <div className="flex items-center gap-2 h-7 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 font-mono text-[11px] text-cyan-400">
-                    <Calendar size={13} />
-                    <span>{startDate || 'YYYY-MM-DD'} — {endDate || 'YYYY-MM-DD'}</span>
-                  </div>
+              <div className="absolute top-full left-0 z-50 mt-3 w-80 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-2xl">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="grid gap-1 text-xs font-semibold text-[var(--color-text-secondary)]">From
+                    <input type="date" value={startDate} onChange={(event) => { setStartDate(event.target.value); setCurrentPage(1); }} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2 py-2 text-sm text-[var(--color-text-primary)]" />
+                  </label>
+                  <label className="grid gap-1 text-xs font-semibold text-[var(--color-text-secondary)]">To
+                    <input type="date" value={endDate} onChange={(event) => { setEndDate(event.target.value); setCurrentPage(1); }} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2 py-2 text-sm text-[var(--color-text-primary)]" />
+                  </label>
                 </div>
-
-                <div className="grid grid-cols-2 gap-8 relative">
-                  <div className="absolute top-0 bottom-0 left-1/2 w-px bg-[var(--color-divider)] -translate-x-1/2" />
-
-                  <div>
-                    <div className="flex items-center justify-between mb-4 px-1">
-                      <button type="button" className="flex items-center justify-center h-7 w-7 rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-card-bg-hover)] transition active:scale-95">
-                        <ChevronLeft size={14} />
-                      </button>
-                      <h4 className="text-xs font-bold text-[var(--color-text-primary)] tracking-wide">May 2026</h4>
-                      <div className="w-7 h-7" />
-                    </div>
-                    <div className="grid grid-cols-7 text-center text-xs font-medium text-[var(--color-text-secondary)] gap-y-2">
-                      <span className="text-[var(--color-brand-danger)] font-bold">Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
-                      {Array.from({ length: mayStartOffset }).map((_, i) => <div key={`empty-may-${i}`} />)}
-                      {mayDays.map((day) => {
-                        const state = getDateState(2026, 5, day);
-                        const isSunday = (day + mayStartOffset - 1) % 7 === 0;
-                        return (
-                          <button
-                            key={`may-${day}`}
-                            type="button"
-                            onClick={() => handleDayClick(2026, 5, day)}
-                            className={`h-8 w-8 text-xs font-medium relative mx-auto flex items-center justify-center transition-all ${state === 'endpoint'
-                                  ? 'bg-[var(--color-brand-warning)] text-[var(--color-brand-black)] font-extrabold rounded-full shadow-md z-10 scale-105'
-                                  : state === 'range'
-                                    ? 'bg-[var(--color-card-bg)] text-[var(--color-brand-primary)] w-full font-medium'
-                                    : isSunday
-                                      ? 'text-[var(--color-brand-danger)] hover:bg-[var(--color-card-bg-hover)] rounded-lg'
-                                      : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] rounded-lg'
-                                  }`}
-                          >
-                            {day}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div>
-                      <div className="flex items-center justify-between mb-4 px-1">
-                      <div className="w-7 h-7" />
-                      <h4 className="text-xs font-bold text-[var(--color-text-primary)] tracking-wide">June 2026</h4>
-                      <button type="button" className="flex items-center justify-center h-7 w-7 rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-card-bg-hover)] transition active:scale-95">
-                        <ChevronRight size={14} />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-7 text-center text-xs font-medium text-[var(--color-text-secondary)] gap-y-2">
-                      <span className="text-[var(--color-brand-danger)] font-bold">Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
-                      {Array.from({ length: juneStartOffset }).map((_, i) => <div key={`empty-june-${i}`} />)}
-                      {juneDays.map((day) => {
-                        const state = getDateState(2026, 6, day);
-                        const isSunday = (day + juneStartOffset - 1) % 7 === 0;
-                        return (
-                          <button
-                            key={`june-${day}`}
-                            type="button"
-                            onClick={() => handleDayClick(2026, 6, day)}
-                            className={`h-8 w-8 text-xs font-medium relative mx-auto flex items-center justify-center transition-all ${state === 'endpoint'
-                              ? 'bg-[var(--color-brand-warning)] text-[var(--color-brand-black)] font-extrabold rounded-full shadow-md z-10 scale-105'
-                              : state === 'range'
-                                ? 'bg-[var(--color-card-bg)] text-[var(--color-brand-primary)] w-full font-semibold'
-                                : isSunday
-                                  ? 'text-[var(--color-brand-danger)] hover:bg-[var(--color-card-bg-hover)] rounded-lg'
-                                  : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] rounded-lg'
-                              }`}
-                          >
-                            {day}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex justify-end items-center gap-2 border-t border-[var(--color-border)] mt-5 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => { setStartDate(''); setEndDate(''); }}
-                    className="h-9 px-4 rounded-xl text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition active:scale-[0.98]"
-                  >
-                    Reset
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsDatePickerOpen(false)}
-                    className="h-9 px-5 rounded-xl bg-[var(--color-brand-primary)] hover:bg-[var(--color-brand-primary)]/80 text-xs font-semibold text-white transition active:scale-[0.98] shadow-lg flex items-center justify-center"
-                  >
-                    Select dates
-                  </button>
+                {startDate && endDate && startDate > endDate && <p role="alert" className="mt-2 text-xs text-red-600">End date must be on or after start date.</p>}
+                <div className="mt-4 flex justify-end gap-2 border-t border-[var(--color-border)] pt-3">
+                  <button type="button" onClick={() => { setStartDate(''); setEndDate(''); setCurrentPage(1); }} className="rounded-lg px-3 py-2 text-xs text-[var(--color-text-secondary)]">Reset</button>
+                  <button type="button" disabled={!!(startDate && endDate && startDate > endDate)} onClick={() => setIsDatePickerOpen(false)} className="rounded-lg bg-[var(--color-brand-primary)] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">Apply range</button>
                 </div>
               </div>
             )}
           </div>
         </div>
-
         <div className="flex items-center gap-2.5">
-          <button className="rounded-xl bg-[var(--color-brand-success)]/15 border border-[var(--color-brand-success)]/20 px-4 h-11 text-sm font-medium text-[var(--color-brand-success)] hover:bg-[var(--color-brand-success)]/25 transition active:scale-95 cursor-pointer flex items-center gap-2">
+          <button type="button" onClick={handleExportExcel} className="rounded-xl bg-[var(--color-brand-success)]/15 border border-[var(--color-brand-success)]/20 px-4 h-11 text-sm font-medium text-[var(--color-brand-success)] hover:bg-[var(--color-brand-success)]/25 transition active:scale-95 cursor-pointer flex items-center gap-2">
             <Download size={16} />
             Export .xlsx
           </button>
@@ -347,7 +241,7 @@ export default function FuelCostSummary({ fillUps = [] }: FuelCostSummaryProps) 
 
                 return (
                   <tr key={item.vehicleId} className="hover:bg-[var(--color-card-bg-hover)] transition-colors">
-                    <td className="px-4 py-3 font-semibold text-[var(--color-text-primary)] font-mono">{item.vehicleId}</td>
+                    <td className="px-4 py-3 font-semibold text-[var(--color-text-primary)] font-mono">{item.vehicleName || item.vehicleId}</td>
                     <td className="px-4 py-3 text-[var(--color-text-secondary)]">{item.model}</td>
                     <td className="px-4 py-3 text-center text-[var(--color-text-secondary)] font-mono">{item.fillUpsCount}</td>
                     <td className="px-4 py-3 text-center text-[var(--color-text-secondary)] font-mono">{item.totalLiters.toLocaleString()}L</td>

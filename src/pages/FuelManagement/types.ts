@@ -10,8 +10,14 @@ export interface FuelFillUp {
   odometer: number;
   station: string;
   filledBy: string;
-  efficiency: number;
+  efficiency: number | null;
   trend: 'above' | 'below' | 'normal';
+  isFullTank?: boolean;
+  isVoided?: boolean;
+  voidReason?: string | null;
+  stationId?: string;
+  fuelClassification?: string;
+  anomaly?: { id: string; status: string; severity?: string; note?: string | null; acknowledgedAt?: string | null } | null;
 }
 
 export interface VehicleEfficiency {

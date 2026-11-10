@@ -1,4 +1,4 @@
-export type MaintenanceCostPeriodType = 'monthly' | 'semiannual' | 'annual' | 'custom';
+export type MaintenanceCostPeriodType = 'monthly' | 'bimonthly' | 'semiannual' | 'annual' | 'custom';
 export type MaintenanceCostHalf = 'first' | 'second';
 export type DateRange = { from: string; to: string };
 
@@ -16,11 +16,18 @@ export function getMaintenanceCostPeriod(
   half: MaintenanceCostHalf,
   customFrom: string,
   customTo: string,
+  twoMonthBlock = 1,
 ): DateRange | null {
   if (!Number.isInteger(year) || year < 1900 || year > 9999) return null;
   if (type === 'monthly') {
     if (!Number.isInteger(month) || month < 1 || month > 12) return null;
     return { from: dateKey(year, month, 1), to: dateKey(year, month, lastDayOfMonth(year, month)) };
+  }
+  if (type === 'bimonthly') {
+    if (!Number.isInteger(twoMonthBlock) || twoMonthBlock < 1 || twoMonthBlock > 6) return null;
+    const firstMonth = (twoMonthBlock - 1) * 2 + 1;
+    const lastMonth = firstMonth + 1;
+    return { from: dateKey(year, firstMonth, 1), to: dateKey(year, lastMonth, lastDayOfMonth(year, lastMonth)) };
   }
   if (type === 'semiannual') {
     return half === 'first'

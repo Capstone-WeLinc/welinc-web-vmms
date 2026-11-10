@@ -22,6 +22,7 @@ import {
   getStatusTone,
 } from "../../components/ui";
 import { getVmmsDashboardData, type VmmsDashboardData } from "../../lib/api/dashboardService";
+import { getFuelReport, recordFuelReportExport, type FuelReport } from "../../lib/api/fuelService";
 import { exportRowsToCsv, exportRowsToExcel, printRowsAsPdf } from "../../lib/utils/frontendExport";
 import {
   isInTimeFilterRange,
@@ -167,6 +168,7 @@ function CompactLineChart({ rows }: { rows: { label: string; value: number }[] }
 
 export default function MaintenanceReports() {
   const [data, setData] = useState<VmmsDashboardData>({ schedules: [], vehicles: [], garages: [] });
+  const [fuelEntries, setFuelEntries] = useState<FuelReport["entries"]>([]);
   const [loading, setLoading] = useState(true);
   const [upcomingSearch, setUpcomingSearch] = useState("");
   const [upcomingSort, setUpcomingSort] = useState<UpcomingSort>("date-desc");
@@ -188,6 +190,14 @@ export default function MaintenanceReports() {
       .then(setData)
       .catch((error) => console.error("Failed to load maintenance reports", error))
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    getFuelReport()
+      .then((result) => { if (active) setFuelEntries(result.entries); })
+      .catch((error) => console.error("Failed to load fuel report totals", error));
+    return () => { active = false; };
   }, []);
 
   const vehicleById = useMemo(
@@ -230,7 +240,9 @@ export default function MaintenanceReports() {
     const completed = filteredReportSchedules.filter((task) => task.status === MaintenanceStatus.COMPLETED);
     const active = filteredReportSchedules.filter((task) => activeStatuses.includes(task.status));
     const maintenanceExpense = filteredReportSchedules.reduce((total, task) => total + getTaskCost(task), 0);
-    const estimatedFuelExpense = Math.round(data.vehicles.length * 3250);
+    const fuelExpense = fuelEntries
+      .filter((entry) => isInTimeFilterRange(new Date(`${entry.date}T00:00:00`), timeFilter, customDateFrom, customDateTo))
+      .reduce((total, entry) => total + entry.totalCost, 0);
     const downtimeVehicles = new Set(active.map((task) => task.vehicleId)).size;
     const fleetPerformance = data.vehicles.length
       ? Math.round(((data.vehicles.length - downtimeVehicles) / data.vehicles.length) * 100)
@@ -271,13 +283,13 @@ export default function MaintenanceReports() {
       completed,
       active,
       maintenanceExpense,
-      estimatedFuelExpense,
+      fuelExpense,
       downtimeVehicles,
       fleetPerformance,
       statusBreakdown,
       downtimeTrend,
     };
-  }, [data.vehicles.length, filteredReportSchedules]);
+  }, [data.vehicles.length, filteredReportSchedules, fuelEntries, timeFilter, customDateFrom, customDateTo]);
 
   const filteredUpcoming = useMemo(() => {
     const query = upcomingSearch.trim().toLowerCase();
@@ -345,39 +357,54 @@ export default function MaintenanceReports() {
   );
 
   const reportExportHeaders = [
+    "Record Type",
     "Work Order",
     "Vehicle",
     "Status",
     "Schedule Date",
     "Mechanic",
-    "Cost",
+    "Maintenance Cost",
+    "Fuel Cost",
+    "Liters",
+    "Average Efficiency (km/L)",
+    "Fuel Anomalies",
   ];
-  const reportExportRows = filteredReportSchedules.map((task) => {
+  const maintenanceExportRows = filteredReportSchedules.map((task) => {
     const vehicle = vehicleById.get(task.vehicleId);
     return [
+      "Maintenance",
       task.title,
       vehicle?.plateNumber ?? vehicle?.value ?? task.vehicleId,
       maintenanceStatusLabels[task.status],
       task.startReferenceDate || task.date || "Not scheduled",
       task.assignedDriver || "Unassigned",
       getTaskCost(task),
+      "", "", "", "",
     ];
   });
+  const filteredFuelForExport = fuelEntries.filter((entry) => isInTimeFilterRange(new Date(`${entry.date}T00:00:00`), timeFilter, customDateFrom, customDateTo));
+  const fuelExportRows = [...new Set(filteredFuelForExport.map((entry) => entry.vehicleId))].map((vehicleId) => {
+    const rows = filteredFuelForExport.filter((entry) => entry.vehicleId === vehicleId);
+    const efficiencies = rows.map((entry) => entry.efficiency).filter((value): value is number => value != null);
+    return ["Fuel", "", rows[0].vehicleName, "", "", "", "", rows.reduce((sum, entry) => sum + entry.totalCost, 0), rows.reduce((sum, entry) => sum + entry.liters, 0), efficiencies.length ? (efficiencies.reduce((sum, value) => sum + value, 0) / efficiencies.length).toFixed(1) : "Insufficient Data", rows.filter((entry) => entry.anomaly).length];
+  });
+  const reportExportRows = [...maintenanceExportRows, ...fuelExportRows];
   const exportDate = new Date().toISOString().slice(0, 10);
+  const auditFuelExport = (format: string) => { void recordFuelReportExport(format, customDateFrom || undefined, customDateTo || undefined).catch((error) => console.error("Failed to audit report export", error)); };
   const exportReportsCsv = () =>
-    exportRowsToCsv(
+    (auditFuelExport("csv"), exportRowsToCsv(
       `maintenance-reports-${exportDate}.csv`,
       reportExportHeaders,
       reportExportRows,
-    );
+    ));
   const exportReportsExcel = () =>
-    exportRowsToExcel(
+    (auditFuelExport("excel"), exportRowsToExcel(
       `maintenance-reports-${exportDate}.xls`,
       reportExportHeaders,
       reportExportRows,
-    );
+    ));
   const exportReportsPdf = () =>
-    printRowsAsPdf("Maintenance Reports", reportExportHeaders, reportExportRows);
+    (auditFuelExport("pdf"), printRowsAsPdf("Maintenance Reports", reportExportHeaders, reportExportRows));
 
   return (
     <div className="space-y-6 pt-6">
@@ -447,7 +474,7 @@ export default function MaintenanceReports() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <Metric label="Upcoming Maintenance" value={report.upcoming.length} icon={CalendarClock} color="#7c3aed" />
         <Metric label="Completed Services" value={report.completed.length} icon={CheckCircle2} color="#059669" />
-        <Metric label="Fuel + Maintenance" value={formatCurrency(report.estimatedFuelExpense + report.maintenanceExpense)} icon={PhilippinePeso} color="#0f766e" />
+        <Metric label="Fuel + Maintenance" value={formatCurrency(report.fuelExpense + report.maintenanceExpense)} icon={PhilippinePeso} color="#0f766e" />
         <Metric label="Vehicle Downtime" value={report.downtimeVehicles} icon={TimerReset} color="#dc2626" />
         <Metric label="Fleet Performance" value={`${report.fleetPerformance}%`} icon={Truck} color="#2563eb" />
       </div>
@@ -455,7 +482,7 @@ export default function MaintenanceReports() {
       <div className="grid gap-4 md:grid-cols-3">
         <Metric label="Due Within 7 Days" value={report.upcomingThisWeek.length} icon={CalendarClock} color="#2563eb" />
         <Metric label="Active Maintenance Load" value={`${report.active.length} work orders`} icon={TimerReset} color="#0f766e" />
-        <Metric label="Estimated Fuel Expense" value={formatCurrency(report.estimatedFuelExpense)} icon={PhilippinePeso} color="#d97706" />
+        <Metric label="Fuel Expense" value={formatCurrency(report.fuelExpense)} icon={PhilippinePeso} color="#d97706" />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">

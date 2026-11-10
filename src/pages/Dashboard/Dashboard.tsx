@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import { getVmmsDashboardData, type VmmsDashboardData } from "../../lib/api/dashboardService";
+import { getFuelAnomalies, type FuelAnomalyRecord } from "../../lib/api/fuelService";
 import { useAuthStore } from "../../store/authStore";
 import {
   MaintenanceStatus,
@@ -92,6 +93,7 @@ export default function Dashboard() {
   const currentUser = useAuthStore((state) => state.currentUser);
   const isMechanic = isMechanicRole(currentUser);
   const [data, setData] = useState<VmmsDashboardData>({ schedules: [], vehicles: [], garages: [] });
+  const [fuelAnomalies, setFuelAnomalies] = useState<FuelAnomalyRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<DashboardFilter>("all");
@@ -100,7 +102,12 @@ export default function Dashboard() {
     if (showLoading) setLoading(true);
     setError(null);
     try {
-      setData(await getVmmsDashboardData());
+      const [dashboardData, anomalyRows] = await Promise.all([
+        getVmmsDashboardData(),
+        currentUser?.role === "ADMIN" || currentUser?.role === "OPERATIONS" ? getFuelAnomalies() : Promise.resolve([]),
+      ]);
+      setData(dashboardData);
+      setFuelAnomalies(anomalyRows);
     } catch (loadError) {
       console.error("Unable to load VMMS dashboard", loadError);
       setError("Unable to load maintenance dashboard data.");
@@ -179,6 +186,7 @@ export default function Dashboard() {
     { label: "Active Work Orders", value: activeWorkOrders.length, icon: ClipboardList, color: "#0284c7", path: "/work-orders" },
     { label: "Due Maintenance", value: schedules.filter((task) => task.status === MaintenanceStatus.DUE).length, icon: CalendarClock, color: "#7c3aed", path: "/maintenance-scheduling" },
     { label: "Overdue Maintenance", value: schedules.filter((task) => task.status === MaintenanceStatus.OVERDUE).length, icon: AlertTriangle, color: "#dc2626", path: "/maintenance-scheduling" },
+    { label: "Open Fuel Anomalies", value: new Set(fuelAnomalies.filter((anomaly) => anomaly.status === "OPEN").map((anomaly) => anomaly.vehicle.plateNumber)).size, icon: AlertTriangle, color: "#b91c1c", path: "/fuel-management" },
     {
       label: filter === "month" ? "Completed This Month" : "Completed Maintenance",
       value: completedForSelectedPeriod.length,
@@ -236,7 +244,7 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-8">
         {loading
           ? Array.from({ length: 7 }).map((_, index) => (
             <div key={index} className="h-32 animate-pulse rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5">

@@ -1,10 +1,12 @@
-﻿import type { FuelFillUp } from '../types';
-import { Edit, Filter, Droplet, Eye, AlertTriangle } from 'lucide-react';
+import type { FuelFillUp } from '../types';
+import { Filter, Droplet, Eye, AlertTriangle } from 'lucide-react';
 import { useEffect, useState, useMemo } from 'react';
 import { printToPDF } from "../../../lib/utils/fuelExport";
+import { exportRowsAsXlsx } from '../../../lib/utils/excelExport';
 import ViewFuelLogModal from './ViewFuelLogModal';
 import {
   ActionMenu,
+  ConfirmationModal,
   DataTable,
   ExportButton,
   Pagination,
@@ -82,24 +84,28 @@ const filtersPanelClasses = 'grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-
 
 interface FuelLogProps {
   fillUps: FuelFillUp[];
-  onEdit?: (fillUp: FuelFillUp) => void;
-  onDelete?: (id: string) => void;
+  onDelete?: (id: string, reason: string) => Promise<void> | void;
   onLogFillUp?: () => void;
+  onExport?: (format: string) => void;
+  onFilteredFillUpsChange?: (fillUps: FuelFillUp[]) => void;
 }
 
-export default function FuelLog({ fillUps = [], onEdit, onDelete, onLogFillUp }: FuelLogProps) {
+export default function FuelLog({ fillUps = [], onDelete, onLogFillUp, onExport, onFilteredFillUpsChange }: FuelLogProps) {
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [vehicleFilter, setVehicleFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState('');
   const [stationFilter, setStationFilter] = useState('');
-  const [filledByFilter, setFilledByFilter] = useState('');
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [selectedViewRecord, setSelectedViewRecord] = useState<FuelFillUp | null>(null);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [voidTargetIds, setVoidTargetIds] = useState<string[]>([]);
+  const [voidReason, setVoidReason] = useState('');
+  const [voidError, setVoidError] = useState('');
+  const [isVoiding, setIsVoiding] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -110,11 +116,8 @@ export default function FuelLog({ fillUps = [], onEdit, onDelete, onLogFillUp }:
   };
 
   const vehiclesOptions = useMemo(() => {
-    const uniqueIds = Array.from(new Set(fillUps.map(f => f.vehicleId).filter(Boolean)));
-    return [
-      { value: 'All', label: 'All Vehicles' },
-      ...uniqueIds.map(v => ({ value: v, label: v }))
-    ];
+    const labels = new Map(fillUps.filter((fillUp) => fillUp.vehicleId).map((fillUp) => [fillUp.vehicleId, fillUp.vehicleName || fillUp.vehicleId]));
+    return [{ value: 'All', label: 'All Vehicles' }, ...Array.from(labels, ([value, label]) => ({ value, label }))];
   }, [fillUps]);
 
   const filteredFillUps = useMemo(() => {
@@ -132,21 +135,38 @@ export default function FuelLog({ fillUps = [], onEdit, onDelete, onLogFillUp }:
       const matchesStation = !stationFilter ||
         (fillUp.station ?? '').toLowerCase().includes(stationFilter.toLowerCase().trim());
 
-      const matchesFilledBy = !filledByFilter ||
-        (fillUp.filledBy ?? '').toLowerCase().includes(filledByFilter.toLowerCase().trim());
-
-      return matchesSearch && matchesVehicle && matchesDate && matchesStation && matchesFilledBy;
+      return matchesSearch && matchesVehicle && matchesDate && matchesStation;
     });
-  }, [fillUps, search, vehicleFilter, dateFilter, stationFilter, filledByFilter]);
+  }, [fillUps, search, vehicleFilter, dateFilter, stationFilter]);
+
+  useEffect(() => {
+    onFilteredFillUpsChange?.(filteredFillUps);
+  }, [filteredFillUps, onFilteredFillUpsChange]);
 
   const totalPages = Math.ceil(filteredFillUps.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedFillUps = filteredFillUps.slice(startIndex, startIndex + itemsPerPage);
 
-  const confirmDelete = () => {
-    if (selectedIds.length > 0) {
-      selectedIds.forEach(id => onDelete?.(id));
-      setSelectedIds([]);
+  const openVoidConfirmation = (ids: string[]) => {
+    setVoidTargetIds(ids);
+    setVoidReason('');
+    setVoidError('');
+  };
+
+  const confirmVoid = async () => {
+    const reason = voidReason.trim();
+    if (!reason) { setVoidError('A reason is required to void fuel entries.'); return; }
+    if (!onDelete || !voidTargetIds.length || isVoiding) return;
+    setIsVoiding(true);
+    setVoidError('');
+    try {
+      for (const id of voidTargetIds) await onDelete(id, reason);
+      setSelectedIds((current) => current.filter((id) => !voidTargetIds.includes(id)));
+      setVoidTargetIds([]);
+    } catch (error) {
+      setVoidError(error instanceof Error ? error.message : 'Unable to void the selected fuel entries.');
+    } finally {
+      setIsVoiding(false);
     }
   };
 
@@ -165,23 +185,17 @@ export default function FuelLog({ fillUps = [], onEdit, onDelete, onLogFillUp }:
   }, []);
 
   const handleExportXLSX = () => {
+    onExport?.('excel');
     if (filteredFillUps.length === 0) return;
-    const headers = ['Vehicle', 'ID', 'Model', 'Date', 'Liters', 'Price/L', 'Total Cost', 'Odometer', 'Station', 'Filled By'];
+    const headers = ['Vehicle', 'ID', 'Model', 'Date', 'Liters', 'Price/L', 'Total Cost', 'Odometer', 'Efficiency', 'Classification', 'Anomaly Status', 'Resolution Note', 'Station', 'Filled By'];
     const rows = filteredFillUps.map(f => [
-      f.vehicleName, f.vehicleId, f.vehicleModel, f.date, f.liters, f.pricePerLiter, f.totalCost, f.odometer, f.station, f.filledBy
+      f.vehicleName, f.vehicleId, f.vehicleModel, f.date, f.liters, f.pricePerLiter, f.totalCost, f.odometer, f.efficiency ?? 'N/A', f.fuelClassification ?? 'Insufficient Data', f.anomaly?.status ?? '', f.anomaly?.note ?? '', f.station, f.filledBy
     ]);
-    const csvContent = [headers, ...rows].map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `fuel_log_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    exportRowsAsXlsx(`fuel_log_${new Date().toISOString().split('T')[0]}.xlsx`, 'Fuel Log', [headers, ...rows]);
   };
 
   const handleExportPDF = () => {
+    onExport?.('pdf');
     printToPDF('fuel-log-table', 'fuel-log');
   };
 
@@ -222,13 +236,12 @@ export default function FuelLog({ fillUps = [], onEdit, onDelete, onLogFillUp }:
               handleExportXLSX();
             }}
           />
-          <button
-            onClick={onLogFillUp}
-            className={successActionButton}
-          >
-            <Droplet size={16} strokeWidth={1.8} />
-            Log Fill-up
-          </button>
+          {onLogFillUp && (
+            <button type="button" onClick={onLogFillUp} className={successActionButton}>
+              <Droplet size={16} strokeWidth={1.8} />
+              Log Fill-up
+            </button>
+          )}
         </div>
       </div>
 
@@ -271,17 +284,6 @@ export default function FuelLog({ fillUps = [], onEdit, onDelete, onLogFillUp }:
             }}
           />
 
-          {/* Filledâ€‘by Filter */}
-          <InputField
-            id="fuelFilledByFilter"
-            label="Filled By"
-            placeholder="e.g. Juan"
-            value={filledByFilter}
-            onChange={(e) => {
-              resetPagination();
-              setFilledByFilter(e.target.value);
-            }}
-          />
         </div>
       )}
 
@@ -291,15 +293,15 @@ export default function FuelLog({ fillUps = [], onEdit, onDelete, onLogFillUp }:
             <AlertTriangle className="w-5 h-5 text-[var(--color-brand-danger)] shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-sm font-bold text-[var(--color-brand-danger)]">
-                Delete {selectedIds.length} selected record{selectedIds.length > 1 ? 's' : ''}? This cannot be undone.
+                Void {selectedIds.length} selected record{selectedIds.length > 1 ? 's' : ''}? A reason is required and the entries will remain in the audit history.
               </p>
             </div>
             <div className="flex gap-2 shrink-0">
               <button
-                onClick={confirmDelete}
+                onClick={() => openVoidConfirmation(selectedIds)}
                 className="font-medium rounded-lg transition-all duration-200 active:scale-95 focus:outline-none bg-[var(--color-brand-danger)] hover:bg-[var(--color-brand-danger)]/90 text-white border border-[var(--color-brand-danger)] px-3 py-1.5 text-xs cursor-pointer"
               >
-                Yes, delete
+                Void selected
               </button>
               <button
                 onClick={() => setSelectedIds([])}
@@ -360,24 +362,35 @@ export default function FuelLog({ fillUps = [], onEdit, onDelete, onLogFillUp }:
               render: (fillUp) => (
                 <div>
                   <div className="font-bold text-[var(--color-text-primary)]">{fillUp.vehicleName ?? 'N/A'}</div>
-                  <div className="text-xs text-[var(--color-text-secondary)] font-mono">{fillUp.vehicleId} Â· {fillUp.vehicleModel}</div>
+                  <div className="text-xs text-[var(--color-text-secondary)] font-mono">{fillUp.vehicleId}  -  {fillUp.vehicleModel}</div>
                 </div>
               ),
             },
-            { key: 'date', header: 'Date', width: '10%', render: (fillUp) => fillUp.date },
+            { key: 'date', header: 'Date / Status', width: '15%', render: (fillUp) => <span>{fillUp.date}{fillUp.isVoided && <strong className="ml-2 text-red-600">VOID</strong>}<small className="block text-xs">{fillUp.isFullTank ? 'Full tank' : 'Partial'} · {fillUp.isVoided ? 'Excluded' : fillUp.fuelClassification}</small></span> },
             { key: 'liters', header: 'Liters', width: '8%', render: (fillUp) => <span className="font-mono">{fillUp.liters}L</span> },
-            { key: 'price', header: 'Price/L', width: '8%', render: (fillUp) => <span className="font-mono">â‚±{fillUp.pricePerLiter?.toFixed(2)}</span> },
-            { key: 'total', header: 'Total Cost', width: '10%', render: (fillUp) => <span className="font-bold font-mono">â‚±{fillUp.totalCost?.toLocaleString()}</span> },
+            { key: 'price', header: 'Price/L', width: '8%', render: (fillUp) => <span className="font-mono">₱{fillUp.pricePerLiter?.toFixed(2)}</span> },
+            { key: 'total', header: 'Total Cost', width: '10%', render: (fillUp) => <span className="font-bold font-mono">₱{fillUp.totalCost?.toLocaleString()}</span> },
             { key: 'odometer', header: 'Odometer', width: '10%', render: (fillUp) => <span className="font-mono">{fillUp.odometer?.toLocaleString()} km</span> },
             {
               key: 'efficiency',
               header: 'Efficiency',
               width: '10%',
               render: (fillUp) => (
-                <span className={`font-bold font-mono ${fillUp.trend === 'above' ? 'text-[var(--color-brand-success)]' : 'text-[var(--color-brand-danger)]'}`}>
-                  {fillUp.efficiency} km/L
+                <span className={`font-bold font-mono ${fillUp.isVoided ? 'text-[var(--color-text-secondary)]' : fillUp.anomaly ? 'text-[var(--color-brand-danger)]' : 'text-[var(--color-brand-success)]'}`}>
+                  {fillUp.isVoided ? '—' : fillUp.efficiency == null ? 'N/A' : `${fillUp.efficiency.toFixed(1)} km/L`}
                 </span>
               ),
+            },
+            {
+              key: 'anomalyResolution',
+              header: 'Anomaly / Resolution Note',
+              width: '16%',
+              render: (fillUp) => fillUp.anomaly ? (
+                <div className="max-w-56 whitespace-normal text-xs">
+                  <strong className="text-[var(--color-brand-danger)]">{fillUp.anomaly.status}</strong>
+                  <p className="mt-1">{fillUp.anomaly.note?.trim() || 'No resolution note recorded.'}</p>
+                </div>
+              ) : <span className="text-[var(--color-text-secondary)]">-</span>,
             },
             { key: 'station', header: 'Station', width: '10%', render: (fillUp) => fillUp.station ?? 'N/A' },
             { key: 'filledBy', header: 'Filled By', width: '10%', render: (fillUp) => fillUp.filledBy ?? 'N/A' },
@@ -404,22 +417,14 @@ export default function FuelLog({ fillUps = [], onEdit, onDelete, onLogFillUp }:
                         handleView(fillUp);
                       },
                     },
-                    {
-                      label: 'Edit',
-                      icon: Edit,
-                      onClick: () => {
-                        setOpenActionMenuId(null);
-                        onEdit?.(fillUp);
-                      },
-                    },
-                    {
-                      label: 'Delete',
+                    ...(!fillUp.isVoided && onDelete ? [{
+                      label: 'Void',
                       danger: true,
                       onClick: () => {
                         setOpenActionMenuId(null);
-                        onDelete?.(fillUp.id);
+                        openVoidConfirmation([fillUp.id]);
                       },
-                    },
+                    }] : []),
                   ]}
                 />
               ),
@@ -450,7 +455,6 @@ export default function FuelLog({ fillUps = [], onEdit, onDelete, onLogFillUp }:
                   setVehicleFilter('All');
                   setDateFilter('');
                   setStationFilter('');
-                  setFilledByFilter('');
                 }}
                 className="text-[var(--color-brand-primary)] hover:text-[var(--color-brand-primary-dark)] transition text-left cursor-pointer font-medium"
               >
@@ -471,6 +475,26 @@ export default function FuelLog({ fillUps = [], onEdit, onDelete, onLogFillUp }:
           fillUp={selectedViewRecord}
         />
       )}
+      <ConfirmationModal
+        isOpen={voidTargetIds.length > 0}
+        title="Void Fuel Entry"
+        variant="danger"
+        confirmLabel={isVoiding ? 'Voiding...' : `Void ${voidTargetIds.length} ${voidTargetIds.length === 1 ? 'Entry' : 'Entries'}`}
+        busy={isVoiding}
+        confirmDisabled={!voidReason.trim()}
+        message={(
+          <div className="space-y-3 text-left">
+            <p>Void {voidTargetIds.length} selected fuel {voidTargetIds.length === 1 ? 'entry' : 'entries'}? The records will remain in the audit history and be excluded from fuel totals and efficiency calculations.</p>
+            <label className="block text-sm font-medium">
+              Void reason (required)
+              <textarea required maxLength={2000} rows={3} value={voidReason} disabled={isVoiding} onChange={(event) => setVoidReason(event.target.value)} className="mt-2 block w-full rounded-lg border border-[#c8ced8] bg-white p-3 text-sm outline-none focus:border-[#070b45]" />
+            </label>
+            {voidError && <p role="alert" className="text-sm text-red-700">{voidError}</p>}
+          </div>
+        )}
+        onConfirm={() => { void confirmVoid(); }}
+        onCancel={() => { if (!isVoiding) setVoidTargetIds([]); }}
+      />
     </div>
   );
 }
