@@ -124,10 +124,16 @@ export default function FuelLog({ fillUps = [], onDelete, onLogFillUp, onExport,
   const filteredFillUps = useMemo(() => {
     return filterFuelFillUps(fillUps, { search, vehicleId: vehicleFilter, date: dateFilter, station: stationFilter });
   }, [fillUps, search, vehicleFilter, dateFilter, stationFilter]);
+  const selectableFillUps = useMemo(() => filteredFillUps.filter((fillUp) => !fillUp.isVoided), [filteredFillUps]);
 
   useEffect(() => {
     onFilteredFillUpsChange?.(filteredFillUps);
   }, [filteredFillUps, onFilteredFillUpsChange]);
+
+  useEffect(() => {
+    const selectableIds = new Set(selectableFillUps.map((fillUp) => fillUp.id));
+    setSelectedIds((current) => current.filter((id) => selectableIds.has(id)));
+  }, [selectableFillUps]);
 
   const totalPages = Math.ceil(filteredFillUps.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -146,7 +152,11 @@ export default function FuelLog({ fillUps = [], onDelete, onLogFillUp, onExport,
     setIsVoiding(true);
     setVoidError('');
     try {
-      for (const id of voidTargetIds) await onDelete(id, reason);
+      for (const id of voidTargetIds) {
+        await onDelete(id, reason);
+        setVoidTargetIds((current) => current.filter((targetId) => targetId !== id));
+        setSelectedIds((current) => current.filter((selectedId) => selectedId !== id));
+      }
       setSelectedIds((current) => current.filter((id) => !voidTargetIds.includes(id)));
       setVoidTargetIds([]);
     } catch (error) {
@@ -272,7 +282,7 @@ export default function FuelLog({ fillUps = [], onDelete, onLogFillUp, onExport,
         </div>
       )}
 
-      {selectedIds.length > 0 && (
+      {onDelete && selectedIds.length > 0 && (
         <div className="mb-4 rounded-xl border border-[var(--color-brand-danger)]/30 bg-[var(--color-brand-danger)]/10 p-4 animate-fadeIn">
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-[var(--color-brand-danger)] shrink-0 mt-0.5" />
@@ -307,16 +317,17 @@ export default function FuelLog({ fillUps = [], onDelete, onLogFillUp, onExport,
           minWidth="1120px"
           emptyMessage="No records found matching your filters."
           columns={[
-            {
+            ...(onDelete ? [{
               key: 'select',
               header: (
                 <input
                   type="checkbox"
                   className={checkboxClasses}
-                  checked={filteredFillUps.length > 0 && selectedIds.length === filteredFillUps.length}
+                  disabled={selectableFillUps.length === 0}
+                  checked={selectableFillUps.length > 0 && selectableFillUps.every((fillUp) => selectedIds.includes(fillUp.id))}
                   onChange={e => {
                     if (e.target.checked) {
-                      setSelectedIds(filteredFillUps.map(f => f.id));
+                      setSelectedIds(selectableFillUps.map((fillUp) => fillUp.id));
                     } else {
                       setSelectedIds([]);
                     }
@@ -324,13 +335,15 @@ export default function FuelLog({ fillUps = [], onDelete, onLogFillUp, onExport,
                 />
               ),
               width: '4%',
-              render: (fillUp) => (
+              render: (fillUp: FuelFillUp) => (
                 <input
                   type="checkbox"
                   className={checkboxClasses}
                   checked={selectedIds.includes(fillUp.id)}
+                  disabled={Boolean(fillUp.isVoided)}
                   onClick={(event) => event.stopPropagation()}
                   onChange={e => {
+                    if (fillUp.isVoided) return;
                     if (e.target.checked) {
                       setSelectedIds(prev => [...prev, fillUp.id]);
                     } else {
@@ -339,7 +352,7 @@ export default function FuelLog({ fillUps = [], onDelete, onLogFillUp, onExport,
                   }}
                 />
               ),
-            },
+            }] : []),
             {
               key: 'vehicle',
               header: 'Vehicle',

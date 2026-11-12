@@ -53,6 +53,13 @@ function KPIStatCard({ icon, value, label, subtitle, iconBgColor, iconColor }: K
 
 type Tab = 'fuel-log' | 'efficiency-trends' | 'anomaly-detection';
 type ReportTab = 'fleet-wide' | 'per-vehicle' | 'anomaly-log';
+const MAX_FUEL_ANOMALY_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const FUEL_ANOMALY_ATTACHMENT_TYPES: Record<string, string> = {
+  '.pdf': 'application/pdf',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+};
 
 function currentMonthPeriod() {
   const now = new Date();
@@ -156,6 +163,28 @@ export default function FuelManagement() {
     try { const saved = await updateFuelAnomalyThreshold(parsed); setAnomalyThreshold(saved.thresholdPercent); setThresholdDraft(String(saved.thresholdPercent)); }
     catch (error) { setPageError(error instanceof Error ? error.message : 'Only Admin can change the anomaly threshold.'); }
     finally { setSavingThreshold(false); }
+  };
+
+  const handleAnomalyReportUpload = async (anomalyId: string, file: File) => {
+    setPageError('');
+    const extension = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
+    if (!FUEL_ANOMALY_ATTACHMENT_TYPES[extension] || file.type.toLowerCase() !== FUEL_ANOMALY_ATTACHMENT_TYPES[extension]) {
+      setPageError('Choose a PDF, JPG, or PNG report.');
+      return;
+    }
+    if (file.size > MAX_FUEL_ANOMALY_ATTACHMENT_BYTES) {
+      setPageError('Fuel anomaly reports must be 10 MB or smaller.');
+      return;
+    }
+    try {
+      await uploadFuelAnomalyAttachment(anomalyId, file);
+      await refresh();
+    } catch (error) {
+      const isPayloadTooLarge = typeof error === 'object' && error !== null && 'status' in error && error.status === 413;
+      setPageError(isPayloadTooLarge
+        ? 'Fuel anomaly reports must be 10 MB or smaller.'
+        : error instanceof Error ? error.message : 'Unable to upload report.');
+    }
   };
 
   const applyPeriod = (event: React.FormEvent<HTMLFormElement>) => {
@@ -296,7 +325,61 @@ export default function FuelManagement() {
         )}
         {activeTab === 'anomaly-detection' && <div className="space-y-3">{anomalyCards.length === 0 ? <p className="text-sm text-[var(--color-text-secondary)]">No open fuel anomalies.</p> : anomalyCards.map((anomaly) => {
           const record = anomalies.find((item) => item.vehicle.plateNumber === anomaly.vehicleId && item.status === 'OPEN')!;
-          return <div key={record.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4"><div><strong>{anomaly.vehicleName}  -  {anomaly.efficiency.toFixed(1)} km/L</strong><div className="text-sm">Rolling average {anomaly.fleetAvg.toFixed(1)} km/L  -  {record.severity}</div><div className="text-sm">{record.note || 'No resolution note recorded'}</div><div className="mt-2 flex flex-wrap gap-2">{record.attachments?.map((attachment) => <button key={attachment.id} className="text-xs underline" onClick={async () => { const file = await getFuelAnomalyAttachment(record.id, attachment.id); const url = URL.createObjectURL(file); const link = document.createElement('a'); link.href = url; link.download = attachment.name; link.click(); URL.revokeObjectURL(url); }}>{attachment.name}</button>)}</div></div><div className="flex flex-wrap gap-2">{canWrite && <><button onClick={async () => { const note = window.prompt('Add or update resolution note'); if (note !== null) { try { await updateFuelAnomaly(record.id, note); await refresh(); } catch (error) { setPageError(error instanceof Error ? error.message : 'Unable to save note.'); } } }} className="rounded-lg border px-3 py-2 text-sm">Save note</button>{record.severity === 'ESCALATED' || record.severity === 'CRITICAL' ? <label className="cursor-pointer rounded-lg border px-3 py-2 text-sm">Attach report<input type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" className="hidden" onChange={async (event) => { const file = event.target.files?.[0]; if (file) { try { await uploadFuelAnomalyAttachment(record.id, file); await refresh(); } catch (error) { setPageError(error instanceof Error ? error.message : 'Unable to upload report.'); } } }} /></label> : null}<button onClick={async () => { try { await updateFuelAnomaly(record.id); await refresh(); } catch (error) { setPageError(error instanceof Error ? error.message : 'Unable to resolve anomaly.'); } }} className="rounded-lg border px-3 py-2 text-sm">Resolve</button></>}{canAcknowledge && record.severity === 'CRITICAL' && !record.acknowledgedAt && <button onClick={async () => { const remark = window.prompt('Optional acknowledgment remark') ?? ''; try { await acknowledgeFuelAnomaly(record.id, remark); await refresh(); } catch (error) { setPageError(error instanceof Error ? error.message : 'Unable to acknowledge anomaly.'); } }} className="rounded-lg border px-3 py-2 text-sm">Acknowledge</button>}</div></div>;
+          return (
+            <div key={record.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
+              <div>
+                <strong>{anomaly.vehicleName} - {anomaly.efficiency.toFixed(1)} km/L</strong>
+                <div className="text-sm">Rolling average {anomaly.fleetAvg.toFixed(1)} km/L - {record.severity}</div>
+                <div className="text-sm">{record.note || 'No resolution note recorded'}</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {record.attachments?.map((attachment) => (
+                    <button key={attachment.id} className="text-xs underline" onClick={async () => {
+                      const file = await getFuelAnomalyAttachment(record.id, attachment.id);
+                      const url = URL.createObjectURL(file);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = attachment.name;
+                      link.click();
+                      URL.revokeObjectURL(url);
+                    }}>{attachment.name}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {canWrite && <>
+                  <button onClick={async () => {
+                    const note = window.prompt('Add or update resolution note');
+                    if (note !== null) {
+                      try { await updateFuelAnomaly(record.id, note); await refresh(); }
+                      catch (error) { setPageError(error instanceof Error ? error.message : 'Unable to save note.'); }
+                    }
+                  }} className="rounded-lg border px-3 py-2 text-sm">Save note</button>
+                  {(record.severity === 'ESCALATED' || record.severity === 'CRITICAL') && (
+                    <label className="cursor-pointer rounded-lg border px-3 py-2 text-sm">Attach report (PDF, JPG, PNG; max 10 MB)
+                      <input aria-label="Attach fuel anomaly report (PDF, JPG, or PNG, max 10 MB)" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" className="hidden" onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        event.currentTarget.value = '';
+                        if (file) void handleAnomalyReportUpload(record.id, file);
+                      }} />
+                    </label>
+                  )}
+                  {(record.severity !== 'CRITICAL' || record.acknowledgedAt) && (
+                    <button onClick={async () => {
+                      try { await updateFuelAnomaly(record.id); await refresh(); }
+                      catch (error) { setPageError(error instanceof Error ? error.message : 'Unable to resolve anomaly.'); }
+                    }} className="rounded-lg border px-3 py-2 text-sm">Resolve</button>
+                  )}
+                </>}
+                {canAcknowledge && record.severity === 'CRITICAL' && !record.acknowledgedAt && (
+                  <button onClick={async () => {
+                    const remark = window.prompt('Optional acknowledgment remark') ?? '';
+                    try { await acknowledgeFuelAnomaly(record.id, remark); await refresh(); }
+                    catch (error) { setPageError(error instanceof Error ? error.message : 'Unable to acknowledge anomaly.'); }
+                  }} className="rounded-lg border px-3 py-2 text-sm">Acknowledge</button>
+                )}
+              </div>
+            </div>
+          );
         })}</div>}
       </div>
 
