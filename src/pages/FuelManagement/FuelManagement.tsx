@@ -12,6 +12,7 @@ import { getMaintenanceCostPeriod, type MaintenanceCostHalf, type MaintenanceCos
 import { getVehicles } from '../../lib/api/vmmsApi';
 import { acknowledgeFuelAnomaly, createFuelEntry, createFuelStation, getFuelAnomalies, getFuelAnomalyAttachment, getFuelAnomalyThreshold, getFuelEntries, getFuelStations, recordFuelReportExport, updateFuelAnomaly, updateFuelAnomalyThreshold, uploadFuelAnomalyAttachment, voidFuelEntry, type FuelAnomalyRecord, type FuelStation, type FuelVehicle } from '../../lib/api/fuelService';
 import type { FuelFillUp } from './types';
+import { excludeVoidedFuelFillUps } from './fuelReportData';
 
 type KPIStatCardProps = {
   icon: ReactNode;
@@ -130,7 +131,8 @@ export default function FuelManagement() {
     setFuelLogFilteredFillUps(filtered);
     setHasFuelLogFilterSnapshot(true);
   }, []);
-  const kpiFilteredFillUps = (hasFuelLogFilterSnapshot ? fuelLogFilteredFillUps : fillUps).filter((item) => !item.isVoided);
+  const filteredFuelData = hasFuelLogFilterSnapshot ? fuelLogFilteredFillUps : fillUps;
+  const kpiFilteredFillUps = useMemo(() => excludeVoidedFuelFillUps(filteredFuelData), [filteredFuelData]);
 
   const totalFillUps = kpiFilteredFillUps.length;
   const totalLiters = kpiFilteredFillUps.reduce((sum, item) => sum + item.liters, 0);
@@ -280,7 +282,7 @@ export default function FuelManagement() {
 
       {/* Tab Content Panels */}
       <div className="space-y-6">
-        {activeTab === 'fuel-log' && (
+        <div hidden={activeTab !== 'fuel-log'}>
           <FuelLog
             fillUps={fillUps}
             onDelete={canWrite ? handleVoid : undefined}
@@ -288,7 +290,7 @@ export default function FuelManagement() {
             onFilteredFillUpsChange={handleFilteredFillUpsChange}
             onExport={(format) => { void recordFuelReportExport(format, appliedFrom || undefined, appliedTo || undefined).catch((error) => setPageError(error instanceof Error ? error.message : 'Unable to record export.')); }}
           />
-        )}
+        </div>
         {activeTab === 'efficiency-trends' && (
           <EfficiencyTrendsWithFilters vehicles={efficiencyByVehicle} fleetAvg={avgEfficiency} />
         )}

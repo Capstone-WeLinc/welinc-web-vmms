@@ -1,9 +1,10 @@
 import type { FuelFillUp } from '../types';
 import { Filter, Droplet, Eye, AlertTriangle } from 'lucide-react';
 import { useEffect, useState, useMemo } from 'react';
-import { printToPDF } from "../../../lib/utils/fuelExport";
+import { exportRowsToPDF } from "../../../lib/utils/fuelExport";
 import { exportRowsAsXlsx } from '../../../lib/utils/excelExport';
 import ViewFuelLogModal from './ViewFuelLogModal';
+import { buildFuelLogExportRows, filterFuelFillUps, fuelLogExportHeaders } from '../fuelReportData';
 import {
   ActionMenu,
   ConfirmationModal,
@@ -121,22 +122,7 @@ export default function FuelLog({ fillUps = [], onDelete, onLogFillUp, onExport,
   }, [fillUps]);
 
   const filteredFillUps = useMemo(() => {
-    return fillUps.filter(fillUp => {
-      const searchLower = search.toLowerCase().trim();
-
-      const matchesSearch = !searchLower ||
-        (fillUp.vehicleName ?? '').toLowerCase().includes(searchLower) ||
-        (fillUp.vehicleId ?? '').toLowerCase().includes(searchLower) ||
-        (fillUp.station ?? '').toLowerCase().includes(searchLower);
-
-      const matchesVehicle = vehicleFilter === 'All' || fillUp.vehicleId === vehicleFilter;
-      const matchesDate = !dateFilter || fillUp.date === dateFilter;
-
-      const matchesStation = !stationFilter ||
-        (fillUp.station ?? '').toLowerCase().includes(stationFilter.toLowerCase().trim());
-
-      return matchesSearch && matchesVehicle && matchesDate && matchesStation;
-    });
+    return filterFuelFillUps(fillUps, { search, vehicleId: vehicleFilter, date: dateFilter, station: stationFilter });
   }, [fillUps, search, vehicleFilter, dateFilter, stationFilter]);
 
   useEffect(() => {
@@ -186,17 +172,16 @@ export default function FuelLog({ fillUps = [], onDelete, onLogFillUp, onExport,
 
   const handleExportXLSX = () => {
     onExport?.('excel');
-    if (filteredFillUps.length === 0) return;
-    const headers = ['Vehicle', 'ID', 'Model', 'Date', 'Liters', 'Price/L', 'Total Cost', 'Odometer', 'Efficiency', 'Classification', 'Anomaly Status', 'Resolution Note', 'Station', 'Filled By'];
-    const rows = filteredFillUps.map(f => [
-      f.vehicleName, f.vehicleId, f.vehicleModel, f.date, f.liters, f.pricePerLiter, f.totalCost, f.odometer, f.efficiency ?? 'N/A', f.fuelClassification ?? 'Insufficient Data', f.anomaly?.status ?? '', f.anomaly?.note ?? '', f.station, f.filledBy
-    ]);
-    exportRowsAsXlsx(`fuel_log_${new Date().toISOString().split('T')[0]}.xlsx`, 'Fuel Log', [headers, ...rows]);
+    const rows = buildFuelLogExportRows(filteredFillUps);
+    if (rows.length === 0) return;
+    exportRowsAsXlsx(`fuel_log_${new Date().toISOString().split('T')[0]}.xlsx`, 'Fuel Log', [fuelLogExportHeaders, ...rows]);
   };
 
   const handleExportPDF = () => {
     onExport?.('pdf');
-    printToPDF('fuel-log-table', 'fuel-log');
+    const rows = buildFuelLogExportRows(filteredFillUps);
+    if (rows.length === 0) return;
+    exportRowsToPDF('fuel-log', 'Fuel Log', fuelLogExportHeaders, rows);
   };
 
   return (

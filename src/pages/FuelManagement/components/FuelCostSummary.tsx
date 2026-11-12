@@ -1,22 +1,13 @@
 import type { FuelFillUp } from '../types';
 import { Download, Calendar, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { useMemo, useState, useRef, useEffect } from 'react';
-import { printToPDF } from "../../../lib/utils/fuelExport";
+import { exportRowsToPDF } from "../../../lib/utils/fuelExport";
 import { exportRowsAsXlsx } from '../../../lib/utils/excelExport';
+import { excludeVoidedFuelFillUps, summarizeFuelFillUps } from '../fuelReportData';
 
 interface FuelCostSummaryProps {
   fillUps: FuelFillUp[];
   onExport?: (format: string) => void;
-}
-
-interface VehicleSummary {
-  vehicleId: string;
-  vehicleName: string;
-  model: string;
-  fillUpsCount: number;
-  totalLiters: number;
-  totalCost: number;
-  totalEfficiencyPoints: number;
 }
 
 export default function FuelCostSummary({ fillUps = [], onExport }: FuelCostSummaryProps) {
@@ -41,13 +32,14 @@ export default function FuelCostSummary({ fillUps = [], onExport }: FuelCostSumm
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const activeFillUps = useMemo(() => excludeVoidedFuelFillUps(fillUps), [fillUps]);
   const uniqueVehicles = useMemo(() => {
-    const vehicles = new Map(fillUps.filter((fillUp) => fillUp.vehicleId).map((fillUp) => [fillUp.vehicleId, fillUp.vehicleName || fillUp.vehicleId]));
+    const vehicles = new Map(activeFillUps.filter((fillUp) => fillUp.vehicleId).map((fillUp) => [fillUp.vehicleId, fillUp.vehicleName || fillUp.vehicleId]));
     return [{ id: 'All', label: 'All Vehicles' }, ...Array.from(vehicles, ([id, label]) => ({ id, label }))];
-  }, [fillUps]);
+  }, [activeFillUps]);
 
   const filteredFillUps = useMemo(() => {
-    return fillUps.filter(f => {
+    return activeFillUps.filter(f => {
       const matchesVehicle = selectedVehicle === 'All' || f.vehicleId === selectedVehicle;
 
       const cleanQuery = searchQuery.trim().toLowerCase();
@@ -62,39 +54,20 @@ export default function FuelCostSummary({ fillUps = [], onExport }: FuelCostSumm
       const fitsTimeline = (!startDate || f.date >= startDate) && (!endDate || f.date <= endDate);
       return matchesVehicle && fitsTimeline && matchesSearch;
     });
-  }, [fillUps, selectedVehicle, startDate, endDate, searchQuery]);
+  }, [activeFillUps, selectedVehicle, startDate, endDate, searchQuery]);
 
-  const summaryData = useMemo(() => {
-    const vehicleMap = filteredFillUps.reduce<Record<string, VehicleSummary>>((acc, fillUp) => {
-      const id = fillUp.vehicleId;
-      if (!acc[id]) {
-        acc[id] = {
-          vehicleId: id,
-          vehicleName: fillUp.vehicleName ?? 'N/A',
-          model: fillUp.vehicleModel ?? 'N/A',
-          fillUpsCount: 0,
-          totalLiters: 0,
-          totalCost: 0,
-          totalEfficiencyPoints: 0,
-        };
-      }
-
-      acc[id].fillUpsCount += 1;
-      acc[id].totalLiters += fillUp.liters ?? 0;
-      acc[id].totalCost += fillUp.totalCost ?? 0;
-      acc[id].totalEfficiencyPoints += fillUp.efficiency ?? 0;
-
-      return acc;
-    }, {});
-
-    return Object.values(vehicleMap);
-  }, [filteredFillUps]);
+  const summaryData = useMemo(() => summarizeFuelFillUps(filteredFillUps), [filteredFillUps]);
 
   const totalPages = Math.ceil(summaryData.length / itemsPerPage);
 
   const handleExportPDF = () => {
     onExport?.('pdf');
-    printToPDF('fuel-cost-summary-table', 'fuel-cost-summary');
+    exportRowsToPDF('fuel-cost-summary', 'Fuel Cost Summary', ['Vehicle', 'Model', 'Total Fill-Ups', 'Total Liters', 'Average Price per Liter (PHP)', 'Total Fuel Cost (PHP)', 'Average Efficiency (km/L)'], summaryData.map((item) => [
+      item.vehicleName, item.model, item.fillUpsCount, item.totalLiters,
+      item.totalLiters > 0 ? `₱${(item.totalCost / item.totalLiters).toFixed(2)}` : '₱0.00',
+      `₱${item.totalCost.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`,
+      item.averageEfficiency == null ? 'Insufficient Data' : `${item.averageEfficiency.toFixed(1)} km/L`,
+    ]));
   };
   const handleExportExcel = () => {
     onExport?.('excel');
@@ -107,7 +80,7 @@ export default function FuelCostSummary({ fillUps = [], onExport }: FuelCostSumm
       item.totalLiters,
       item.totalLiters > 0 ? item.totalCost / item.totalLiters : 0,
       item.totalCost,
-      item.fillUpsCount > 0 ? item.totalEfficiencyPoints / item.fillUpsCount : 0,
+      item.averageEfficiency ?? 'Insufficient Data',
     ]);
     exportRowsAsXlsx(`fuel_cost_summary_${new Date().toISOString().split('T')[0]}.xlsx`, 'Fuel Cost Summary', [headers, ...rows]);
   };
@@ -123,16 +96,17 @@ export default function FuelCostSummary({ fillUps = [], onExport }: FuelCostSumm
         acc.fillUps += item.fillUpsCount;
         acc.liters += item.totalLiters;
         acc.totalCost += item.totalCost;
-        acc.efficiencySum += item.totalEfficiencyPoints;
+        acc.efficiencySum += (item.averageEfficiency ?? 0) * item.efficiencyCount;
+        acc.efficiencyCount += item.efficiencyCount;
         return acc;
       },
-      { fillUps: 0, liters: 0, totalCost: 0, efficiencySum: 0 }
+      { fillUps: 0, liters: 0, totalCost: 0, efficiencySum: 0, efficiencyCount: 0 }
     );
 
     return {
       ...totals,
       avgPricePerLiter: totals.liters > 0 ? totals.totalCost / totals.liters : 0,
-      avgEfficiency: filteredFillUps.length > 0 ? totals.efficiencySum / filteredFillUps.length : 0,
+      avgEfficiency: totals.efficiencyCount > 0 ? totals.efficiencySum / totals.efficiencyCount : 0,
     };
   }, [summaryData, filteredFillUps]);
 
@@ -237,7 +211,7 @@ export default function FuelCostSummary({ fillUps = [], onExport }: FuelCostSumm
             ) : (
               paginatedSummaryData.map((item) => {
                 const calculatedAvgPrice = item.totalLiters > 0 ? item.totalCost / item.totalLiters : 0;
-                const calculatedAvgEfficiency = item.fillUpsCount > 0 ? item.totalEfficiencyPoints / item.fillUpsCount : 0;
+                const calculatedAvgEfficiency = item.averageEfficiency;
 
                 return (
                   <tr key={item.vehicleId} className="hover:bg-[var(--color-card-bg-hover)] transition-colors">
@@ -247,8 +221,8 @@ export default function FuelCostSummary({ fillUps = [], onExport }: FuelCostSumm
                     <td className="px-4 py-3 text-center text-[var(--color-text-secondary)] font-mono">{item.totalLiters.toLocaleString()}L</td>
                     <td className="px-4 py-3 text-center text-[var(--color-text-secondary)] font-mono">₱{calculatedAvgPrice.toFixed(2)}</td>
                     <td className="px-4 py-3 text-center text-[var(--color-text-primary)] font-semibold font-mono">₱{item.totalCost.toLocaleString()}</td>
-                    <td className={`px-4 py-3 text-right font-semibold font-mono ${calculatedAvgEfficiency >= 8.0 ? 'text-[var(--color-brand-success)]' : 'text-[var(--color-brand-danger)]'}`}>
-                      {calculatedAvgEfficiency.toFixed(1)} km/L
+                    <td className={`px-4 py-3 text-right font-semibold font-mono ${calculatedAvgEfficiency != null && calculatedAvgEfficiency >= 8.0 ? 'text-[var(--color-brand-success)]' : 'text-[var(--color-brand-danger)]'}`}>
+                      {calculatedAvgEfficiency == null ? 'Insufficient Data' : `${calculatedAvgEfficiency.toFixed(1)} km/L`}
                     </td>
                   </tr>
                 );

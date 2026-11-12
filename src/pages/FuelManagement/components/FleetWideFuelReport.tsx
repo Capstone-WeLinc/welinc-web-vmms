@@ -1,22 +1,18 @@
 import type { FuelFillUp } from '../types';
 import { Download } from 'lucide-react';
 import { exportRowsAsXlsx } from '../../../lib/utils/excelExport';
-import { printToPDF } from '../../../lib/utils/fuelExport';
+import { exportRowsToPDF } from '../../../lib/utils/fuelExport';
+import { summarizeFuelFillUps } from '../fuelReportData';
 
 export default function FleetWideReport({ fillUps, onExport }: { fillUps: FuelFillUp[]; onExport?: (format: string) => void }) {
-  const vehicles = [...new Set(fillUps.map((entry) => entry.vehicleId))];
-  const rows = vehicles.map((vehicleId) => {
-    const entries = fillUps.filter((entry) => entry.vehicleId === vehicleId);
-    const efficiencies = entries.map((entry) => entry.efficiency).filter((value): value is number => value != null);
-    return {
-      plate: entries[0]?.vehicleName || vehicleId,
-      model: entries[0]?.vehicleModel || '',
-      count: entries.length,
-      liters: entries.reduce((sum, entry) => sum + entry.liters, 0),
-      cost: entries.reduce((sum, entry) => sum + entry.totalCost, 0),
-      efficiency: efficiencies.length ? efficiencies.reduce((sum, value) => sum + value, 0) / efficiencies.length : null,
-    };
-  });
+  const rows = summarizeFuelFillUps(fillUps).map((summary) => ({
+    plate: summary.vehicleName,
+    model: summary.model,
+    count: summary.fillUpsCount,
+    liters: summary.totalLiters,
+    cost: summary.totalCost,
+    efficiency: summary.averageEfficiency,
+  }));
   const exportExcel = () => {
     onExport?.('excel');
     const headers = ['Vehicle', 'Model', 'Fill-ups', 'Total Liters', 'Total Fuel Cost (PHP)', 'Average Efficiency (km/L)'];
@@ -28,7 +24,12 @@ export default function FleetWideReport({ fillUps, onExport }: { fillUps: FuelFi
     <div className="space-y-3">
       <div className="flex justify-end gap-2">
         <button type="button" onClick={exportExcel} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"><Download size={15} />Export Excel</button>
-        <button type="button" onClick={() => { onExport?.('pdf'); printToPDF('fuel-fleet-report-table', 'fleet-fuel-cost'); }} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"><Download size={15} />Export PDF</button>
+        <button type="button" onClick={() => {
+          onExport?.('pdf');
+          exportRowsToPDF('fleet-fuel-cost', 'Fleet Fuel Cost', ['Vehicle', 'Model', 'Fill-ups', 'Liters', 'Fuel cost', 'Average km/L'], rows.map((row) => [
+            row.plate, row.model, row.count, `${row.liters.toFixed(2)} L`, `₱${row.cost.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`, row.efficiency == null ? 'Insufficient Data' : `${row.efficiency.toFixed(1)} km/L`,
+          ]));
+        }} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"><Download size={15} />Export PDF</button>
       </div>
       <div id="fuel-fleet-report-table" className="overflow-x-auto">
         <table className="w-full text-left text-sm">
