@@ -1,15 +1,18 @@
-import { useState, useEffect, useCallback, type MouseEvent } from "react";
-import { Eye, Plus, Truck } from "lucide-react";
+import { useState, useEffect, useCallback, useRef, type ChangeEvent, type MouseEvent } from "react";
+import { Eye, FileSpreadsheet, Plus, Truck } from "lucide-react";
 import {
   getVehicleRecords,
   createVehicleRecord,
   updateVehicleRecord,
   deleteVehicleRecord,
+  previewVehicleImport,
+  saveVehicleImport,
   getGarageRecords,
   getVehicleAuditHistory,
   type VehicleRecord,
   type VehicleAuditEntry,
   type GarageFullRecord,
+  type VehicleImportRow,
 } from "../../lib/api/vmmsApi";
 import {
   DataTable,
@@ -76,6 +79,9 @@ export default function Vehicles() {
   const [form, setForm] = useState(emptyForm());
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importRows, setImportRows] = useState<VehicleImportRow[] | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deletePlate, setDeletePlate] = useState("");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -222,6 +228,53 @@ export default function Vehicles() {
     }
   };
 
+  const handleImportFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !canManage) return;
+    if (!file.name.toLowerCase().endsWith(".xlsx")) {
+      showToast("Choose an .xlsx workbook.", "error");
+      return;
+    }
+    setImporting(true);
+    setImportRows(null);
+    try {
+      const preview = await previewVehicleImport(file);
+      setImportRows(preview.rows);
+      showToast(`Preview ready: review ${preview.rows.length} row${preview.rows.length === 1 ? "" : "s"}, then save.`, "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Vehicle import failed.", "error");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const updateImportRow = (index: number, field: keyof Omit<VehicleImportRow, "row" | "errors">, value: string) => {
+    setImportRows((current) => current?.map((row, rowIndex) => rowIndex === index
+      ? { ...row, [field]: value, errors: [] }
+      : row) ?? null);
+  };
+
+  const handleSaveImport = async () => {
+    if (!canManage || !importRows?.length || importing) return;
+    setImporting(true);
+    try {
+      const result = await saveVehicleImport(importRows);
+      setImportRows(result.rows.length ? result.rows : null);
+      if (result.imported > 0) await load();
+      showToast(
+        result.rows.length
+          ? `Saved ${result.imported} vehicle${result.imported === 1 ? "" : "s"}; edit the ${result.rows.length} remaining row${result.rows.length === 1 ? "" : "s"} and save again.`
+          : `Saved ${result.imported} vehicle${result.imported === 1 ? "" : "s"}.`,
+        result.rows.length ? "error" : "success",
+      );
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not save vehicle import.", "error");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const filtered = filterAndSortVehiclesByBranch(
     vehicles.filter(
       (v) =>
@@ -328,18 +381,66 @@ export default function Vehicles() {
             <p className="text-sm text-[#64748b]">Manage company trucks and logistics vehicles.</p>
           </div>
         </div>
-        {canManage && <button
-          id="create-vehicle-btn"
-          onClick={openCreate}
-          className="flex items-center gap-2 rounded-xl bg-[#070b45] px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-[#11175f]"
-        >
-          <Plus className="h-4 w-4" />
-          Create Vehicle
-        </button>}
+        {canManage && <div className="flex flex-wrap gap-2">
+          <input ref={importInputRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={handleImportFile} />
+          <button type="button" onClick={() => importInputRef.current?.click()} disabled={importing} className="flex items-center gap-2 rounded-xl border border-[#c8ced8] bg-white px-4 py-2.5 text-sm font-semibold text-[#141827] transition hover:bg-slate-50 disabled:opacity-60">
+            <FileSpreadsheet className="h-4 w-4" />
+            {importing ? "Preparing…" : "Upload .xlsx"}
+          </button>
+          <button
+            id="create-vehicle-btn"
+            onClick={openCreate}
+            className="flex items-center gap-2 rounded-xl bg-[#070b45] px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-[#11175f]"
+          >
+            <Plus className="h-4 w-4" />
+            Create Vehicle
+          </button>
+        </div>}
       </div>
 
       {/* Table Card */}
       <div className="overflow-hidden rounded-2xl border border-[#dde4ef] bg-white shadow-sm">
+        {importRows && (
+          <section className="border-b border-[#dde4ef] bg-slate-50 p-5" aria-label="Vehicle import preview">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold text-[#141827]">Review vehicle import</h2>
+                <p className="text-sm text-[#64748b]">No vehicles have been saved. Edit the rows, then save when ready.</p>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setImportRows(null)} disabled={importing} className="rounded-lg border border-[#c8ced8] bg-white px-3 py-2 text-sm font-semibold text-[#344158] disabled:opacity-60">Cancel</button>
+                <button type="button" onClick={handleSaveImport} disabled={importing || importRows.length === 0} className="rounded-lg bg-[#070b45] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{importing ? "Saving…" : "Save vehicles"}</button>
+              </div>
+            </div>
+            <div className="overflow-x-auto rounded-lg border border-[#dde4ef] bg-white">
+              <table className="min-w-[1150px] w-full text-left text-xs">
+                <thead className="bg-slate-100 text-[#344158]"><tr>
+                  <th className="p-2">Row</th><th className="p-2">Plate Number</th><th className="p-2">Make</th><th className="p-2">Model</th><th className="p-2">Year</th><th className="p-2">Engine Type</th><th className="p-2">Truck Size/Category</th><th className="p-2">Garage Branch</th><th className="p-2">Odometer Baseline</th><th className="p-2">Validation</th>
+                </tr></thead>
+                <tbody className="divide-y divide-[#dde4ef]">{importRows.map((row, index) => {
+                  const cellClass = "w-full min-w-24 rounded border border-[#c8ced8] px-2 py-1.5 text-xs";
+                  const textCell = (field: keyof Omit<VehicleImportRow, "row" | "errors">, type = "text") => <input aria-label={`Row ${row.row} ${field}`} className={cellClass} type={type} value={row[field]} onChange={(event) => updateImportRow(index, field, event.target.value)} />;
+                  const garageIsRegistered = garages.some((garage) => garage.name.toLowerCase() === row.garageBranch.toLowerCase());
+                  return <tr key={`${row.row}-${index}`}>
+                    <td className="p-2 font-semibold">{row.row}</td>
+                    <td className="p-2">{textCell("plateNumber")}</td>
+                    <td className="p-2">{textCell("make")}</td>
+                    <td className="p-2">{textCell("model")}</td>
+                    <td className="p-2">{textCell("year", "number")}</td>
+                    <td className="p-2">{textCell("engineType")}</td>
+                    <td className="p-2">{textCell("truckSizeCategory")}</td>
+                    <td className="p-2"><select aria-label={`Row ${row.row} garage branch`} className={cellClass} value={row.garageBranch} onChange={(event) => updateImportRow(index, "garageBranch", event.target.value)}>
+                      {!garageIsRegistered && row.garageBranch && <option value={row.garageBranch}>{row.garageBranch} (unregistered)</option>}
+                      <option value="">Select branch</option>{garages.map((garage) => <option key={garage.id} value={garage.name}>{garage.name}</option>)}
+                    </select></td>
+                    <td className="p-2">{textCell("odometerBaseline", "number")}</td>
+                    <td className="max-w-64 p-2 text-red-700">{row.errors.length ? row.errors.join(" ") : "Ready"}</td>
+                  </tr>;
+                })}</tbody>
+              </table>
+            </div>
+          </section>
+        )}
         <div className="border-b border-[#dde4ef] p-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <SearchInput

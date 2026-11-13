@@ -1207,6 +1207,39 @@ export async function createVehicleRecord(
   });
 }
 
+export type VehicleImportResult = {
+  imported: number;
+  rows: VehicleImportRow[];
+};
+
+export type VehicleImportRow = {
+  row: number;
+  plateNumber: string;
+  make: string;
+  model: string;
+  year: string;
+  engineType: string;
+  truckSizeCategory: string;
+  garageBranch: string;
+  odometerBaseline: string;
+  errors: string[];
+};
+
+export async function previewVehicleImport(file: File): Promise<VehicleImportResult> {
+  if (!useBackend) throw new Error("Vehicle import requires the VMMS backend.");
+  const body = new FormData();
+  body.append("file", file);
+  return apiRequest<VehicleImportResult>("/vehicles/import/preview", { method: "POST", body });
+}
+
+export async function saveVehicleImport(rows: VehicleImportRow[]): Promise<VehicleImportResult> {
+  if (!useBackend) throw new Error("Vehicle import requires the VMMS backend.");
+  return fetchJSON<VehicleImportResult>("/vehicles/import", {
+    method: "POST",
+    body: JSON.stringify({ rows }),
+  });
+}
+
 export async function updateVehicleRecord(
   id: string,
   dto: Partial<Omit<VehicleRecord, "id" | "garageId" | "garageName">> & { garageId?: string },
