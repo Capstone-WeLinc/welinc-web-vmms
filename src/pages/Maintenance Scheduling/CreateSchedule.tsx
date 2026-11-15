@@ -18,10 +18,7 @@ import {
   getChecklistTemplates,
   getChecklistTemplateId,
 } from "../../lib/api/maintenanceService";
-import {
-  getUsers,
-  type UserRecord,
-} from "../../lib/api/userService";
+import { getUsers, type UserRecord } from "../../lib/api/vmmsApi";
 import {
   getGarages,
 } from "../../lib/api/locationService";
