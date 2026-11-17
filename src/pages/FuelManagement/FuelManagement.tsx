@@ -84,9 +84,9 @@ export default function FuelManagement() {
   const [thresholdDraft, setThresholdDraft] = useState('20');
   const [savingThreshold, setSavingThreshold] = useState(false);
   const [pageError, setPageError] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(canView);
 
-  const initialPeriod = useMemo(currentMonthPeriod, []);
+  const initialPeriod = useMemo(() => currentMonthPeriod(), []);
   const now = new Date();
   const [periodType, setPeriodType] = useState<MaintenanceCostPeriodType>('monthly');
   const [periodYear, setPeriodYear] = useState(now.getFullYear());
@@ -118,7 +118,14 @@ export default function FuelManagement() {
     finally { if (showLoading) setLoading(false); }
   }, [canView]);
   const refresh = useCallback((showLoading = false) => load(appliedPeriod, showLoading), [appliedPeriod, load]);
-  useEffect(() => { if (canView) void load(initialPeriod); else setLoading(false); }, [canView, initialPeriod, load]);
+  useEffect(() => {
+    if (!canView) {
+      return;
+    }
+    // The initial fetch owns the loading state for this page.
+    const initialLoad = window.setTimeout(() => void load(initialPeriod), 0);
+    return () => window.clearTimeout(initialLoad);
+  }, [canView, initialPeriod, load]);
   useEffect(() => {
     if (!canView) return undefined;
     const intervalId = window.setInterval(() => { void load(appliedPeriod, false); }, 60_000);

@@ -11,6 +11,7 @@ import Profile from './pages/Profile/Profile';
 import AIAnalyticsPage from './pages/AIAnalytics/AIAnalytics';
 import Vehicles from './pages/Vehicles/Vehicles';
 import Garages from './pages/Garages/Garages';
+import OutsourcedProviders from './pages/OutsourcedProviders/OutsourcedProviders';
 import MaintenanceReports from './pages/MaintenanceReports/MaintenanceReports';
 import MaintenanceCosting from './pages/MaintenanceCosting/MaintenanceCosting';
 import AuditLogs from './pages/AuditLogs/AuditLogs';
@@ -98,6 +99,7 @@ export default function App() {
           <Route path="/fuel-management" element={<Protected><FuelManagement /></Protected>} />
           <Route path="/vehicles" element={<Protected><Vehicles /></Protected>} />
           <Route path="/garages" element={<Protected><Garages /></Protected>} />
+          <Route path="/outsourced-providers" element={<Protected><OutsourcedProviders /></Protected>} />
           <Route path="/audit-logs" element={['ADMIN', 'OPERATIONS'].includes(currentUser?.role ?? '') ? <Protected><AuditLogs /></Protected> : <Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

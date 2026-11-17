@@ -109,12 +109,15 @@ export default function Vehicles() {
   }, []);
 
   useEffect(() => {
-    load();
+    const initialLoad = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(initialLoad);
   }, [load]);
 
   const vehicleDetailsId = vehicleDetails?.id;
   useEffect(() => {
     if (!vehicleDetailsId || !canViewAudit) {
+      // Clear details from the previous vehicle when its modal closes or access changes.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAuditEntries([]);
       setAuditError(false);
       return;

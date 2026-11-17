@@ -193,6 +193,7 @@ function normalizeMaintenanceTask(task: MaintenanceTask): MaintenanceTask {
       ? task.priority
       : MaintenancePriority.MEDIUM,
     accountType: normalizeAccountTypeValue(task.accountType),
+    outsourcedProvider: task.outsourcedProvider,
     triggerType: normalizeTriggerTypeValue(task.triggerType),
     intervalType: normalizeIntervalTypeValue(task.intervalType),
     assignedDriver:
@@ -392,6 +393,31 @@ export async function getSystems() {
   if (!useBackend) return mockSystems.map((s) => ({ ...s }));
 
   return fetchJSON<{ id: string; name: string }[]>("/systems");
+}
+
+export interface OutsourcedProviderRecord {
+  id: string;
+  name: string;
+  isActive: boolean;
+}
+
+export async function getOutsourcedProviders() {
+  if (!useBackend) return [] as OutsourcedProviderRecord[];
+  return fetchJSON<OutsourcedProviderRecord[]>("/config/outsourced-providers");
+}
+
+export async function createOutsourcedProvider(name: string) {
+  return fetchJSON<OutsourcedProviderRecord>("/config/outsourced-providers", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function updateOutsourcedProvider(id: string, values: { name?: string; isActive?: boolean }) {
+  return fetchJSON<OutsourcedProviderRecord>(`/config/outsourced-providers/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(values),
+  });
 }
 
 export async function updateWorkOrder(task: MaintenanceTask) {
@@ -602,6 +628,7 @@ export async function createMaintenanceSchedule(
     priority: schedule.priority ?? MaintenancePriority.MEDIUM,
     garageId: schedule.garageId,
     accountType: schedule.accountType,
+    outsourcedProvider: schedule.outsourcedProvider,
     odometerReading: schedule.odometerReading,
     triggerType: schedule.triggerType,
     intervalKm: schedule.intervalKm,
@@ -647,6 +674,7 @@ export async function updateMaintenanceSchedule(schedule: MaintenanceTask) {
     priority: schedule.priority ?? MaintenancePriority.MEDIUM,
     garageId: schedule.garageId,
     accountType: schedule.accountType,
+    outsourcedProvider: schedule.outsourcedProvider,
     odometerReading: schedule.odometerReading,
     triggerType: schedule.triggerType,
     intervalKm: schedule.intervalKm,
@@ -808,7 +836,7 @@ export async function getVehicles(): Promise<VehicleOption[]> {
       status?: string;
       odometer?: number;
     }>
-  >("/vehicles");
+  >("/vehicles?activeOnly=true");
 
   return vehicles.map((vehicle) => ({
     id: vehicle.id,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Ban, Eye, FileText, KeyRound, Pencil, Trash2 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import ViewModal from "./components/ViewModal";
@@ -295,6 +295,8 @@ export default function MaintenanceLogs() {
   const isOperations = currentUser?.role === "OPERATIONS";
 
   useEffect(() => {
+    // Reset action reason and validation state whenever the confirmation target changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLogActionReason("");
     setLogActionError("");
   }, [pendingLogConfirmation]);
@@ -475,22 +477,19 @@ export default function MaintenanceLogs() {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
-  const normalizeText = (value?: string | null) =>
-    value?.trim().toLowerCase() ?? "";
-
-  const isAssignedToCurrentMechanic = (log: MaintenanceLog) => {
+  const isAssignedToCurrentMechanic = useCallback((log: MaintenanceLog) => {
     if (!isMechanic || !currentUser) return true;
 
     const currentNames = [currentUser.name, currentUser.email]
-      .map(normalizeText)
+      .map((value) => value?.trim().toLowerCase() ?? "")
       .filter(Boolean);
-    const mechanic = normalizeText(log.mechanic);
+    const mechanic = log.mechanic.trim().toLowerCase();
 
     return currentNames.some(
       (name) =>
         mechanic === name || mechanic.includes(name) || name.includes(mechanic),
     );
-  };
+  }, [currentUser, isMechanic]);
 
   const filteredLogs = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -514,7 +513,7 @@ export default function MaintenanceLogs() {
 
       return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
     });
-  }, [logs, searchQuery, selectedStatuses, dateFrom, dateTo, currentUser, isMechanic]);
+  }, [logs, searchQuery, selectedStatuses, dateFrom, dateTo, isAssignedToCurrentMechanic]);
 
   const totalPages = Math.max(1, Math.ceil(filteredLogs.length / itemsPerPage));
   const activePage = Math.min(currentPage, totalPages);
@@ -526,6 +525,8 @@ export default function MaintenanceLogs() {
   );
 
   useEffect(() => {
+    // Clamp pagination after filtering changes the number of available pages.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrentPage((page) => Math.min(page, totalPages));
   }, [totalPages]);
 

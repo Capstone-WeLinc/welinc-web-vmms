@@ -99,7 +99,7 @@ function parseAiSummary(raw: string): AiBlock[] {
     if (!line) continue; // treat blank lines as visual breaks only
 
     // Numbered list item: "1. …" or "1) …"
-    const numberedMatch = line.match(/^\d+[\).]\s+(.+)/);
+    const numberedMatch = line.match(/^\d+[).]\s+(.+)/);
     if (numberedMatch) {
       flushBullet();
       numberedAccum.push(numberedMatch[1]);
@@ -457,7 +457,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
     return () => window.clearTimeout(timeout);
   }, [searchQuery]);
 
-  const snapshot = overview?.snapshot ?? {};
+  const snapshot = useMemo(() => overview?.snapshot ?? {}, [overview?.snapshot]);
   const summaryMetrics = overview?.summaryMetrics;
   const forecast = overview?.forecast;
   const anomalies = overview?.anomalies;

@@ -18,7 +18,7 @@ import {
   getChecklistTemplates,
   getChecklistTemplateId,
 } from "../../lib/api/maintenanceService";
-import { getUsers, type UserRecord } from "../../lib/api/vmmsApi";
+import { getOutsourcedProviders, getUsers, type OutsourcedProviderRecord, type UserRecord } from "../../lib/api/vmmsApi";
 import {
   getGarages,
 } from "../../lib/api/locationService";
@@ -102,6 +102,7 @@ export default function CreateScheduleModal({
   const [accountType, setAccountType] = useState<AccountType | "">("");
   const [priority, setPriority] = useState<MaintenancePriority>(MaintenancePriority.MEDIUM);
   const [outsourcedProvider, setOutsourcedProvider] = useState("");
+  const [outsourcedProviders, setOutsourcedProviders] = useState<OutsourcedProviderRecord[]>([]);
   const [systemAffected, setSystemAffected] = useState("");
   const [odometerReading, setOdometerReading] = useState("");
   const [intervalKm, setIntervalKm] = useState("");
@@ -124,6 +125,10 @@ export default function CreateScheduleModal({
   const [duplicateSchedule, setDuplicateSchedule] =
     useState<MaintenanceTask | null>(null);
   const isOdometerOnlyUpdate = Boolean(odometerOnly && editingTask);
+
+  useEffect(() => {
+    getOutsourcedProviders().then(setOutsourcedProviders).catch(() => setOutsourcedProviders([]));
+  }, []);
 
   useEffect(() => {
     getChecklistTemplates()
@@ -837,13 +842,20 @@ export default function CreateScheduleModal({
                   <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
                     OUTSOURCED COMPANY / SERVICE PROVIDER
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={outsourcedProvider}
                     onChange={(e) => setOutsourcedProvider(e.target.value)}
-                    placeholder="Enter company or service provider"
-                    className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
-                  />
+                    required
+                    className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
+                  >
+                    <option value="">Select a registered provider</option>
+                    {outsourcedProviders.filter((provider) => provider.isActive || provider.name === outsourcedProvider).map((provider) => (
+                      <option key={provider.id} value={provider.name}>{provider.name}{!provider.isActive ? " (inactive)" : ""}</option>
+                    ))}
+                  </select>
+                  {outsourcedProviders.filter((provider) => provider.isActive).length === 0 && (
+                    <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Operations must register an active provider before outsourced work can be scheduled.</p>
+                  )}
                 </div>
               ) : null}
 

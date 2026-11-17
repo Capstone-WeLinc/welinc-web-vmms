@@ -20,8 +20,8 @@ import {
   SortSelect,
   StatusBadge,
   TableToolbar,
-  getStatusTone,
 } from "../../components/ui";
+import { getStatusTone } from "../../components/ui/tableUtils";
 import { getVmmsDashboardData, type VmmsDashboardData } from "../../lib/api/dashboardService";
 import { getFuelReport, recordFuelReportExport, type FuelReport } from "../../lib/api/fuelService";
 import { getScheduledFleetReports, type ScheduledFleetReport } from "../../lib/api/scheduledReportsService";
@@ -199,6 +199,8 @@ export default function MaintenanceReports() {
 
   useEffect(() => {
     let active = true;
+    // Refresh the loading and error state for each explicit scheduled-report reload.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setScheduledReportsLoading(true);
     setScheduledReportsError(null);
     getScheduledFleetReports()

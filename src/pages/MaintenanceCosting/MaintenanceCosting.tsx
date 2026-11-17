@@ -61,7 +61,7 @@ function exportTruckCosts(trucks: MaintenanceCostTruck[], from: string, to: stri
 export default function MaintenanceCosting() {
   const currentUser = useAuthStore((state) => state.currentUser);
   const isAdmin = currentUser?.role === 'ADMIN';
-  const initialPeriod = useMemo(currentMonthPeriod, []);
+  const initialPeriod = useMemo(() => currentMonthPeriod(), []);
   const [from, setFrom] = useState(initialPeriod.from);
   const [to, setTo] = useState(initialPeriod.to);
   const now = new Date();
@@ -95,7 +95,8 @@ export default function MaintenanceCosting() {
   }, []);
 
   useEffect(() => {
-    void load(initialPeriod);
+    const initialLoad = window.setTimeout(() => void load(initialPeriod), 0);
+    return () => window.clearTimeout(initialLoad);
   }, [initialPeriod, load]);
 
   useEffect(() => {

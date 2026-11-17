@@ -19,7 +19,6 @@ import {
   Trash2,
 } from "lucide-react";
 
-const navy = "#070b45";
 
 export type StandardStatus =
   | "Completed"
@@ -260,23 +259,6 @@ export const TableToolbar = ({
     {actions && <div className="flex items-center gap-2">{actions}</div>}
   </div>
 );
-
-export function getStatusTone(status: string): string {
-  const normalized = status.toLowerCase();
-  if (normalized.includes("complete") || normalized === "active") return "#059669";
-  if (normalized.includes("progress")) return "#2563eb";
-  if (normalized === "due") return "#7c3aed";
-  if (
-    normalized.includes("overdue") ||
-    normalized.includes("flag") ||
-    normalized.includes("failed") ||
-    normalized.includes("cancel")
-  ) {
-    return "#dc2626";
-  }
-  if (normalized.includes("pending") || normalized.includes("hold")) return "#d97706";
-  return "#64748b";
-}
 
 interface FilterPanelProps {
   open: boolean;
@@ -604,10 +586,7 @@ export const ActionMenu = ({
   const hasActions = itemCount > 0;
 
   useEffect(() => {
-    if (!open || !hasActions) {
-      setPosition(null);
-      return;
-    }
+    if (!open || !hasActions) return;
 
     const updatePosition = () => {
       const button = buttonRef.current;
@@ -639,7 +618,7 @@ export const ActionMenu = ({
 
   if (!hasActions) return null;
 
-  const menu = position ? (
+  const menu = open && hasActions && position ? (
     <div
       className="fixed z-[100] w-40 overflow-hidden rounded-xl border border-[#dce3ed] bg-white py-1.5 text-left shadow-[0_10px_24px_rgba(15,23,42,0.22)]"
       style={position}
@@ -862,5 +841,3 @@ export const ToastNotification = ({ type, message }: ToastProps) => {
     </div>
   );
 };
-
-export const brandNavy = navy;

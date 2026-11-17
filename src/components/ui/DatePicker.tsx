@@ -33,6 +33,8 @@ export default function DatePicker({
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    // Keep the visible month aligned when a form changes the selected date.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (value) setCalendarMonth(getInitialMonth(value));
   }, [value]);
 

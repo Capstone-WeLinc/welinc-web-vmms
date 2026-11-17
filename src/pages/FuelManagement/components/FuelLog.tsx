@@ -132,6 +132,8 @@ export default function FuelLog({ fillUps = [], onDelete, onLogFillUp, onExport,
 
   useEffect(() => {
     const selectableIds = new Set(selectableFillUps.map((fillUp) => fillUp.id));
+    // Keep bulk selection limited to the currently visible non-voided fuel records.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedIds((current) => current.filter((id) => selectableIds.has(id)));
   }, [selectableFillUps]);
 

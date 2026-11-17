@@ -37,7 +37,10 @@ export default function AuditLogs() {
     }
   }, [source]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const initialLoad = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(initialLoad);
+  }, [load]);
 
   const filteredRecords = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();

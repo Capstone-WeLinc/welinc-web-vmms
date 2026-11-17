@@ -108,7 +108,7 @@ export default function FuelCostSummary({ fillUps = [], onExport }: FuelCostSumm
       avgPricePerLiter: totals.liters > 0 ? totals.totalCost / totals.liters : 0,
       avgEfficiency: totals.efficiencyCount > 0 ? totals.efficiencySum / totals.efficiencyCount : 0,
     };
-  }, [summaryData, filteredFillUps]);
+  }, [summaryData]);
 
   return (
     <div className="space-y-6">

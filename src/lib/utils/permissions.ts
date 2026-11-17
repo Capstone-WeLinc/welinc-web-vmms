@@ -59,6 +59,7 @@ const OPERATIONS_NAV_PATHS = new Set([
   "/dashboard",
   "/vehicles",
   "/garages",
+  "/outsourced-providers",
   "/maintenance-scheduling",
   "/work-orders",
   "/maintenance-logs",

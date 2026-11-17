@@ -78,6 +78,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: "Fleet Vehicles", icon: Truck, path: "/vehicles" },
       { label: "Service Garages", icon: Warehouse, path: "/garages" },
+      { label: "Outsourced Providers", icon: Warehouse, path: "/outsourced-providers" },
     ],
   },
   {
@@ -177,12 +178,18 @@ export default function Sidebar({ currentUser }: SidebarProps) {
 
   useEffect(() => {
     if (!currentUser) {
+      // Do not retain one user's notifications after sign-out or account switching.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setNotifications([]);
       return;
     }
-    void loadNotifications();
+    // Defer the initial request so its loading state is applied after this effect completes.
+    const initialLoad = window.setTimeout(() => void loadNotifications(), 0);
     const interval = window.setInterval(() => { void loadNotifications(); }, 30_000);
-    return () => window.clearInterval(interval);
+    return () => {
+      window.clearTimeout(initialLoad);
+      window.clearInterval(interval);
+    };
   }, [currentUser, loadNotifications]);
 
   const markNotificationAsRead = async (notificationId: string) => {
@@ -238,6 +245,8 @@ export default function Sidebar({ currentUser }: SidebarProps) {
       lastPathRef.current = location.pathname;
       const activeCategory = findActiveGroupCategory(location.pathname);
       if (activeCategory) {
+        // Route changes should expand the matching group while preserving manual toggles otherwise.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setExpandedCategory(activeCategory);
       }
     }

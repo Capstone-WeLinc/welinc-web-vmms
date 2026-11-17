@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
@@ -98,7 +98,7 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<DashboardFilter>("all");
 
-  const loadDashboard = async (showLoading = true) => {
+  const loadDashboard = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
     setError(null);
     try {
@@ -114,19 +114,20 @@ export default function Dashboard() {
     } finally {
       if (showLoading) setLoading(false);
     }
-  };
+  }, [currentUser]);
 
   useEffect(() => {
-    void loadDashboard();
+    const initialLoad = window.setTimeout(() => void loadDashboard(), 0);
     const refreshDashboard = () => void loadDashboard(false);
     const refreshInterval = window.setInterval(refreshDashboard, 30_000);
     window.addEventListener("focus", refreshDashboard);
 
     return () => {
+      window.clearTimeout(initialLoad);
       window.clearInterval(refreshInterval);
       window.removeEventListener("focus", refreshDashboard);
     };
-  }, []);
+  }, [loadDashboard]);
 
   const schedules = useMemo(() => {
     if (!isMechanic || !currentUser) return data.schedules;
@@ -340,7 +341,7 @@ export default function Dashboard() {
               <tbody className="divide-y divide-[var(--color-divider)]">
                 {overdue.map((task) => {
                   const due = dateOf(task);
-                  const days = Number.isNaN(due.getTime()) ? "—" : Math.max(0, Math.floor((Date.now() - due.getTime()) / 86400000));
+                  const days = Number.isNaN(due.getTime()) ? "—" : Math.max(0, Math.floor((Date.now() - due.getTime()) / 86400000)); // eslint-disable-line react-hooks/purity -- Overdue age is intentionally refreshed whenever the dashboard renders.
                   return <tr key={task.id}><td className="px-3 py-3">{vehicleLabel(task)}</td><td className="px-3 py-3 font-bold text-red-600">{days}</td><td className="px-3 py-3">{task.assignedDriver || "Unassigned"}</td><td className="px-3 py-3">{garageNames.get(task.garageId ?? "") ?? "Unassigned"}</td></tr>;
                 })}
                 {!loading && overdue.length === 0 ? <tr><td colSpan={4} className="px-4 py-10 text-center text-[var(--color-text-secondary)]">No overdue maintenance.</td></tr> : null}

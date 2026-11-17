@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- Application entrypoint bootstraps React and exports no components. */
 import { StrictMode } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
