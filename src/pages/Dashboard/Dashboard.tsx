@@ -109,7 +109,7 @@ export default function Dashboard() {
       setData(dashboardData);
       setFuelAnomalies(anomalyRows);
     } catch (loadError) {
-      console.error("Unable to load VMMS dashboard", loadError);
+      console.error("Unable to load dashboard", loadError);
       setError("Unable to load maintenance dashboard data.");
     } finally {
       if (showLoading) setLoading(false);
@@ -222,7 +222,7 @@ export default function Dashboard() {
     <div className="space-y-6">
       <PageHeader
         icon={LayoutDashboard}
-        title="VMMS DASHBOARD"
+        title="DASHBOARD"
         subtitle={isMechanic ? "Your assigned maintenance workload" : "Vehicle maintenance operations overview"}
         action={
           <select

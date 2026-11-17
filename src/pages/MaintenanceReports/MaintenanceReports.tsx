@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   PhilippinePeso,
   PieChart,
+  RefreshCw,
   TimerReset,
   Truck,
 } from "lucide-react";
@@ -23,6 +24,7 @@ import {
 } from "../../components/ui";
 import { getVmmsDashboardData, type VmmsDashboardData } from "../../lib/api/dashboardService";
 import { getFuelReport, recordFuelReportExport, type FuelReport } from "../../lib/api/fuelService";
+import { getScheduledFleetReports, type ScheduledFleetReport } from "../../lib/api/scheduledReportsService";
 import { exportRowsToCsv, exportRowsToExcel, printRowsAsPdf } from "../../lib/utils/frontendExport";
 import {
   isInTimeFilterRange,
@@ -88,15 +90,13 @@ function Metric({
   color: string;
 }) {
   return (
-    <div className="enterprise-kpi-card">
-      <div className="relative ml-2 flex items-start justify-between gap-4">
-        <div>
-          <p className="enterprise-kpi-label">{label}</p>
-          <p className="enterprise-kpi-value">{value}</p>
-        </div>
-        <div className="enterprise-icon-box" style={{ backgroundColor: `${color}14`, color }}>
-          <Icon size={22} strokeWidth={2.2} />
-        </div>
+    <div className="flex h-full min-h-32 min-w-0 items-start justify-between gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card">
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold uppercase leading-5 tracking-wide text-[var(--color-text-secondary)]">{label}</p>
+        <p className="mt-2 break-words text-2xl font-bold leading-tight tabular-nums text-[var(--color-text-primary)]">{value}</p>
+      </div>
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: `${color}14`, color }} aria-hidden="true">
+        <Icon size={22} strokeWidth={2.2} />
       </div>
     </div>
   );
@@ -184,6 +184,11 @@ export default function MaintenanceReports() {
   const [customDateFrom, setCustomDateFrom] = useState("");
   const [customDateTo, setCustomDateTo] = useState("");
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const [scheduledReports, setScheduledReports] = useState<ScheduledFleetReport[]>([]);
+  const [scheduledReportsLoading, setScheduledReportsLoading] = useState(true);
+  const [scheduledReportsError, setScheduledReportsError] = useState<string | null>(null);
+  const [scheduledReportsReload, setScheduledReportsReload] = useState(0);
+  const [scheduledReportsVisibleCount, setScheduledReportsVisibleCount] = useState(10);
 
   useEffect(() => {
     getVmmsDashboardData()
@@ -191,6 +196,19 @@ export default function MaintenanceReports() {
       .catch((error) => console.error("Failed to load maintenance reports", error))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    setScheduledReportsLoading(true);
+    setScheduledReportsError(null);
+    getScheduledFleetReports()
+      .then((reports) => { if (active) setScheduledReports(reports); })
+      .catch((error) => {
+        if (active) setScheduledReportsError(error instanceof Error ? error.message : "Unable to load scheduled reports.");
+      })
+      .finally(() => { if (active) setScheduledReportsLoading(false); });
+    return () => { active = false; };
+  }, [scheduledReportsReload]);
 
   useEffect(() => {
     let active = true;
@@ -471,13 +489,80 @@ export default function MaintenanceReports() {
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
         <Metric label="Upcoming Maintenance" value={report.upcoming.length} icon={CalendarClock} color="#7c3aed" />
         <Metric label="Completed Services" value={report.completed.length} icon={CheckCircle2} color="#059669" />
         <Metric label="Fuel + Maintenance" value={formatCurrency(report.fuelExpense + report.maintenanceExpense)} icon={PhilippinePeso} color="#0f766e" />
         <Metric label="Vehicle Downtime" value={report.downtimeVehicles} icon={TimerReset} color="#dc2626" />
         <Metric label="Fleet Performance" value={`${report.fleetPerformance}%`} icon={Truck} color="#2563eb" />
       </div>
+
+      <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)]" aria-labelledby="scheduled-report-history-title">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-divider)] px-5 py-4">
+          <div>
+            <h2 id="scheduled-report-history-title" className="text-base font-bold text-[var(--color-text-primary)]">Scheduled report history</h2>
+            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Daily operations and monthly cost snapshots, generated at 7:00 AM Manila time.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setScheduledReportsReload((value) => value + 1)}
+            disabled={scheduledReportsLoading}
+            className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm font-semibold text-[var(--color-text-primary)] hover:bg-[var(--color-input-bg)] disabled:opacity-50"
+          >
+            <RefreshCw size={15} className={scheduledReportsLoading ? "animate-spin" : ""} aria-hidden="true" />
+            Refresh
+          </button>
+        </div>
+        <div className="space-y-3 p-5">
+          {scheduledReportsLoading ? <p role="status" className="text-sm text-[var(--color-text-secondary)]">Loading scheduled reports...</p> : null}
+          {scheduledReportsError ? <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{scheduledReportsError}</p> : null}
+          {!scheduledReportsLoading && !scheduledReportsError && scheduledReports.length === 0 ? (
+                  <p className="py-4 text-sm text-[var(--color-text-secondary)]">No scheduled reports have been generated yet. New snapshots will appear here after the next scheduled run.</p>
+          ) : null}
+          {scheduledReports.slice(0, scheduledReportsVisibleCount).map((scheduledReport) => {
+            const isDaily = scheduledReport.reportType === "daily-operations";
+            const data = scheduledReport.data;
+            return (
+              <article key={scheduledReport.id} className="border-t border-[var(--color-divider)] py-4 first:border-t-0">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h3 className="font-bold text-[var(--color-text-primary)]">{isDaily ? "Daily fleet operations" : "Monthly fleet costs"}</h3>
+                    <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Period {scheduledReport.periodKey} | Generated {new Date(scheduledReport.generatedAt).toLocaleString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium", timeStyle: "short" })}</p>
+                  </div>
+                  <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-800">Scheduled</span>
+                </div>
+                {isDaily ? (
+                  <dl className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <div><dt className="text-xs text-[var(--color-text-secondary)]">Overdue work orders</dt><dd className="mt-1 text-xl font-bold text-red-700">{Number(data.overdueWorkOrders ?? 0)}</dd></div>
+                    <div><dt className="text-xs text-[var(--color-text-secondary)]">Vehicles under maintenance</dt><dd className="mt-1 text-xl font-bold text-[var(--color-text-primary)]">{Number(data.vehiclesUnderMaintenance ?? 0)}</dd></div>
+                    <div><dt className="text-xs text-[var(--color-text-secondary)]">Open fuel anomalies</dt><dd className="mt-1 text-xl font-bold text-amber-700">{Number(data.openFuelAnomalies ?? 0)}</dd></div>
+                  </dl>
+                ) : (
+                  <dl className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <div><dt className="text-xs text-[var(--color-text-secondary)]">Maintenance parts</dt><dd className="mt-1 font-bold">{formatCurrency(parseMoney(data.maintenancePartsCost))}</dd></div>
+                    <div><dt className="text-xs text-[var(--color-text-secondary)]">Maintenance labor</dt><dd className="mt-1 font-bold">{formatCurrency(parseMoney(data.maintenanceLaborCost))}</dd></div>
+                    <div><dt className="text-xs text-[var(--color-text-secondary)]">Fuel</dt><dd className="mt-1 font-bold">{formatCurrency(parseMoney(data.fuelTotalCost))}</dd></div>
+                    <div className="md:col-span-2 xl:col-span-3"><p className="text-sm font-bold text-[var(--color-text-primary)]">Total maintenance: {formatCurrency(parseMoney(data.maintenanceTotalCost))}</p></div>
+                  </dl>
+                )}
+              </article>
+            );
+          })}
+          {scheduledReports.length > 10 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-divider)] pt-3">
+              <p className="text-sm text-[var(--color-text-secondary)]">Showing {Math.min(scheduledReportsVisibleCount, scheduledReports.length)} of {scheduledReports.length} saved reports.</p>
+              <div className="flex gap-2">
+                {scheduledReportsVisibleCount > 10 ? (
+                  <button type="button" onClick={() => setScheduledReportsVisibleCount(10)} className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm font-semibold text-[var(--color-text-primary)] hover:bg-[var(--color-input-bg)]">Show latest 10</button>
+                ) : null}
+                {scheduledReportsVisibleCount < scheduledReports.length ? (
+                  <button type="button" onClick={() => setScheduledReportsVisibleCount((count) => Math.min(count + 10, scheduledReports.length))} className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm font-semibold text-[var(--color-text-primary)] hover:bg-[var(--color-input-bg)]">Show 10 more</button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </section>
 
       <div className="grid gap-4 md:grid-cols-3">
         <Metric label="Due Within 7 Days" value={report.upcomingThisWeek.length} icon={CalendarClock} color="#2563eb" />

@@ -682,7 +682,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <PageHeader
           icon={BrainCircuit}
-          title="AI / ANALYTICS & FLEET INTELLIGENCE"
+          title="AI / ANALYTICS"
           subtitle="Real-time operational analytics, predictive maintenance forecasts, risk assessment, and DuckDB search"
         />
 

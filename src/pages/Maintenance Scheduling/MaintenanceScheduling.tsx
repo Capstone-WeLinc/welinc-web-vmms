@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Calendar as CalendarIcon,
   Plus,
@@ -288,6 +288,8 @@ const MaintenanceSchedulingCombined = () => {
   const isAdmin = currentUser?.role === "ADMIN";
   const canEditPriority = canEditWorkOrderPriority(currentUser);
   const location = useLocation();
+  const navigate = useNavigate();
+  const focusScheduleId = new URLSearchParams(location.search).get("scheduleId");
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -571,6 +573,15 @@ const MaintenanceSchedulingCombined = () => {
     setSelectedSchedules(schedules);
     setSelectedSchedulePage(0);
   };
+
+  useEffect(() => {
+    if (!focusScheduleId) return;
+    const schedule = tasks.find((task) => task.id === focusScheduleId);
+    if (!schedule) return;
+    setSelectedSchedules([schedule]);
+    setSelectedSchedulePage(0);
+    navigate(location.pathname, { replace: true });
+  }, [focusScheduleId, location.pathname, navigate, tasks]);
 
   const closeScheduleDetails = () => {
     setSelectedSchedules([]);

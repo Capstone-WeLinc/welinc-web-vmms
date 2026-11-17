@@ -1,6 +1,6 @@
 import type { UserRecord } from "../../lib/mocks/vmmsMocks";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   canSeeVmmsNavigationPath,
 } from "../../lib/utils/permissions";
@@ -32,6 +32,7 @@ import {
   ShieldCheck,
   ScrollText,
   Bell,
+  AlertTriangle,
   type LucideIcon,
 } from "lucide-react";
 
@@ -59,6 +60,7 @@ interface NotificationRecord {
   type: "info" | "success" | "warning" | "error";
   isRead: boolean;
   createdAt: string;
+  maintenanceScheduleId?: string | null;
 }
 
 const navGroups: NavGroup[] = [
@@ -151,6 +153,7 @@ const isItemActive = (itemPath: string, currentPath: string) => {
 
 export default function Sidebar({ currentUser }: SidebarProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
@@ -474,14 +477,28 @@ export default function Sidebar({ currentUser }: SidebarProps) {
               <button
                 key={notification.id}
                 type="button"
-                onClick={() => void markNotificationAsRead(notification.id)}
+                onClick={() => {
+                  void markNotificationAsRead(notification.id);
+                  if (notification.maintenanceScheduleId) {
+                    setIsNotificationsOpen(false);
+                    navigate(`/maintenance-scheduling?scheduleId=${encodeURIComponent(notification.maintenanceScheduleId)}`);
+                  }
+                }}
+                aria-label={`${notification.title}. ${notification.message}${notification.maintenanceScheduleId ? ". Open work order." : ". Mark as read."}`}
                 className={`w-full rounded-lg border p-3 text-left transition ${
-                  notification.isRead ? "border-[#dce3ed] bg-[#f7f9fc]" : "border-[#f4c400]/60 bg-[#fffaf0]"
+                  notification.title === "Critical maintenance escalation"
+                    ? notification.isRead ? "border-red-300 bg-red-50" : "border-red-500 bg-red-50 ring-1 ring-red-200"
+                    : notification.isRead ? "border-[#dce3ed] bg-[#f7f9fc]" : "border-[#f4c400]/60 bg-[#fffaf0]"
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-bold text-[#141827]">{notification.title}</p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {notification.title === "Critical maintenance escalation" ? <AlertTriangle size={15} className="text-red-700" aria-hidden="true" /> : null}
+                      <p className={`text-sm font-bold ${notification.title === "Critical maintenance escalation" ? "text-red-900" : "text-[#141827]"}`}>{notification.title}</p>
+                      {notification.title === "Critical maintenance escalation" ? <span className="rounded-full bg-red-700 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-white">CRITICAL</span> : null}
+                      {/fleet .*report/i.test(notification.title) ? <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold tracking-wide text-blue-800">SCHEDULED REPORT</span> : null}
+                    </div>
                     <p className="mt-1 text-sm text-[#667085]">{notification.message}</p>
                   </div>
                   {!notification.isRead && (
@@ -497,6 +514,7 @@ export default function Sidebar({ currentUser }: SidebarProps) {
                     minute: "2-digit",
                   })}
                 </p>
+                {notification.maintenanceScheduleId ? <p className="mt-2 text-xs font-semibold text-[#1a1f6e]">Open overdue work order →</p> : null}
               </button>
             ))
           )}

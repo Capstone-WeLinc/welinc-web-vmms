@@ -25,8 +25,8 @@ type KPIStatCardProps = {
 
 function KPIStatCard({ icon, value, label, subtitle, iconBgColor, iconColor }: KPIStatCardProps) {
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card transition-theme">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="flex h-full min-h-40 min-w-0 flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card transition-theme">
+      <div className="mb-4 flex items-center">
         <div
           style={{
             display: 'flex',
@@ -42,11 +42,11 @@ function KPIStatCard({ icon, value, label, subtitle, iconBgColor, iconColor }: K
           {icon}
         </div>
       </div>
-      <div className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">{value}</div>
-      <div className="mt-2 text-xs font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">{label}</div>
-      {subtitle && (
-        <div className="mt-2 text-sm font-medium" style={{ color: iconColor }}>{subtitle}</div>
-      )}
+      <div className="mt-auto min-w-0">
+        <div className="break-words text-2xl font-bold leading-tight tracking-tight tabular-nums text-[var(--color-text-primary)]">{value}</div>
+        <div className="mt-2 text-xs font-semibold uppercase leading-5 tracking-wide text-[var(--color-text-secondary)]">{label}</div>
+        {subtitle && <div className="mt-1 break-words text-xs leading-5" style={{ color: iconColor }}>{subtitle}</div>}
+      </div>
     </div>
   );
 }
@@ -127,12 +127,12 @@ export default function FuelManagement() {
 
   // Layout className constants (interaction/layout only)
   const containerClasses = 'space-y-6 relative';
-  const kpiGridClasses = 'grid gap-4 xl:grid-cols-4 lg:grid-cols-2';
+  const kpiGridClasses = 'grid gap-4 sm:grid-cols-2 2xl:grid-cols-4';
   const tabsLayoutClasses = 'border-b border-[var(--color-border)]';
-  const tabButtonBaseClasses = 'flex items-center gap-2 border-b-2 px-4 py-3 font-medium transition-colors cursor-pointer text-sm';
+  const tabButtonBaseClasses = 'flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 font-medium transition-colors cursor-pointer text-sm';
   const reportsHeaderClasses = 'flex flex-col sm:flex-row sm:items-center justify-between gap-4';
   const reportSwitcherClasses = 'flex flex-wrap gap-1 rounded-xl p-1 border';
-  const reportPanelClasses = 'bg-[var(--color-card-bg)] border border-[var(--color-border)] rounded-2xl p-4 shadow-card transition-all duration-200 min-h-62.5';
+  const reportPanelClasses = 'min-h-[15.625rem] pt-4';
 
   const handleFilteredFillUpsChange = useCallback((filtered: FuelFillUp[]) => {
     setFuelLogFilteredFillUps(filtered);
@@ -292,14 +292,16 @@ export default function FuelManagement() {
 
       {/* Tabs Layout */}
       <div className={tabsLayoutClasses}>
-        <div className="flex gap-1">
+        <div className="flex gap-1 overflow-x-auto" role="group" aria-label="Fuel management views">
           {tabs.map(tab => {
             const Icon = tab.icon;
             return (
               <button
                 key={tab.id}
+                type="button"
+                aria-pressed={activeTab === tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`${tabButtonBaseClasses} ${activeTab === tab.id ? 'border-b-2 border-[var(--color-brand-primary)] text-[var(--color-brand-primary)]' : 'text-[var(--color-text-secondary)]'}`}
+                className={`${tabButtonBaseClasses} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)] ${activeTab === tab.id ? 'border-[var(--color-brand-primary)] text-[var(--color-brand-primary)]' : 'border-transparent text-[var(--color-text-secondary)]'}`}
               >
                 <Icon size={16} strokeWidth={1.8} />
                 {tab.label}
@@ -321,7 +323,9 @@ export default function FuelManagement() {
           />
         </div>
         {activeTab === 'efficiency-trends' && (
-          <EfficiencyTrendsWithFilters vehicles={efficiencyByVehicle} fleetAvg={avgEfficiency} />
+          <div>
+            <EfficiencyTrendsWithFilters vehicles={efficiencyByVehicle} fleetAvg={avgEfficiency} />
+          </div>
         )}
         {activeTab === 'anomaly-detection' && <div className="space-y-3">{anomalyCards.length === 0 ? <p className="text-sm text-[var(--color-text-secondary)]">No open fuel anomalies.</p> : anomalyCards.map((anomaly) => {
           const record = anomalies.find((item) => item.vehicle.plateNumber === anomaly.vehicleId && item.status === 'OPEN')!;
@@ -388,22 +392,28 @@ export default function FuelManagement() {
         <div className={reportsHeaderClasses}>
           <h2 className="text-2xl font-bold text-[var(--color-text-primary)]">Reports</h2>
 
-          <div className={`${reportSwitcherClasses} bg-[var(--color-input-bg)] border-[var(--color-border)]`}>
+          <div className={`${reportSwitcherClasses} bg-[var(--color-input-bg)] border-[var(--color-border)]`} role="group" aria-label="Fuel reports">
             <button
+              type="button"
+              aria-pressed={activeReport === 'fleet-wide'}
               onClick={() => setActiveReport('fleet-wide')}
-              className={`${activeReport === 'fleet-wide' ? 'bg-[var(--color-brand-primary)] text-white shadow-[0_8px_24px_rgba(26,31,110,0.12)]' : 'text-[var(--color-text-secondary)]'} px-3 py-2 rounded-md`}
+              className={`${activeReport === 'fleet-wide' ? 'bg-[var(--color-brand-primary)] text-white shadow-[0_8px_24px_rgba(26,31,110,0.12)]' : 'text-[var(--color-text-secondary)]'} whitespace-nowrap rounded-md px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)]`}
             >
               Fleet-Wide Cost
             </button>
             <button
+              type="button"
+              aria-pressed={activeReport === 'per-vehicle'}
               onClick={() => setActiveReport('per-vehicle')}
-              className={`${activeReport === 'per-vehicle' ? 'bg-[var(--color-brand-primary)] text-white shadow-[0_8px_24px_rgba(26,31,110,0.12)]' : 'text-[var(--color-text-secondary)]'} px-3 py-2 rounded-md`}
+              className={`${activeReport === 'per-vehicle' ? 'bg-[var(--color-brand-primary)] text-white shadow-[0_8px_24px_rgba(26,31,110,0.12)]' : 'text-[var(--color-text-secondary)]'} whitespace-nowrap rounded-md px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)]`}
             >
               Per-Vehicle Summary
             </button>
             <button
+              type="button"
+              aria-pressed={activeReport === 'anomaly-log'}
               onClick={() => setActiveReport('anomaly-log')}
-              className={`${activeReport === 'anomaly-log' ? 'bg-[var(--color-brand-primary)] text-white shadow-[0_8px_24px_rgba(26,31,110,0.12)]' : 'text-[var(--color-text-secondary)]'} px-3 py-2 rounded-md`}
+              className={`${activeReport === 'anomaly-log' ? 'bg-[var(--color-brand-primary)] text-white shadow-[0_8px_24px_rgba(26,31,110,0.12)]' : 'text-[var(--color-text-secondary)]'} whitespace-nowrap rounded-md px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)]`}
             >
               Anomaly Logs
             </button>

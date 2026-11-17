@@ -31,7 +31,7 @@ export default function FleetWideReport({ fillUps, onExport }: { fillUps: FuelFi
           ]));
         }} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"><Download size={15} />Export PDF</button>
       </div>
-      <div id="fuel-fleet-report-table" className="overflow-x-auto">
+      <div id="fuel-fleet-report-table" className="overflow-x-auto rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)]">
         <table className="w-full text-left text-sm">
           <thead><tr><th className="p-2">Vehicle</th><th className="p-2">Model</th><th className="p-2">Fill-ups</th><th className="p-2">Liters</th><th className="p-2">Fuel cost</th><th className="p-2">Average km/L</th></tr></thead>
           <tbody>
