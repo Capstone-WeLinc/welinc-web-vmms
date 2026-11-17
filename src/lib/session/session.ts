@@ -5,6 +5,7 @@ const API_BASE = String(import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/,
 export const PORTAL_URL = String(import.meta.env.VITE_PORTAL_URL ?? '').replace(/\/+$/, '');
 const BOOT_FLAG = 'vmms_boot_attempt';
 const LOCK_NAME = 'vmms-refresh';
+const SESSION_STATUS_POLL_MS = 30_000;
 
 type SessionAnswer = {
   accessToken: string;
@@ -19,9 +20,49 @@ type SessionAnswer = {
 };
 
 let refreshInFlight: Promise<string | null> | null = null;
+let sessionStatusTimer: number | null = null;
+let sessionStatusInFlight = false;
 
 function apiUrl(path: string): string {
   return `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+/** Polls the server's fresh account/session check so idle tabs leave after deactivation. */
+async function checkSessionStatus(): Promise<void> {
+  const { authenticated, token } = useAuthStore.getState();
+  if (!authenticated || !token || sessionStatusInFlight) return;
+
+  sessionStatusInFlight = true;
+  try {
+    const response = await fetch(apiUrl('/vmms/session/status'), {
+      credentials: 'include',
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (response.status === 401) {
+      const refreshed = await refreshAccessToken();
+      if (!refreshed && useAuthStore.getState().status !== 'unavailable') {
+        handleSessionEnded();
+      }
+    } else if (response.status === 403) {
+      handleSessionEnded();
+    }
+  } catch {
+    // Keep the session during a temporary outage; the next poll will retry.
+  } finally {
+    sessionStatusInFlight = false;
+  }
+}
+
+function startSessionStatusPolling(): void {
+  if (typeof window === 'undefined' || sessionStatusTimer !== null) return;
+  sessionStatusTimer = window.setInterval(() => void checkSessionStatus(), SESSION_STATUS_POLL_MS);
+}
+
+function stopSessionStatusPolling(): void {
+  if (sessionStatusTimer === null || typeof window === 'undefined') return;
+  window.clearInterval(sessionStatusTimer);
+  sessionStatusTimer = null;
 }
 
 function asUser(answer: SessionAnswer['user']): UserRecord {
@@ -58,6 +99,7 @@ async function refreshRequest(): Promise<string | null> {
       Date.now() + answer.expiresIn * 1000,
       asUser(answer.user),
     );
+    startSessionStatusPolling();
     return token;
   } catch {
     useAuthStore.setState({ status: 'unavailable' });
@@ -107,6 +149,7 @@ export async function bootSession(): Promise<void> {
 
 export async function signOut(): Promise<void> {
   const token = useAuthStore.getState().token;
+  stopSessionStatusPolling();
   try {
     await fetch(apiUrl('/vmms/session/logout'), {
       method: 'POST',
@@ -124,6 +167,7 @@ export async function signOut(): Promise<void> {
 }
 
 export function handleSessionEnded(): void {
+  stopSessionStatusPolling();
   useAuthStore.getState().clearAuth();
   window.location.assign(`${PORTAL_URL}/login?reason=idle`);
 }

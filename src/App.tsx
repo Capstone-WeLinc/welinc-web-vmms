@@ -16,7 +16,7 @@ import MaintenanceCosting from './pages/MaintenanceCosting/MaintenanceCosting';
 import AuditLogs from './pages/AuditLogs/AuditLogs';
 import { useBackend } from './lib/api/httpClient';
 import { useAuthStore } from './store/authStore';
-import { PORTAL_URL } from './lib/session/session';
+import { bootSession, PORTAL_URL } from './lib/session/session';
 
 function Protected({ children }: { children: ReactNode }) {
   return <>{children}</>;
@@ -26,6 +26,7 @@ export default function App() {
   const [adminCodeRequired, setAdminCodeRequired] = useState(false);
   const authenticated = useAuthStore((state) => state.authenticated);
   const currentUser = useAuthStore((state) => state.currentUser);
+  const sessionStatus = useAuthStore((state) => state.status);
 
   useEffect(() => {
     const showNotice = () => setAdminCodeRequired(true);
@@ -36,7 +37,21 @@ export default function App() {
   if (useBackend && !authenticated) {
     return (
       <div className="grid min-h-screen place-items-center p-6 text-center">
-        <p>Connecting to the shared sign in service…</p>
+        {sessionStatus === 'unavailable' ? (
+          <div role="alert" className="max-w-md">
+            <p className="font-semibold">Can't reach the shared sign in service</p>
+            <p className="mt-2 text-sm text-[var(--color-text-secondary)]">Check your connection, then try again.</p>
+            <button
+              type="button"
+              className="mt-4 rounded-md bg-[var(--color-primary)] px-4 py-2 font-semibold text-white"
+              onClick={() => void bootSession()}
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <p>Connecting to the shared sign in service…</p>
+        )}
       </div>
     );
   }
