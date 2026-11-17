@@ -1,4 +1,4 @@
-import type { UserRecord } from "../../lib/api/authService";
+import type { UserRecord } from "../../lib/mocks/vmmsMocks";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
@@ -6,6 +6,8 @@ import {
 } from "../../lib/utils/permissions";
 import { ConfirmationModal, Modal } from "../ui";
 import { fetchJSON } from "../../lib/api/httpClient";
+import { signOut } from "../../lib/session/session";
+import { canSwitchSystem, switchSystemUrl } from "../../lib/session/switchSystem";
 import logo from "../../assets/logo.png";
 import {
   LayoutDashboard,
@@ -41,6 +43,7 @@ interface NavItem {
   label: string;
   icon: LucideIcon;
   path: string;
+  externalHref?: string;
 }
 
 interface NavGroup {
@@ -98,7 +101,12 @@ const navGroups: NavGroup[] = [
     category: "Administration",
     icon: ShieldCheck,
     items: [
-      { label: "User Management", icon: Users, path: "/users" },
+      {
+        label: "Manage people",
+        icon: Users,
+        path: "/admin/people?system=VMMS",
+        externalHref: `${String(import.meta.env.VITE_PORTAL_URL ?? "").replace(/\/+$/, "")}/admin/people?system=VMMS`,
+      },
       { label: "Audit Logs", icon: ScrollText, path: "/audit-logs" },
     ],
   },
@@ -236,54 +244,17 @@ export default function Sidebar({ currentUser }: SidebarProps) {
     setExpandedCategory((prev) => (prev === category ? null : category));
   };
 
-  const getSubsystemCount = () => {
-    try {
-      const token = window.localStorage.getItem("accessToken");
-      if (!token) return 0;
-      const [, payload] = token.split(".");
-      if (!payload) return 0;
-      const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
-      const json = decodeURIComponent(
-        atob(base64)
-          .split("")
-          .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-          .join(""),
-      );
-      const decoded = JSON.parse(json) as { roles?: { system: string }[] };
-      const subsystemRoles = (decoded.roles || []).filter((r) =>
-        ["VRMS", "VMMS", "BMS"].includes(r.system.toUpperCase()),
-      );
-      const uniqueSystems = new Set(subsystemRoles.map((r) => r.system.toUpperCase()));
-      return uniqueSystems.size;
-    } catch (err) {
-      console.error("Error parsing token to count subsystems:", err);
-      return 2;
-    }
-  };
-
-  const hasMultipleSystems = getSubsystemCount() > 1;
+  const canSwitch = canSwitchSystem(currentUser
+    ? { systems: currentUser.systems ?? [], role: currentUser.role }
+    : null);
 
   const handleSignOut = () => {
     setIsLogoutModalOpen(false);
-    window.localStorage.removeItem("accessToken");
-    try {
-      window.localStorage.removeItem("session_login_time");
-      window.localStorage.removeItem("session_last_activity");
-    } catch (e) {
-      console.error(e);
-    }
-    const portalUrl = import.meta.env.VITE_PORTAL_URL || "http://localhost:8000";
-    window.location.href = `${portalUrl}/login?logout=true`;
+    void signOut();
   };
 
-  const handleSwitchToVrms = () => {
-    const token = window.localStorage.getItem("accessToken");
-    const vrmsUrl = import.meta.env.VITE_VRMS_URL || "http://localhost:8001";
-    if (token) {
-      window.location.href = `${vrmsUrl}/login?token=${token}`;
-    } else {
-      window.location.href = vrmsUrl;
-    }
+  const handleSwitchSystem = () => {
+    window.location.assign(switchSystemUrl());
   };
 
   const currentRole = currentUser ? roleLabelMap[currentUser.role] ?? currentUser.role : "Administrator";
@@ -381,14 +352,21 @@ export default function Sidebar({ currentUser }: SidebarProps) {
                     <ul className="m-0 list-none space-y-0.5 p-0 pt-0.5">
                       {group.items.map((item) => (
                         <li key={item.path}>
-                          <NavLink
-                            to={item.path}
-                            title={item.label}
-                            className={({ isActive }) => getNavLinkClass(isActive)}
-                          >
-                            <item.icon className="h-4.5 w-4.5 shrink-0" strokeWidth={1.9} />
-                            <span className={labelRevealClasses}>{item.label}</span>
-                          </NavLink>
+                          {item.externalHref ? (
+                            <a href={item.externalHref} target="_blank" rel="noreferrer" title={item.label} className={getNavLinkClass(false)}>
+                              <item.icon className="h-4.5 w-4.5 shrink-0" strokeWidth={1.9} />
+                              <span className={labelRevealClasses}>{item.label}</span>
+                            </a>
+                          ) : (
+                            <NavLink
+                              to={item.path}
+                              title={item.label}
+                              className={({ isActive }) => getNavLinkClass(isActive)}
+                            >
+                              <item.icon className="h-4.5 w-4.5 shrink-0" strokeWidth={1.9} />
+                              <span className={labelRevealClasses}>{item.label}</span>
+                            </NavLink>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -433,15 +411,15 @@ export default function Sidebar({ currentUser }: SidebarProps) {
             </div>
           </NavLink>
 
-          {hasMultipleSystems && (
+          {canSwitch && (
             <button
               className={`${baseButtonClasses} mb-1 text-[#9ba4db] hover:bg-white/10 hover:text-white`}
-              onClick={handleSwitchToVrms}
-              title="Switch to VRMS"
+              onClick={handleSwitchSystem}
+              title="Switch system"
               type="button"
             >
               <LayoutGrid size={18} strokeWidth={1.8} />
-              <span className={labelRevealClasses}>Switch to VRMS</span>
+              <span className={labelRevealClasses}>Switch system</span>
             </button>
           )}
 

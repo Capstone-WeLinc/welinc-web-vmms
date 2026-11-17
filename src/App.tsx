@@ -1,407 +1,107 @@
-import { useEffect, useCallback, type ReactNode } from "react";
-import {
-  Routes,
-  Route,
-  Navigate,
-  useLocation,
-  useNavigate,
-  type Location,
-} from "react-router-dom";
-import Sidebar from "./components/Sidebar/Sidebar";
-import { getCurrentUser } from "./lib/api/authService";
-import Dashboard from "./pages/Dashboard/Dashboard";
-import SchedulingPage from "./pages/Maintenance Scheduling/MaintenanceScheduling";
-import ChecklistTemplates from "./pages/ChecklistTemplates/ChecklistTemplates";
-import WorkOrders from "./pages/WorkOrders/WorkOrders";
-import MaintenanceLogs from "./pages/MaintenanceLogs/MaintenanceLogs";
-import FuelManagement from "./pages/FuelManagement/FuelManagement";
-import UserManagement from "./pages/UserManagement/UserManagement";
-import LoginPage from "./pages/Login/LoginPage";
-import Profile from "./pages/Profile/Profile";
-import AIAnalyticsPage from "./pages/AIAnalytics/AIAnalytics";
-import Vehicles from "./pages/Vehicles/Vehicles";
-import Garages from "./pages/Garages/Garages";
-import { useBackend } from "./lib/api/httpClient";
-import { recordLogout } from "./lib/api/vmmsApi";
+import { useEffect, useState, type ReactNode } from 'react';
+import { Navigate, Route, Routes } from 'react-router-dom';
+import Sidebar from './components/Sidebar/Sidebar';
+import Dashboard from './pages/Dashboard/Dashboard';
+import SchedulingPage from './pages/Maintenance Scheduling/MaintenanceScheduling';
+import ChecklistTemplates from './pages/ChecklistTemplates/ChecklistTemplates';
+import WorkOrders from './pages/WorkOrders/WorkOrders';
+import MaintenanceLogs from './pages/MaintenanceLogs/MaintenanceLogs';
+import FuelManagement from './pages/FuelManagement/FuelManagement';
+import Profile from './pages/Profile/Profile';
+import AIAnalyticsPage from './pages/AIAnalytics/AIAnalytics';
+import Vehicles from './pages/Vehicles/Vehicles';
+import Garages from './pages/Garages/Garages';
+import MaintenanceReports from './pages/MaintenanceReports/MaintenanceReports';
+import MaintenanceCosting from './pages/MaintenanceCosting/MaintenanceCosting';
+import AuditLogs from './pages/AuditLogs/AuditLogs';
+import { useBackend } from './lib/api/httpClient';
+import { useAuthStore } from './store/authStore';
+import { bootSession, PORTAL_URL } from './lib/session/session';
 
-import { setLastActivity, msUntilAbsoluteExpiry, msUntilInactivityExpiry, clearSession } from "./lib/utils/session";
-
-import { isMechanicRole, isOperationsRole, isChiefMechanicRole } from "./lib/utils/permissions";
-import { useAuthStore } from "./store/authStore";
-import MaintenanceReports from "./pages/MaintenanceReports/MaintenanceReports";
-import MaintenanceCosting from "./pages/MaintenanceCosting/MaintenanceCosting";
-import AuditLogs from "./pages/AuditLogs/AuditLogs";
-
-function RequireAuthWrapper({
-  children,
-  isAuthenticated,
-  location,
-}: {
-  children: ReactNode;
-  isAuthenticated: boolean;
-  location: Location;
-}) {
-  if (isAuthenticated) return <>{children}</>;
-  return <Navigate to="/login" replace state={{ from: location }} />;
+function Protected({ children }: { children: ReactNode }) {
+  return <>{children}</>;
 }
 
-function App() {
+export default function App() {
+  const [adminCodeRequired, setAdminCodeRequired] = useState(false);
   const authenticated = useAuthStore((state) => state.authenticated);
   const currentUser = useAuthStore((state) => state.currentUser);
-  const setAuthenticated = useAuthStore((state) => state.setAuthenticated);
-  const setCurrentUser = useAuthStore((state) => state.setCurrentUser);
-  const clearAuth = useAuthStore((state) => state.clearAuth);
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  const isAuthenticated = useBackend ? authenticated : true;
-  const hasIncomingSsoToken =
-    location.pathname === "/login" &&
-    new URLSearchParams(location.search).has("token");
-  const isMechanic = isMechanicRole(currentUser);
-  const isOperations = isOperationsRole(currentUser);
-  const isChiefMechanic = isChiefMechanicRole(currentUser);
-
-  const handleLogin = () => {
-    setAuthenticated(true);
-    getCurrentUser()
-      .then((u) => {
-        setCurrentUser(u);
-        navigate("/dashboard", { replace: true });
-      })
-      .catch(() => {
-        window.localStorage.removeItem("accessToken");
-        clearSession();
-        setAuthenticated(false);
-        setCurrentUser(null);
-        navigate("/login", { replace: true });
-      });
-  };
-
-  const handleLogout = useCallback(() => {
-    void recordLogout();
-    window.localStorage.removeItem("accessToken");
-    clearSession();
-    clearAuth();
-    navigate("/login", { replace: true });
-  }, [clearAuth, navigate]);
+  const sessionStatus = useAuthStore((state) => state.status);
 
   useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'token' || e.key === 'welinc_token' || e.key === 'accessToken' || e.key === 'welinc_user') {
-        window.location.reload();
-      }
-    };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    const showNotice = () => setAdminCodeRequired(true);
+    window.addEventListener('admin-code-required', showNotice);
+    return () => window.removeEventListener('admin-code-required', showNotice);
   }, []);
 
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    getCurrentUser()
-      .then((u) => setCurrentUser(u))
-      .catch(() => setCurrentUser(null));
-  }, [isAuthenticated]);
+  if (useBackend && !authenticated) {
+    return (
+      <div className="grid min-h-screen place-items-center p-6 text-center">
+        {sessionStatus === 'unavailable' ? (
+          <div role="alert" className="max-w-md">
+            <p className="font-semibold">Can't reach the shared sign in service</p>
+            <p className="mt-2 text-sm text-[var(--color-text-secondary)]">Check your connection, then try again.</p>
+            <button
+              type="button"
+              className="mt-4 rounded-md bg-[var(--color-primary)] px-4 py-2 font-semibold text-white"
+              onClick={() => void bootSession()}
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <p>Connecting to the shared sign in service…</p>
+        )}
+      </div>
+    );
+  }
 
-  useEffect(() => {
-    if (!isAuthenticated || !currentUser) return;
-
-    if (isMechanic) {
-      handleLogout();
-      return;
-    }
-
-    if (isChiefMechanic) {
-      handleLogout();
-      return;
-    }
-
-    if (isOperations) {
-      const allowedOperationsPaths = [
-        "/dashboard",
-        "/maintenance-scheduling",
-        "/work-orders",
-        "/maintenance-logs",
-        "/profile",
-        "/maintenance-reports",
-        "/maintenance-costing",
-        "/ai-analytics",
-        "/fuel-management",
-        "/vehicles",
-        "/garages",
-      ];
-
-      if (!allowedOperationsPaths.includes(location.pathname)) {
-        navigate("/dashboard", { replace: true });
-      }
-    }
-  }, [currentUser, isAuthenticated, isMechanic, isChiefMechanic, isOperations, location.pathname, navigate]);
-
-  useEffect(() => {
-    const handleUnauthorized = () => {
-      if (!isAuthenticated) return;
-      clearAuth();
-      navigate("/login", { replace: true });
-    };
-
-    // Session expiry handling — use session helper for persistence and timing
-    let absoluteTimeout: ReturnType<typeof setTimeout> | null = null;
-    let inactivityTimeout: ReturnType<typeof setTimeout> | null = null;
-    const activityEvents = ["mousemove", "mousedown", "keydown", "touchstart", "click"] as const;
-
-    function clearTimers() {
-      if (absoluteTimeout) {
-        clearTimeout(absoluteTimeout);
-        absoluteTimeout = null;
-      }
-      if (inactivityTimeout) {
-        clearTimeout(inactivityTimeout);
-        inactivityTimeout = null;
-      }
-    }
-
-    function scheduleAbsoluteExpiry() {
-      const msUntil = msUntilAbsoluteExpiry();
-      if (!isFinite(msUntil) || msUntil <= 0) {
-        handleLogout();
-        return;
-      }
-      absoluteTimeout = setTimeout(() => {
-        handleLogout();
-      }, msUntil);
-    }
-
-    function resetInactivityTimer() {
-      setLastActivity(new Date());
-      if (inactivityTimeout) clearTimeout(inactivityTimeout);
-      const msUntil = msUntilInactivityExpiry();
-      inactivityTimeout = setTimeout(() => {
-        handleLogout();
-      }, msUntil);
-    }
-
-    function activityHandler() {
-      resetInactivityTimer();
-    }
-
-    if (isAuthenticated) {
-      scheduleAbsoluteExpiry();
-      resetInactivityTimer();
-      activityEvents.forEach((ev) => window.addEventListener(ev, activityHandler));
-    }
-
-    window.addEventListener("unauthorized", handleUnauthorized);
-    return () => {
-      window.removeEventListener("unauthorized", handleUnauthorized);
-      activityEvents.forEach((ev) => window.removeEventListener(ev, activityHandler));
-      clearTimers();
-    };
-  }, [clearAuth, isAuthenticated, handleLogout, navigate]);
+  if (useBackend && authenticated && !['ADMIN', 'OPERATIONS'].includes(currentUser?.role ?? '')) {
+    return (
+      <div className="grid min-h-screen place-items-center p-6 text-center">
+        <div className="max-w-md">
+          <h1 className="text-xl font-semibold">Use the VMMS mobile app</h1>
+          <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+            This account does not have access to the VMMS web app. Mechanics and Chief Mechanics use the mobile app.
+          </p>
+          <a className="mt-4 inline-block font-semibold underline" href={`${PORTAL_URL}/?from=VMMS`}>
+            Return to the app launcher
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[var(--color-page-bg)] text-[var(--color-text-primary)] transition-colors duration-300">
-      {isAuthenticated && (
-        <Sidebar
-          currentUser={currentUser}
-        />
-      )}
-      <main
-        className={`transition-all duration-300 ease-in-out ${
-          isAuthenticated
-            ? "ml-20 px-6 py-8 md:px-8 lg:px-10"
-            : "h-screen"
-        }`}
-      >
+      <Sidebar currentUser={currentUser} />
+      <main className="ml-20 px-6 py-8 transition-all duration-300 ease-in-out md:px-8 lg:px-10">
+        {adminCodeRequired && (
+          <div role="alert" className="mb-5 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+            Confirm your sign in in the portal to continue.{' '}
+            <a className="font-semibold underline" href={`${PORTAL_URL}/admin`} target="_blank" rel="noreferrer">Open portal administration</a>
+          </div>
+        )}
         <Routes>
-          <Route
-            path="/"
-            element={
-              isAuthenticated ? (
-                <Navigate to="/dashboard" replace />
-              ) : (
-                <Navigate to="/login" replace />
-              )
-            }
-          />
-          <Route
-            path="/login"
-            element={
-              isAuthenticated && !hasIncomingSsoToken ? (
-                <Navigate to="/dashboard" replace />
-              ) : (
-                <LoginPage onLogin={handleLogin} />
-              )
-            }
-          />
-          <Route
-            path="/dashboard"
-            element={
-              <RequireAuthWrapper
-                isAuthenticated={isAuthenticated}
-                location={location}
-              >
-                <Dashboard />
-              </RequireAuthWrapper>
-            }
-          />
-          <Route
-            path="/users"
-            element={
-              <RequireAuthWrapper
-                isAuthenticated={isAuthenticated}
-                location={location}
-              >
-                <UserManagement />
-              </RequireAuthWrapper>
-            }
-          />
-          <Route
-            path="/audit-logs"
-            element={
-              <RequireAuthWrapper isAuthenticated={isAuthenticated} location={location}>
-                <AuditLogs />
-              </RequireAuthWrapper>
-            }
-          />
-          <Route
-            path="/maintenance-scheduling"
-            element={
-              <RequireAuthWrapper
-                isAuthenticated={isAuthenticated}
-                location={location}
-              >
-                <SchedulingPage />
-              </RequireAuthWrapper>
-            }
-          />
-          <Route
-            path="/work-orders"
-            element={
-              <RequireAuthWrapper
-                isAuthenticated={isAuthenticated}
-                location={location}
-              >
-                <WorkOrders />
-              </RequireAuthWrapper>
-            }
-          />
-          <Route
-            path="/maintenance-logs"
-            element={
-              <RequireAuthWrapper
-                isAuthenticated={isAuthenticated}
-                location={location}
-              >
-                <MaintenanceLogs />
-              </RequireAuthWrapper>
-            }
-          />
-            <Route
-              path="/checklist-templates"
-              element={
-              <RequireAuthWrapper
-                isAuthenticated={isAuthenticated}
-                location={location}
-              >
-                <ChecklistTemplates />
-              </RequireAuthWrapper>
-              }
-            />
-            <Route
-              path="/inspection-checklists"
-              element={<Navigate to="/checklist-templates" replace />}
-            />
-          <Route
-            path="/profile"
-            element={
-              <RequireAuthWrapper
-                isAuthenticated={isAuthenticated}
-                location={location}
-              >
-                <Profile />
-              </RequireAuthWrapper>
-            }
-          />
-          <Route
-            path="/ai-analytics"
-            element={
-              <RequireAuthWrapper
-                isAuthenticated={isAuthenticated}
-                location={location}
-              >
-                <AIAnalyticsPage />
-              </RequireAuthWrapper>
-            }
-          />
-          <Route
-            path="/maintenance-reports"
-            element={
-              <RequireAuthWrapper
-                isAuthenticated={isAuthenticated}
-                location={location}
-              >
-                <MaintenanceReports />
-              </RequireAuthWrapper>
-            }
-          />
-          <Route
-            path="/maintenance-costing"
-            element={
-              <RequireAuthWrapper
-                isAuthenticated={isAuthenticated}
-                location={location}
-              >
-                <MaintenanceCosting />
-              </RequireAuthWrapper>
-            }
-          />
-          <Route
-            path="/fuel-management"
-            element={
-              <RequireAuthWrapper
-                isAuthenticated={isAuthenticated}
-                location={location}
-              >
-                <FuelManagement />
-              </RequireAuthWrapper>
-            }
-          />
-          <Route
-            path="/vehicles"
-            element={
-              <RequireAuthWrapper
-                isAuthenticated={isAuthenticated}
-                location={location}
-              >
-                <Vehicles />
-              </RequireAuthWrapper>
-            }
-          />
-          <Route
-            path="/garages"
-            element={
-              <RequireAuthWrapper
-                isAuthenticated={isAuthenticated}
-                location={location}
-              >
-                <Garages />
-              </RequireAuthWrapper>
-            }
-          />
-          <Route
-            path="*"
-            element={
-              isAuthenticated ? (
-                <Navigate to="/dashboard" replace />
-              ) : (
-                <Navigate to="/login" replace />
-              )
-            }
-          />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/login" element={<Navigate to="/" replace />} />
+          <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
+          <Route path="/maintenance-scheduling" element={<Protected><SchedulingPage /></Protected>} />
+          <Route path="/work-orders" element={<Protected><WorkOrders /></Protected>} />
+          <Route path="/maintenance-logs" element={<Protected><MaintenanceLogs /></Protected>} />
+          <Route path="/checklist-templates" element={<Protected><ChecklistTemplates /></Protected>} />
+          <Route path="/inspection-checklists" element={<Navigate to="/checklist-templates" replace />} />
+          <Route path="/profile" element={<Protected><Profile /></Protected>} />
+          <Route path="/ai-analytics" element={<Protected><AIAnalyticsPage /></Protected>} />
+          <Route path="/maintenance-reports" element={<Protected><MaintenanceReports /></Protected>} />
+          <Route path="/maintenance-costing" element={<Protected><MaintenanceCosting /></Protected>} />
+          <Route path="/fuel-management" element={<Protected><FuelManagement /></Protected>} />
+          <Route path="/vehicles" element={<Protected><Vehicles /></Protected>} />
+          <Route path="/garages" element={<Protected><Garages /></Protected>} />
+          <Route path="/audit-logs" element={['ADMIN', 'OPERATIONS'].includes(currentUser?.role ?? '') ? <Protected><AuditLogs /></Protected> : <Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </main>
     </div>
   );
 }
-
-export default App;

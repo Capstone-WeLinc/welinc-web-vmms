@@ -2,14 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw, ScrollText } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import { getAuditLogs, type AuditLogRecord, type AuditLogSource } from "../../lib/api/vmmsApi";
+import { useAuthStore } from "../../store/authStore";
 
 const sourceLabels: Record<AuditLogSource, string> = {
-  all: "All activity",
-  login: "Logins",
-  vehicle: "Vehicles",
-  "work-order": "Work orders",
-  schedule: "Schedules",
-  fuel: "Fuel",
+  business: "Business",
+  accounts: "Accounts",
 };
 
 const dateTime = (value: string) => new Date(value).toLocaleString("en-PH", {
@@ -17,17 +14,21 @@ const dateTime = (value: string) => new Date(value).toLocaleString("en-PH", {
 });
 
 export default function AuditLogs() {
-  const [source, setSource] = useState<AuditLogSource>("all");
+  const user = useAuthStore((state) => state.currentUser);
+  const [source, setSource] = useState<AuditLogSource>("business");
   const [search, setSearch] = useState("");
   const [records, setRecords] = useState<AuditLogRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(false);
     try {
-      setRecords(await getAuditLogs(source));
+      const page = await getAuditLogs(source);
+      setRecords(page.records);
+      setNextCursor(page.nextCursor);
     } catch {
       setError(true);
       setRecords([]);
@@ -48,16 +49,17 @@ export default function AuditLogs() {
 
   return (
     <div className="mx-auto max-w-7xl">
-      <PageHeader title="Audit Logs" subtitle="Review login and project activity across VMMS." icon={ScrollText} />
+      <PageHeader title="Audit Logs" subtitle={source === "accounts" ? "Review account sign-in activity." : "Review VMMS business activity."} icon={ScrollText} />
 
       <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-sm">
         <div className="flex flex-col gap-3 border-b border-[var(--color-border)] p-4 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-col gap-3 sm:flex-row">
-            <label className="sr-only" htmlFor="audit-source">Activity type</label>
-            <select id="audit-source" value={source} onChange={(event) => setSource(event.target.value as AuditLogSource)}
-              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]">
-              {Object.entries(sourceLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
+            <div className="flex gap-2" aria-label="Audit log category">
+              <button type="button" aria-pressed={source === "business"} onClick={() => setSource("business")}
+                className={`rounded-lg border px-3 py-2 text-sm ${source === "business" ? "border-[var(--color-brand-primary)] bg-[var(--color-page-bg)] font-semibold" : "border-[var(--color-border)]"}`}>Business</button>
+              {user?.role === "ADMIN" && <button type="button" aria-pressed={source === "accounts"} onClick={() => setSource("accounts")}
+                className={`rounded-lg border px-3 py-2 text-sm ${source === "accounts" ? "border-[var(--color-brand-primary)] bg-[var(--color-page-bg)] font-semibold" : "border-[var(--color-border)]"}`}>Accounts</button>}
+            </div>
             <label className="sr-only" htmlFor="audit-search">Search audit logs</label>
             <input id="audit-search" value={search} onChange={(event) => setSearch(event.target.value)}
               placeholder="Search actor, action, or record…"
@@ -103,8 +105,14 @@ export default function AuditLogs() {
             </table>
           </div>
         )}
+        {nextCursor && <div className="border-t border-[var(--color-border)] p-4 text-center"><button type="button" disabled={loading} onClick={() => void (async () => {
+          setLoading(true);
+          try { const page = await getAuditLogs(source, nextCursor); setRecords((current) => [...current, ...page.records]); setNextCursor(page.nextCursor); }
+          catch { setError(true); }
+          finally { setLoading(false); }
+        })()} className="rounded border px-4 py-2 text-sm disabled:opacity-50">Show more</button></div>}
         <div className="border-t border-[var(--color-border)] px-4 py-3 text-xs text-[var(--color-text-secondary)]">
-          Showing {filteredRecords.length} of {records.length} most recent matching entries (up to 500).
+          {filteredRecords.length} {source === "accounts" ? "account events" : "business events"} loaded.
         </div>
       </section>
     </div>

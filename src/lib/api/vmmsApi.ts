@@ -59,10 +59,8 @@ import type {
   ChecklistItemTemplate,
 } from "../../data/ChecklistData";
 import type {
-  UserStatus,
   UserRecord,
   UserRole,
-  UserCreateInput,
 } from "../mocks/vmmsMocks";
 
 const useMaintenanceScheduleBackend =
@@ -283,79 +281,6 @@ function loadMockVehicleStatuses() {
   }
 }
 
-export async function login(
-  email: string,
-  password: string,
-): Promise<{ accessToken: string }> {
-  if (!useBackend) {
-    const matchingUser = mockUsers.find((user) => user.email === email);
-    if (!matchingUser) {
-      throw new Error("Invalid email or password.");
-    }
-
-    const now = new Date().toISOString();
-    matchingUser.lastActive = now;
-    window.localStorage.setItem("mockCurrentUserId", matchingUser.id);
-
-    return { accessToken: `mock-${matchingUser.id}` };
-  }
-
-  return fetchJSON<{ accessToken: string }>("/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
-}
-
-export function logout() {
-  void recordLogout();
-  window.localStorage.removeItem("accessToken");
-  if (!useBackend) {
-    window.localStorage.removeItem("mockCurrentUserId");
-  }
-}
-
-export async function updateUserLastActive(
-  userId: string,
-  lastActive = new Date().toISOString(),
-) {
-  if (!useBackend) {
-    const index = mockUsers.findIndex((user) => user.id === userId);
-    if (index >= 0) {
-      mockUsers[index] = { ...mockUsers[index], lastActive };
-      return mockUsers[index] as UserRecord;
-    }
-    throw new Error("User not found");
-  }
-
-  return fetchJSON<UserRecord>(
-    `/users/${encodeURIComponent(userId)}/last-active`,
-    {
-      method: "PATCH",
-    },
-  );
-}
-
-export async function recordLoginActivity() {
-  try {
-    const me = await getCurrentUser();
-    if (!me) return null;
-
-    const updatedUser = await updateUserLastActive(
-      me.id,
-      new Date().toISOString(),
-    );
-    if (updatedUser) {
-      window.dispatchEvent(
-        new CustomEvent("user-login-activity-updated", { detail: updatedUser }),
-      );
-    }
-    return updatedUser;
-  } catch (error) {
-    console.error("Failed to record login activity", error);
-    return null;
-  }
-}
-
 export async function getDashboardStats() {
   if (!useBackend) return mockDashboardStats;
 
@@ -436,34 +361,27 @@ export async function getWorkOrders() {
   return getMaintenanceSchedules({ includeDeleted: true });
 }
 
-export async function getUsers() {
+export async function getUsers(): Promise<UserRecord[]> {
   if (!useBackend) return mockUsers.map((user) => normalizeUserRecord(user));
-
-  return fetchJSON<UserRecord[]>("/users").then((users) =>
-    users.map((user) => normalizeUserRecord(user)),
-  );
+  const people = await fetchJSON<Array<{
+    id: string;
+    userId?: string;
+    name: string;
+    email: string;
+    role: UserRecord["role"];
+    temporaryRoles?: string[];
+  }>>('/mechanics');
+  return people
+    .filter((person) => !person.temporaryRoles?.includes(person.role))
+    .map((person) => normalizeUserRecord({
+      id: person.userId ?? person.id,
+      name: person.name,
+      email: person.email,
+      role: person.role,
+      status: 'Active',
+      lastActive: '',
+    }));
 }
-
-export async function getManagedUsers() {
-  if (!useBackend) return mockUsers.map((user) => normalizeUserRecord(user));
-
-  return fetchJSON<UserRecord[]>("/auth/users?system=VMMS").then((users) =>
-    users.map((user) => normalizeUserRecord(user)),
-  );
-}
-
-export async function getChiefMechanics(): Promise<UserRecord[]> {
-  if (!useBackend) {
-    return mockUsers
-      .filter((u) => u.role === "CHIEF_MECHANIC")
-      .map((user) => normalizeUserRecord(user));
-  }
-
-  return fetchJSON<UserRecord[]>("/users/chief-mechanics").then((users) =>
-    users.map((user) => normalizeUserRecord(user)),
-  );
-}
-
 export async function getGarages() {
   if (!useBackend) return mockGarages.map((g) => ({ ...g }));
 
@@ -474,179 +392,6 @@ export async function getSystems() {
   if (!useBackend) return mockSystems.map((s) => ({ ...s }));
 
   return fetchJSON<{ id: string; name: string }[]>("/systems");
-}
-
-export async function createUser(user: UserCreateInput) {
-  if (!useBackend) {
-    const now = new Date().toISOString();
-    const createdUser: UserRecord = {
-      id: `u${Date.now()}`,
-      name: user.name,
-      email: user.email,
-      role: user.role ?? "OPERATIONS",
-      status: user.isActive === false ? "Inactive" : "Active",
-      lastActive: now,
-      updatedAt: now,
-    };
-    mockUsers.unshift(createdUser);
-    return createdUser;
-  }
-
-  return fetchJSON<UserRecord>("/auth/users", {
-    method: "POST",
-    body: JSON.stringify({
-      name: user.name,
-      email: user.email,
-      password: user.password,
-      isActive: user.isActive ?? true,
-      roleAssignments: [
-        {
-          role: user.role ?? "OPERATIONS",
-          system: "VMMS",
-        },
-      ],
-    }),
-  }).then((createdUser) => normalizeUserRecord(createdUser));
-}
-
-export async function updateUserRole(userId: string, role: UserRole) {
-  if (!useBackend) {
-    const me = await getCurrentUser();
-    if (me && me.id === userId) {
-      throw new Error("You cannot edit your own account.");
-    }
-    const index = mockUsers.findIndex(
-      (currentUser) => currentUser.id === userId,
-    );
-    if (index >= 0) {
-      mockUsers[index] = { ...mockUsers[index], role };
-    }
-    return mockUsers[index] as UserRecord;
-  }
-
-  return fetchJSON<UserRecord>(`/auth/users/${encodeURIComponent(userId)}`, {
-    method: "PATCH",
-    body: JSON.stringify({
-      roleAssignments: [{ role, system: "VMMS" }],
-    }),
-  }).then((updatedUser) => normalizeUserRecord(updatedUser));
-}
-
-export async function updateUser(
-  userId: string,
-  data: { name?: string; email?: string; username?: string; password?: string },
-) {
-  if (!useBackend) {
-    const index = mockUsers.findIndex((u) => u.id === userId);
-    if (index >= 0) {
-      const updated = { ...mockUsers[index], ...data } as UserRecord;
-      mockUsers[index] = updated;
-      return updated;
-    }
-    throw new Error("User not found");
-  }
-
-  return fetchJSON<UserRecord>(`/auth/users/${encodeURIComponent(userId)}`, {
-    method: "PATCH",
-    body: JSON.stringify(data),
-  }).then((updatedUser) => normalizeUserRecord(updatedUser));
-}
-
-export async function updateUserStatus(userId: string, status: UserStatus) {
-  if (!useBackend) {
-    const me = await getCurrentUser();
-    if (me && me.id === userId) {
-      throw new Error("You cannot change your own account status.");
-    }
-    const index = mockUsers.findIndex(
-      (currentUser) => currentUser.id === userId,
-    );
-    if (index >= 0) {
-      mockUsers[index] = { ...mockUsers[index], status };
-    }
-    return mockUsers[index] as UserRecord;
-  }
-
-  return fetchJSON<UserRecord>(`/auth/users/${encodeURIComponent(userId)}/status`, {
-    method: "PATCH",
-    body: JSON.stringify({ isActive: status === "Active" }),
-  }).then((updatedUser) => normalizeUserRecord(updatedUser));
-}
-
-export async function unlockUser(userId: string) {
-  if (!useBackend) {
-    const index = mockUsers.findIndex((user) => user.id === userId);
-    if (index < 0) throw new Error("User not found");
-
-    mockUsers[index] = {
-      ...mockUsers[index],
-      isLocked: false,
-      lockedAt: null,
-    };
-    return normalizeUserRecord(mockUsers[index]);
-  }
-
-  return fetchJSON<UserRecord>(
-    `/auth/users/${encodeURIComponent(userId)}/unlock`,
-    { method: "PATCH" },
-  ).then((user) => normalizeUserRecord(user));
-}
-
-export async function resetUserPassword(userId: string) {
-  const password = "Password123!";
-
-  if (!useBackend) {
-    const index = mockUsers.findIndex((user) => user.id === userId);
-    if (index < 0) throw new Error("User not found");
-    mockUsers[index] = { ...mockUsers[index], updatedAt: new Date().toISOString() };
-    return normalizeUserRecord(mockUsers[index]);
-  }
-
-  return fetchJSON<UserRecord>(
-    `/auth/users/${encodeURIComponent(userId)}/password`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({ password }),
-    },
-  ).then((user) => normalizeUserRecord(user));
-}
-
-export async function deleteUser(userId: string) {
-  if (!useBackend) {
-    const me = await getCurrentUser();
-    if (me && me.id === userId) {
-      throw new Error("You cannot delete your own account.");
-    }
-    const index = mockUsers.findIndex(
-      (currentUser) => currentUser.id === userId,
-    );
-    if (index >= 0) {
-      mockUsers.splice(index, 1);
-    }
-    return;
-  }
-
-  return fetchJSON<void>(`/users/${encodeURIComponent(userId)}`, {
-    method: "DELETE",
-  });
-}
-
-export async function getCurrentUser() {
-  if (!useBackend) {
-    const currentUserId = window.localStorage.getItem("mockCurrentUserId");
-    if (currentUserId) {
-      const currentUser = mockUsers.find((user) => user.id === currentUserId);
-      if (currentUser) {
-        return { ...currentUser };
-      }
-    }
-
-    return { ...mockUsers[0] };
-  }
-
-  return fetchJSON<UserRecord>("/auth/me").then((user) =>
-    normalizeUserRecord(user),
-  );
 }
 
 export async function updateWorkOrder(task: MaintenanceTask) {
@@ -757,36 +502,6 @@ export async function getChecklistTemplateId(type: string): Promise<string | und
   );
   if (!template?.id || !template.items?.length) throw new Error('The selected checklist is unavailable or empty. Refresh the templates and try again.');
   return template.id;
-}
-
-export async function recordLogout() {
-  if (!useBackend || !window.localStorage.getItem("accessToken")) return;
-  try {
-    await fetchJSON<{ message: string }>("/auth/logout", { method: "POST" });
-  } catch (error) {
-    console.warn("Unable to record logout activity", error);
-  }
-}
-
-export type LoginActivityRecord = {
-  id: string;
-  event: "SUCCESSFUL_LOGIN" | "FAILED_LOGIN" | "ACCOUNT_LOCKOUT" | "LOGOUT" | "PLATFORM_ACCESS_DENIED";
-  email: string;
-  ipAddress: string | null;
-  deviceType: string;
-  createdAt: string;
-};
-
-export async function getLoginActivity(userId: string) {
-  if (!useBackend) return [] as LoginActivityRecord[];
-  return fetchJSON<LoginActivityRecord[]>(
-    `/auth/users/${encodeURIComponent(userId)}/login-activity`,
-  );
-}
-
-export async function getMyLoginActivity() {
-  if (!useBackend) return [] as LoginActivityRecord[];
-  return fetchJSON<LoginActivityRecord[]>("/auth/me/login-activity");
 }
 
 export async function saveChecklistTemplates(
@@ -1158,10 +873,10 @@ export type VehicleAuditEntry = {
   createdAt: string;
 };
 
-export type AuditLogSource = "all" | "login" | "vehicle" | "work-order" | "schedule" | "fuel";
+export type AuditLogSource = "accounts" | "business";
 export type AuditLogRecord = {
   id: string;
-  source: Exclude<AuditLogSource, "all">;
+  source: AuditLogSource;
   actor: string;
   action: string;
   entity: string;
@@ -1171,11 +886,32 @@ export type AuditLogRecord = {
   createdAt: string;
 };
 
-export async function getAuditLogs(source: AuditLogSource = "all"): Promise<AuditLogRecord[]> {
-  if (!useBackend) return [];
-  return fetchJSON<AuditLogRecord[]>(`/auth/audit-logs?source=${encodeURIComponent(source)}`);
+export async function getAuditLogs(source: AuditLogSource = "business", cursor: string | null = null): Promise<{ records: AuditLogRecord[]; nextCursor: string | null }> {
+  if (!useBackend) return { records: [], nextCursor: null };
+  if (source === "business") {
+    const result = await fetchJSON<{ records?: Omit<AuditLogRecord, "source">[] }>("/audit-logs/business");
+    return { records: (result.records ?? []).map((record) => ({ ...record, source: "business" })), nextCursor: null };
+  }
+  const result = await fetchJSON<{ data?: Array<{
+    id: string;
+    type: string;
+    createdAt: string;
+    device?: string | null;
+    address?: string | null;
+    user?: { name?: string; email?: string };
+  }>; nextCursor?: string | null }>(`/auth/activity?category=SIGN_IN&limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
+  return { records: (result.data ?? []).map((event) => ({
+    id: event.id,
+    source: "accounts",
+    actor: event.user?.email ?? event.user?.name ?? "Account",
+    action: event.type,
+    entity: "Account",
+    details: [event.device, event.address].filter(Boolean).join(" · ") || null,
+    previousValue: null,
+    newValue: null,
+    createdAt: event.createdAt,
+  })), nextCursor: result.nextCursor ?? null };
 }
-
 export async function getVehicleRecords(): Promise<VehicleRecord[]> {
   if (!useBackend) return [...mockVehicleRecords];
   const data = await fetchJSON<VehicleRecord[]>("/vehicles");

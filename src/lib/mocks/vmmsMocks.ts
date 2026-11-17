@@ -41,6 +41,8 @@ export type UserRecord = {
   id: string;
   name: string;
   email: string;
+  contact?: string | null;
+  profilePicture?: string | null;
   username?: string;
   role: "ADMIN" | "MECHANIC" | "OPERATIONS" | "CHIEF_MECHANIC";
   status: UserStatus;
@@ -48,6 +50,7 @@ export type UserRecord = {
   updatedAt?: string;
   isLocked?: boolean;
   lockedAt?: string | null;
+  systems?: string[];
 };
 
 export type UserRole = UserRecord["role"];
