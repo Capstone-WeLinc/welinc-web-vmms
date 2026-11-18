@@ -24,10 +24,11 @@ import {
 } from "../../lib/api/locationService";
 import {
   getVehicles,
+  getVehicleMaintenanceDefaults,
   type VehicleOption,
+  type VehicleMaintenanceDefaults,
 } from "../../lib/api/vehicleService";
 import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
-import { getOdometerActivationRange } from "../../lib/utils/workOrders";
 import {
   AccountType,
   accountTypeLabels,
@@ -64,14 +65,12 @@ const getTodayDateText = () => {
 export default function CreateScheduleModal({
   isOpen,
   editingTask,
-  odometerOnly = false,
   existingSchedules,
   onClose,
   onSaved,
 }: {
   isOpen: boolean;
   editingTask?: MaintenanceTask;
-  odometerOnly?: boolean;
   existingSchedules: MaintenanceTask[];
   onClose: () => void;
   onSaved?: (task: MaintenanceTask) => void | Promise<void>;
@@ -109,6 +108,16 @@ export default function CreateScheduleModal({
   const [bufferDistanceKm, setBufferDistanceKm] = useState("");
   const [startingReferenceReadingKm, setStartingReferenceReadingKm] =
     useState("");
+  const [odometerMileageMode, setOdometerMileageMode] = useState<
+    "DEFAULT" | "CUSTOM"
+  >("CUSTOM");
+  const [odometerMileageModeTouched, setOdometerMileageModeTouched] =
+    useState(false);
+  const [vehicleMaintenanceDefaults, setVehicleMaintenanceDefaults] =
+    useState<VehicleMaintenanceDefaults | null>(null);
+  const [maintenanceDefaultsLoading, setMaintenanceDefaultsLoading] =
+    useState(false);
+  const [maintenanceDefaultsError, setMaintenanceDefaultsError] = useState("");
   const [timeIntervalValue, setTimeIntervalValue] = useState('3');
   const [timeIntervalUnit, setTimeIntervalUnit] = useState<'DAYS' | 'MONTHS'>('MONTHS');
   const [triggerType, setTriggerType] = useState<
@@ -124,7 +133,6 @@ export default function CreateScheduleModal({
   } | null>(null);
   const [duplicateSchedule, setDuplicateSchedule] =
     useState<MaintenanceTask | null>(null);
-  const isOdometerOnlyUpdate = Boolean(odometerOnly && editingTask);
 
   useEffect(() => {
     getOutsourcedProviders().then(setOutsourcedProviders).catch(() => setOutsourcedProviders([]));
@@ -163,6 +171,8 @@ export default function CreateScheduleModal({
     if (isOpen) {
       requestAnimationFrame(() => {
         if (editingTask) {
+          setOdometerMileageMode("CUSTOM");
+          setOdometerMileageModeTouched(true);
           setVehicleId(editingTask.vehicleId);
           setStartDate(editingTask.startDate ?? '');
           setTargetDueDate(editingTask.targetDueDate ?? editingTask.dueDate ?? '');
@@ -198,6 +208,8 @@ export default function CreateScheduleModal({
 
         } else {
           // Reset all fields for new schedule
+          setOdometerMileageMode("DEFAULT");
+          setOdometerMileageModeTouched(false);
           setStartDate('');
           setTargetDueDate('');
           setVehicleId("");
@@ -222,9 +234,97 @@ export default function CreateScheduleModal({
           setTimeIntervalValue('3');
           setTimeIntervalUnit('MONTHS');
         }
+        setVehicleMaintenanceDefaults(null);
+        setMaintenanceDefaultsError("");
       });
     }
   }, [isOpen, editingTask]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (triggerType !== MaintenanceTriggerType.ODOMETER) {
+      const frame = requestAnimationFrame(() =>
+        setMaintenanceDefaultsLoading(false),
+      );
+      return () => cancelAnimationFrame(frame);
+    }
+
+    let active = true;
+    const frame = requestAnimationFrame(() => {
+      setVehicleMaintenanceDefaults(null);
+      setMaintenanceDefaultsError("");
+      if (!vehicleId || !checklistTemplate) {
+        setMaintenanceDefaultsLoading(false);
+        return;
+      }
+
+      const selectedVehicle = vehicles.find(
+        (vehicle) => vehicle.value === vehicleId,
+      );
+      if (!selectedVehicle?.id) {
+        setMaintenanceDefaultsLoading(false);
+        setOdometerMileageMode("CUSTOM");
+        setMaintenanceDefaultsError(
+          "Vehicle defaults are unavailable. Enter custom interval and buffer values.",
+        );
+        return;
+      }
+
+      setMaintenanceDefaultsLoading(true);
+      getVehicleMaintenanceDefaults(selectedVehicle.id)
+        .then((defaults) => {
+          if (!active) return;
+          setVehicleMaintenanceDefaults(defaults);
+          const category = defaults.categories.find(
+            (item) =>
+              item.type.trim().toLowerCase() ===
+              checklistTemplate.trim().toLowerCase(),
+          );
+          const hasCategoryOverride =
+            category?.intervalKm != null &&
+            category.bufferDistanceKm != null;
+          const intervalKm = hasCategoryOverride
+            ? category.intervalKm
+            : defaults.baseIntervalKm;
+          const bufferDistanceKm = hasCategoryOverride
+            ? category.bufferDistanceKm
+            : defaults.baseBufferDistanceKm;
+          if (intervalKm != null && bufferDistanceKm != null) {
+            if (!odometerMileageModeTouched) {
+              setOdometerMileageMode("DEFAULT");
+              setIntervalKm(String(intervalKm));
+              setBufferDistanceKm(String(bufferDistanceKm));
+            }
+          } else {
+            setOdometerMileageMode("CUSTOM");
+          }
+        })
+        .catch((error: unknown) => {
+          if (!active) return;
+          setOdometerMileageMode("CUSTOM");
+          setMaintenanceDefaultsError(
+            error instanceof Error
+              ? error.message
+              : "Could not load vehicle maintenance defaults.",
+          );
+        })
+        .finally(() => {
+          if (active) setMaintenanceDefaultsLoading(false);
+        });
+    });
+
+    return () => {
+      active = false;
+      cancelAnimationFrame(frame);
+    };
+  }, [
+    isOpen,
+    triggerType,
+    vehicleId,
+    checklistTemplate,
+    vehicles,
+    odometerMileageModeTouched,
+  ]);
 
   useEffect(() => {
     if (!toast) return;
@@ -251,6 +351,51 @@ export default function CreateScheduleModal({
     .map(([templateName]) => templateName);
   const isSelectedTemplateUsable =
     selectableTemplateNames.includes(checklistTemplate);
+  const categoryMaintenanceDefault =
+    vehicleMaintenanceDefaults?.categories.find(
+      (item) =>
+        item.type.trim().toLowerCase() ===
+        checklistTemplate.trim().toLowerCase(),
+    );
+  const categoryIntervalKm = categoryMaintenanceDefault?.intervalKm;
+  const categoryBufferDistanceKm =
+    categoryMaintenanceDefault?.bufferDistanceKm;
+  const resolvedMaintenanceDefault =
+    categoryIntervalKm != null && categoryBufferDistanceKm != null
+      ? {
+          intervalKm: categoryIntervalKm,
+          bufferDistanceKm: categoryBufferDistanceKm,
+          source: "Checklist type override",
+        }
+      : vehicleMaintenanceDefaults?.baseIntervalKm != null &&
+          vehicleMaintenanceDefaults.baseBufferDistanceKm != null
+        ? {
+            intervalKm: vehicleMaintenanceDefaults.baseIntervalKm,
+            bufferDistanceKm:
+              vehicleMaintenanceDefaults.baseBufferDistanceKm,
+            source: "Vehicle base default",
+          }
+        : null;
+  const effectiveIntervalKm =
+    triggerType === MaintenanceTriggerType.ODOMETER &&
+    odometerMileageMode === "DEFAULT" && resolvedMaintenanceDefault
+      ? String(resolvedMaintenanceDefault.intervalKm)
+      : intervalKm;
+  const effectiveBufferDistanceKm =
+    triggerType === MaintenanceTriggerType.ODOMETER &&
+    odometerMileageMode === "DEFAULT" && resolvedMaintenanceDefault
+      ? String(resolvedMaintenanceDefault.bufferDistanceKm)
+      : bufferDistanceKm;
+  const odometerDefaultsError =
+    triggerType === MaintenanceTriggerType.ODOMETER &&
+    vehicleId &&
+    checklistTemplate &&
+    odometerMileageMode === "DEFAULT" &&
+    !maintenanceDefaultsLoading &&
+    !resolvedMaintenanceDefault
+      ? maintenanceDefaultsError ||
+        "No default is configured. Choose Custom and enter an interval and buffer."
+      : "";
   const requiredFieldValues = [
     vehicleId,
     targetDueDate,
@@ -261,7 +406,11 @@ export default function CreateScheduleModal({
     checklistTemplate,
     assignedMechanic,
     ...(triggerType !== MaintenanceTriggerType.TIME
-      ? [intervalKm, bufferDistanceKm, startingReferenceReadingKm]
+      ? [
+          effectiveIntervalKm,
+          effectiveBufferDistanceKm,
+          startingReferenceReadingKm,
+        ]
       : []),
     ...(triggerType !== MaintenanceTriggerType.ODOMETER
       ? [timeIntervalValue, timeIntervalUnit, startReferenceDate]
@@ -273,10 +422,14 @@ export default function CreateScheduleModal({
     : targetDueDate < startDate
       ? 'Target due date cannot be earlier than the schedule start date.'
       : '';
-  const mileageError = scheduleMileageError({
+  const mileageError = odometerDefaultsError || scheduleMileageError({
     vehicleId, title: checklistTemplate, triggerType, odometerReading,
-    intervalKm: triggerType === MaintenanceTriggerType.TIME ? '' : intervalKm,
-    bufferDistanceKm: triggerType === MaintenanceTriggerType.TIME ? '' : bufferDistanceKm,
+    intervalKm:
+      triggerType === MaintenanceTriggerType.TIME ? "" : effectiveIntervalKm,
+    bufferDistanceKm:
+      triggerType === MaintenanceTriggerType.TIME
+        ? ""
+        : effectiveBufferDistanceKm,
     startingReferenceReadingKm: triggerType === MaintenanceTriggerType.TIME ? '' : startingReferenceReadingKm,
   }, vehicles.find((vehicle) => vehicle.value === vehicleId)?.odometer, editingTask);
   const startingReferenceReadingError = mileageError ===
@@ -287,30 +440,39 @@ export default function CreateScheduleModal({
     ? mileageError
     : '';
   const intervalError = triggerType === MaintenanceTriggerType.TIME ? timeIntervalError(timeIntervalValue, timeIntervalUnit) : '';
-  const isFormComplete = !startDateError && !targetDueDateError && !mileageError && !intervalError && (isOdometerOnlyUpdate
-    ? odometerReading.trim().length > 0 &&
-      NON_NEGATIVE_NUMBER_PATTERN.test(odometerReading.trim())
-    : requiredFieldValues.every((value) => value.trim().length > 0) &&
-      isSelectedTemplateUsable &&
-      [
-        odometerReading,
-        ...(triggerType !== MaintenanceTriggerType.TIME
-          ? [intervalKm, bufferDistanceKm, startingReferenceReadingKm]
-          : []),
-      ].every((value) => NON_NEGATIVE_NUMBER_PATTERN.test(value.trim())));
+  const isFormComplete =
+    !startDateError &&
+    !targetDueDateError &&
+    !mileageError &&
+    !maintenanceDefaultsLoading &&
+    !intervalError &&
+    requiredFieldValues.every((value) => value.trim().length > 0) &&
+    isSelectedTemplateUsable &&
+    [
+      odometerReading,
+      ...(triggerType !== MaintenanceTriggerType.TIME
+        ? [
+            effectiveIntervalKm,
+            effectiveBufferDistanceKm,
+            startingReferenceReadingKm,
+          ]
+        : []),
+    ].every((value) => NON_NEGATIVE_NUMBER_PATTERN.test(value.trim()));
 
   const saveSchedule = async () => {
     if (!canSchedule) return;
     const dateError = scheduleStartDateError(startDate, editingTask?.startDate);
     if (dateError) { setToast({ type: 'error', message: dateError }); return; }
     if (targetDueDateError) { setToast({ type: 'error', message: targetDueDateError }); return; }
+    if (maintenanceDefaultsLoading) {
+      setToast({ type: "error", message: "Wait for vehicle defaults to finish loading." });
+      return;
+    }
     if (mileageError) { setToast({ type: 'error', message: mileageError }); return; }
     if (intervalError) { setToast({ type: 'error', message: intervalError }); return; }
     setIsSaving(true);
     try {
-      const checklistTemplateId = isOdometerOnlyUpdate && editingTask?.checklistTemplateId
-        ? editingTask.checklistTemplateId
-        : await getChecklistTemplateId(checklistTemplate);
+      const checklistTemplateId = await getChecklistTemplateId(checklistTemplate);
       const savedGarageId = garageIsOther
         ? otherGarageValue.trim()
         : garageId;
@@ -326,8 +488,10 @@ export default function CreateScheduleModal({
       const isTimeBased = triggerType === MaintenanceTriggerType.TIME;
       const submittedStartReferenceDate = isTimeBased ? startReferenceDate : "";
       const timeConfig = isTimeBased ? { timeIntervalValue: Number(timeIntervalValue), timeIntervalUnit } : {};
-      const submittedIntervalKm = isTimeBased ? "" : intervalKm;
-      const submittedBufferDistanceKm = isTimeBased ? "" : bufferDistanceKm;
+      const submittedIntervalKm = isTimeBased ? "" : effectiveIntervalKm;
+      const submittedBufferDistanceKm = isTimeBased
+        ? ""
+        : effectiveBufferDistanceKm;
       const submittedStartingReferenceReadingKm = isTimeBased
         ? ""
         : startingReferenceReadingKm;
@@ -335,40 +499,35 @@ export default function CreateScheduleModal({
       if (editingTask) {
         const targetSchedule = editingTask;
 
-        const updated: MaintenanceTask = isOdometerOnlyUpdate
-          ? {
-              ...targetSchedule,
-              startDate,
-              targetDueDate,
-              odometerReading,
-              checklistTemplateId,
-            }
-          : {
-              ...targetSchedule,
-              vehicleId,
-              startDate,
-              title: checklistTemplate,
-              checklistTemplateId,
-              assignedDriver: assignedMechanic,
-              assignedMechanicId: selectedMechanic?.id,
-              assignedMechanicEmail: selectedMechanic?.email,
-              chiefMechanicId: resolvedChiefMechanicId,
-              chiefMechanic: resolvedChiefMechanicName,
-              notes,
-              garageId: savedGarageId,
-              accountType: accountType || undefined,
-              priority,
-              outsourcedProvider:
-                accountType === AccountType.OUTSOURCED ? outsourcedProvider.trim() : "",
-              systemAffected,
-              odometerReading,
-              triggerType,
-              startReferenceDate: submittedStartReferenceDate,
-              intervalKm: submittedIntervalKm,
-              bufferDistanceKm: submittedBufferDistanceKm,
-              startingReferenceReadingKm: submittedStartingReferenceReadingKm,
-              ...timeConfig,
-            };
+        const updated: MaintenanceTask = {
+          ...targetSchedule,
+          vehicleId,
+          startDate,
+          title: checklistTemplate,
+          checklistTemplateId,
+          assignedDriver: assignedMechanic,
+          assignedMechanicId: selectedMechanic?.id,
+          assignedMechanicEmail: selectedMechanic?.email,
+          chiefMechanicId: resolvedChiefMechanicId,
+          chiefMechanic: resolvedChiefMechanicName,
+          notes,
+          garageId: savedGarageId,
+          accountType: accountType || undefined,
+          priority,
+          outsourcedProvider:
+            accountType === AccountType.OUTSOURCED ? outsourcedProvider.trim() : "",
+          systemAffected,
+          odometerReading,
+          triggerType,
+          useVehicleDefaults:
+            triggerType === MaintenanceTriggerType.ODOMETER &&
+            odometerMileageMode === "DEFAULT",
+          startReferenceDate: submittedStartReferenceDate,
+          intervalKm: submittedIntervalKm,
+          bufferDistanceKm: submittedBufferDistanceKm,
+          startingReferenceReadingKm: submittedStartingReferenceReadingKm,
+          ...timeConfig,
+        };
         const saved = await updateMaintenanceSchedule(updated);
         await onSaved?.(saved);
       } else {
@@ -394,6 +553,9 @@ export default function CreateScheduleModal({
           systemAffected,
           odometerReading,
           triggerType,
+          useVehicleDefaults:
+            triggerType === MaintenanceTriggerType.ODOMETER &&
+            odometerMileageMode === "DEFAULT",
           startReferenceDate: submittedStartReferenceDate,
           intervalKm: submittedIntervalKm,
           bufferDistanceKm: submittedBufferDistanceKm,
@@ -443,7 +605,7 @@ export default function CreateScheduleModal({
 
     // The server also checks persisted Pending status (display status may be
     // calculated as Due Soon/Overdue) and protects against concurrent saves.
-    const duplicate = isOdometerOnlyUpdate || (editingTask && editingTask.status !== MaintenanceStatus.PENDING)
+    const duplicate = editingTask && editingTask.status !== MaintenanceStatus.PENDING
       ? null
       : existingSchedules.find(
       (schedule) =>
@@ -471,24 +633,13 @@ export default function CreateScheduleModal({
     checklistTemplate,
   );
   const mechanicExists = mechanics.some((m) => m.name === assignedMechanic);
-  const activationRange = editingTask
-    ? getOdometerActivationRange(editingTask)
-    : null;
-  const modalTitle = isOdometerOnlyUpdate
-    ? "UPDATE ODOMETER READING"
-    : editingTask
-      ? "EDIT MAINTENANCE SCHEDULE"
-      : "CREATE MAINTENANCE SCHEDULE";
-  const modalSubtitle = isOdometerOnlyUpdate
-    ? "Update the latest odometer reading for this pending schedule."
-    : editingTask
-      ? "Update schedule details, trigger rules, assignment, and checklist template."
-      : "Set up a new maintenance schedule with vehicle, trigger, assignment, and checklist details.";
-  const submitLabel = isOdometerOnlyUpdate
-    ? "Update Odometer"
-    : editingTask
-      ? "Update Schedule"
-      : "Create Schedule";
+  const modalTitle = editingTask
+    ? "EDIT MAINTENANCE SCHEDULE"
+    : "CREATE MAINTENANCE SCHEDULE";
+  const modalSubtitle = editingTask
+    ? "Update schedule details, trigger rules, assignment, and checklist template."
+    : "Set up a new maintenance schedule with vehicle, trigger, assignment, and checklist details.";
+  const submitLabel = editingTask ? "Update Schedule" : "Create Schedule";
 
   /*
   const renderCalendar = (
@@ -600,88 +751,21 @@ export default function CreateScheduleModal({
               className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-3" />
             {targetDueDateError && <p id="schedule-target-due-date-error" role="alert" className="mt-1 text-sm text-red-600">{targetDueDateError}</p>}
           </section>
-          {!isOdometerOnlyUpdate && (
-            <section>
-              <label htmlFor="schedule-priority" className="mb-1.5 block text-sm font-medium">Work-order priority</label>
-              <select
-                id="schedule-priority"
-                value={priority}
-                onChange={(event) => setPriority(event.target.value as MaintenancePriority)}
-                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-3"
-              >
-                {Object.values(MaintenancePriority).map((value) => (
-                  <option key={value} value={value}>{maintenancePriorityLabels[value]}</option>
-                ))}
-              </select>
-            </section>
-          )}
+          <section>
+            <label htmlFor="schedule-priority" className="mb-1.5 block text-sm font-medium">Work-order priority</label>
+            <select
+              id="schedule-priority"
+              value={priority}
+              onChange={(event) => setPriority(event.target.value as MaintenancePriority)}
+              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-3"
+            >
+              {Object.values(MaintenancePriority).map((value) => (
+                <option key={value} value={value}>{maintenancePriorityLabels[value]}</option>
+              ))}
+            </select>
+          </section>
           {mileageError && !startingReferenceReadingError && !maintenanceIntervalError && <p role="alert" className="text-sm text-red-600">{mileageError}</p>}
           {intervalError && <p role="alert" className="text-sm text-red-600">{intervalError}</p>}
-          {isOdometerOnlyUpdate ? (
-            <section className="space-y-4 border-b border-[var(--color-border)] pb-6">
-              <div className="mb-4 flex items-center gap-3">
-                <div className="rounded-2xl border border-[var(--color-status-info)]/30 bg-[var(--color-status-info)]/10 p-2 text-[#0369a1]">
-                  <Wrench className="h-4 w-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-[var(--color-text-primary)]">
-                    Update Pending Schedule Odometer
-                  </h3>
-                  <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                    Pending schedules only allow odometer reading updates.
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                {[
-                  { label: "Vehicle", value: editingTask?.vehicleId },
-                  { label: "Checklist Template", value: editingTask?.title },
-                  {
-                    label: "Assigned Mechanic",
-                    value: editingTask?.assignedDriver,
-                  },
-                  { label: "Status", value: editingTask?.status },
-                  {
-                    label: "Activation Range",
-                    value: activationRange
-                      ? `${activationRange.minimum} km - ${activationRange.maximum} km`
-                      : "Not available",
-                  },
-                ].map((detail) => (
-                  <div
-                    key={detail.label}
-                    className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4"
-                  >
-                    <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
-                      {detail.label}
-                    </p>
-                    <p className="mt-1 text-sm font-medium text-[var(--color-text-primary)]">
-                      {detail.value || "Not specified"}
-                    </p>
-                  </div>
-                ))}
-                <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4 md:col-span-2">
-                  <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-                    Odometer Reading (km)
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="e.g., 12000"
-                    value={odometerReading}
-                    onChange={(e) =>
-                      setOdometerReading(
-                        e.target.value,
-                      )
-                    }
-                    className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
-                  />
-                </div>
-              </div>
-            </section>
-          ) : (
-            <>
           {/* Vehicle Information */}
           <section className="space-y-4 border-b border-[var(--color-border)] pb-6">
             <div className="mb-4 flex items-center gap-3">
@@ -912,6 +996,104 @@ export default function CreateScheduleModal({
               ))}
             </div>
 
+            {triggerType === MaintenanceTriggerType.ODOMETER && (
+              <fieldset className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
+                <legend className="px-1 text-sm font-bold text-[var(--color-text-primary)]">
+                  Interval and buffer source
+                </legend>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label
+                    className={`flex items-start gap-3 rounded-lg border p-3 ${
+                      odometerMileageMode === "DEFAULT"
+                        ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)]/5"
+                        : "border-[var(--color-border)]"
+                    } ${
+                      resolvedMaintenanceDefault
+                        ? "cursor-pointer"
+                        : "cursor-not-allowed opacity-60"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="odometer-mileage-mode"
+                      value="DEFAULT"
+                      checked={odometerMileageMode === "DEFAULT"}
+                      disabled={
+                        maintenanceDefaultsLoading ||
+                        !resolvedMaintenanceDefault
+                      }
+                      onChange={() => {
+                        if (!resolvedMaintenanceDefault) return;
+                        setOdometerMileageModeTouched(true);
+                        setOdometerMileageMode("DEFAULT");
+                        setIntervalKm(
+                          String(resolvedMaintenanceDefault.intervalKm),
+                        );
+                        setBufferDistanceKm(
+                          String(resolvedMaintenanceDefault.bufferDistanceKm),
+                        );
+                      }}
+                      className="mt-1 h-4 w-4 accent-[var(--color-brand-primary)]"
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold text-[var(--color-text-primary)]">
+                        Use vehicle default
+                      </span>
+                      <span className="mt-1 block text-xs text-[var(--color-text-secondary)]">
+                        {maintenanceDefaultsLoading
+                          ? "Loading defaults…"
+                          : resolvedMaintenanceDefault
+                            ? `${resolvedMaintenanceDefault.source}: ${resolvedMaintenanceDefault.intervalKm.toLocaleString()} km interval, ${resolvedMaintenanceDefault.bufferDistanceKm.toLocaleString()} km buffer`
+                            : "No applicable default is configured."}
+                      </span>
+                    </span>
+                  </label>
+                  <label
+                    className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${
+                      odometerMileageMode === "CUSTOM"
+                        ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)]/5"
+                        : "border-[var(--color-border)]"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="odometer-mileage-mode"
+                      value="CUSTOM"
+                      checked={odometerMileageMode === "CUSTOM"}
+                      onChange={() => {
+                        setOdometerMileageModeTouched(true);
+                        setOdometerMileageMode("CUSTOM");
+                      }}
+                      className="mt-1 h-4 w-4 accent-[var(--color-brand-primary)]"
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold text-[var(--color-text-primary)]">
+                        Custom for this schedule
+                      </span>
+                      <span className="mt-1 block text-xs text-[var(--color-text-secondary)]">
+                        Enter both values below. This does not change vehicle defaults.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+                {maintenanceDefaultsError && (
+                  <p role="alert" className="mt-3 text-sm text-red-600">
+                    {maintenanceDefaultsError}
+                  </p>
+                )}
+                {!maintenanceDefaultsLoading &&
+                  !resolvedMaintenanceDefault &&
+                  !maintenanceDefaultsError &&
+                  vehicleId &&
+                  checklistTemplate && (
+                    <p className="mt-3 text-xs text-[var(--color-text-secondary)]">
+                      No defaults are configured for this vehicle and checklist
+                      type. Enter Custom values to continue.
+                    </p>
+                  )}
+              </fieldset>
+            )}
+
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:items-start mb-4">
               <div
                 className="flex h-full flex-col"
@@ -929,15 +1111,21 @@ export default function CreateScheduleModal({
                   type="text"
                   inputMode="numeric"
                   placeholder="e.g., 5000"
-                  value={intervalKm}
+                  value={effectiveIntervalKm}
                   aria-invalid={Boolean(maintenanceIntervalError)}
                   aria-describedby={maintenanceIntervalError ? "schedule-interval-km-error" : undefined}
                   onChange={(e) =>
                     setIntervalKm(e.target.value)
                   }
-                  disabled={triggerType === MaintenanceTriggerType.TIME}
+                  disabled={
+                    triggerType === MaintenanceTriggerType.TIME ||
+                    (triggerType === MaintenanceTriggerType.ODOMETER &&
+                      odometerMileageMode === "DEFAULT")
+                  }
                   className={`w-full rounded-md border px-3 py-2 text-sm placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 ${
-                    triggerType === MaintenanceTriggerType.TIME
+                    triggerType === MaintenanceTriggerType.TIME ||
+                    (triggerType === MaintenanceTriggerType.ODOMETER &&
+                      odometerMileageMode === "DEFAULT")
                       ? "border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] cursor-not-allowed opacity-80"
                       : "border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-primary)]"
                   }`}
@@ -963,15 +1151,21 @@ export default function CreateScheduleModal({
                   type="text"
                   inputMode="numeric"
                   placeholder="e.g., 500"
-                  value={bufferDistanceKm}
+                  value={effectiveBufferDistanceKm}
                   onChange={(e) =>
                     setBufferDistanceKm(
                       e.target.value,
                     )
                   }
-                  disabled={triggerType === MaintenanceTriggerType.TIME}
+                  disabled={
+                    triggerType === MaintenanceTriggerType.TIME ||
+                    (triggerType === MaintenanceTriggerType.ODOMETER &&
+                      odometerMileageMode === "DEFAULT")
+                  }
                   className={`w-full rounded-md border px-3 py-2 text-sm placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 ${
-                    triggerType === MaintenanceTriggerType.TIME
+                    triggerType === MaintenanceTriggerType.TIME ||
+                    (triggerType === MaintenanceTriggerType.ODOMETER &&
+                      odometerMileageMode === "DEFAULT")
                       ? "border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] cursor-not-allowed opacity-80"
                       : "border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-primary)]"
                   }`}
@@ -1318,8 +1512,6 @@ export default function CreateScheduleModal({
               </div>
             </div>
           </section>
-            </>
-          )}
         </div>
 
         {/* Footer */}

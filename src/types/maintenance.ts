@@ -139,6 +139,7 @@ export interface MaintenanceTask {
   triggerType?: MaintenanceTriggerType;
   intervalKm?: string;
   bufferDistanceKm?: string;
+  useVehicleDefaults?: boolean;
   startingReferenceReadingKm?: string;
   intervalType?: MaintenanceIntervalType;
   startReferenceDate?: string;

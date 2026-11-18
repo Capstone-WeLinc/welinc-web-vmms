@@ -15,7 +15,6 @@ import {
   ArrowUp,
   ArrowDown,
   Edit2,
-  RefreshCw,
   Ban,
   Power,
   CheckCircle2 as ApproveIcon,
@@ -52,7 +51,6 @@ import {
   getMaintenanceSchedules,
   cancelMaintenanceSchedule,
   reviewMaintenanceScheduleCancellation,
-  updateMaintenanceOdometerThreshold,
   updateMaintenanceSchedule,
   updateWorkOrderPriority,
 } from "../../lib/api/maintenanceService";
@@ -317,18 +315,12 @@ const MaintenanceSchedulingCombined = () => {
   const [garages, setGarages] = useState<GarageOption[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<MaintenanceTask | null>(null);
-  const [isOdometerUpdateOpen, setIsOdometerUpdateOpen] = useState(false);
   const [selectedSchedules, setSelectedSchedules] = useState<MaintenanceTask[]>(
     [],
   );
   const [selectedSchedulePage, setSelectedSchedulePage] = useState(0);
   const [pendingAction, setPendingAction] =
     useState<PendingScheduleAction | null>(null);
-  const [thresholdEditTask, setThresholdEditTask] = useState<MaintenanceTask | null>(null);
-  const [thresholdValue, setThresholdValue] = useState("");
-  const [thresholdReason, setThresholdReason] = useState("");
-  const [isSavingThreshold, setIsSavingThreshold] = useState(false);
-  const [thresholdError, setThresholdError] = useState("");
   const [cancellationReason, setCancellationReason] = useState('');
   const [actionSaving, setActionSaving] = useState(false);
   const [actionError, setActionError] = useState('');
@@ -338,13 +330,6 @@ const MaintenanceSchedulingCombined = () => {
     setCancellationReason('');
     setActionError('');
   }, [pendingAction]);
-  useEffect(() => {
-    // Initialize this dialog's draft fields when a different schedule is selected for editing.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setThresholdValue(thresholdEditTask?.dueOdometer != null ? String(thresholdEditTask.dueOdometer) : "");
-    setThresholdReason("");
-    setThresholdError("");
-  }, [thresholdEditTask]);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [savingPriorityId, setSavingPriorityId] = useState<string | null>(null);
@@ -373,7 +358,6 @@ const MaintenanceSchedulingCombined = () => {
     // A create query parameter opens a fresh schedule form.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setEditingTask(null);
-    setIsOdometerUpdateOpen(false);
     setIsModalOpen(true);
   }, [location.search, canSchedule]);
 
@@ -636,31 +620,8 @@ const MaintenanceSchedulingCombined = () => {
       return;
     }
     setEditingTask(task);
-    setIsOdometerUpdateOpen(false);
     setIsModalOpen(true);
   };
-
-  const openOdometerUpdate = (task: MaintenanceTask) => {
-    if (!canSchedule) return;
-    if (isInProgressScheduleLocked(task)) {
-      setToast({
-        type: "warning",
-        message: "In-progress schedules cannot be updated.",
-      });
-      return;
-    }
-    setEditingTask(task);
-    setIsOdometerUpdateOpen(true);
-    setIsModalOpen(true);
-  };
-
-  const canShowScheduleUpdate = (task: MaintenanceTask) =>
-    canSchedule &&
-    !isInProgressScheduleLocked(task) &&
-    task.status !== MaintenanceStatus.COMPLETED &&
-    task.status !== MaintenanceStatus.CANCELLED &&
-    (task.triggerType === MaintenanceTriggerType.ODOMETER ||
-      task.triggerType === MaintenanceTriggerType.MANUAL);
 
   const confirmScheduleAction = async () => {
     if (!pendingAction || actionSaving) return;
@@ -734,46 +695,6 @@ const MaintenanceSchedulingCombined = () => {
     }
   };
 
-  const saveOdometerThreshold = async () => {
-    if (!thresholdEditTask || !isAdmin || isSavingThreshold) return;
-    const thresholdKm = Number(thresholdValue);
-    const vehicleReading = vehicles.find((vehicle) => vehicle.value === thresholdEditTask.vehicleId)?.odometer ?? 0;
-    const currentOdometer = Math.max(vehicleReading, Number(thresholdEditTask.odometerReading ?? 0));
-    if (!Number.isSafeInteger(thresholdKm) || thresholdKm <= 0) {
-      setThresholdError("Enter a positive whole-number odometer threshold.");
-      return;
-    }
-    if (thresholdKm <= currentOdometer) {
-      setThresholdError(`The target must be in the future. This truck is at ${currentOdometer.toLocaleString()} km; choose a higher threshold or schedule its maintenance immediately.`);
-      return;
-    }
-    if (!thresholdReason.trim()) {
-      setThresholdError("A reason for changing the threshold is required.");
-      return;
-    }
-
-    setIsSavingThreshold(true);
-    setThresholdError("");
-    try {
-      const result = await updateMaintenanceOdometerThreshold(
-        thresholdEditTask.id,
-        thresholdKm,
-        thresholdReason,
-      );
-      const updatedTask = { ...thresholdEditTask, ...result };
-      setTasks((current) => current.map((task) => task.id === updatedTask.id ? updatedTask : task));
-      setSelectedSchedules((current) => current.map((task) => task.id === updatedTask.id ? updatedTask : task));
-      setThresholdEditTask(null);
-      setToast({ type: "success", message: `Odometer threshold updated to ${thresholdKm.toLocaleString()} km and audited.` });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not update the odometer threshold.";
-      setThresholdError(message);
-      setToast({ type: "error", message });
-    } finally {
-      setIsSavingThreshold(false);
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div className="fixed right-6 top-6 z-50 flex w-[340px] max-w-[calc(100vw-2rem)] flex-col gap-3">
@@ -792,7 +713,6 @@ const MaintenanceSchedulingCombined = () => {
           className="flex items-center gap-2"
           onClick={() => {
             setEditingTask(null);
-            setIsOdometerUpdateOpen(false);
             setIsModalOpen(true);
           }}
         >
@@ -1130,20 +1050,6 @@ const MaintenanceSchedulingCombined = () => {
                           );
                         }}
                         items={[
-                          ...(isAdmin &&
-                          !task.logNumber &&
-                          task.triggerType === MaintenanceTriggerType.ODOMETER &&
-                          ([MaintenanceStatus.PENDING, MaintenanceStatus.DUE, MaintenanceStatus.OVERDUE] as MaintenanceStatus[]).includes(task.status) &&
-                          !getPendingCancellationRequest(task)
-                            ? [{
-                                label: "Edit Odometer Threshold",
-                                icon: Edit2,
-                                onClick: () => {
-                                  setOpenActionMenuId(null);
-                                  setThresholdEditTask(task);
-                                },
-                              }]
-                            : []),
                           ...(canSchedule && !isInProgressScheduleLocked(task)
                             ? [{
                                 label: "Edit",
@@ -1151,16 +1057,6 @@ const MaintenanceSchedulingCombined = () => {
                                 onClick: () => {
                                   setOpenActionMenuId(null);
                                   openFullScheduleEdit(task);
-                                },
-                              }]
-                            : []),
-                          ...(canShowScheduleUpdate(task)
-                            ? [{
-                                label: "Update",
-                                icon: RefreshCw,
-                                onClick: () => {
-                                  setOpenActionMenuId(null);
-                                  openOdometerUpdate(task);
                                 },
                               }]
                             : []),
@@ -1436,18 +1332,6 @@ const MaintenanceSchedulingCombined = () => {
                       Edit
                     </Button>
                   ) : null}
-                  {canShowScheduleUpdate(selectedSchedule) ? (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => {
-                        closeScheduleDetails();
-                        openOdometerUpdate(selectedSchedule);
-                      }}
-                    >
-                      Update
-                    </Button>
-                  ) : null}
                 </div>
               </div>
 
@@ -1615,12 +1499,10 @@ const MaintenanceSchedulingCombined = () => {
       <CreateSchedule
         isOpen={canSchedule && isModalOpen}
         editingTask={editingTask ?? undefined}
-        odometerOnly={isOdometerUpdateOpen}
         existingSchedules={tasks}
         onClose={() => {
           setIsModalOpen(false);
           setEditingTask(null);
-          setIsOdometerUpdateOpen(false);
         }}
         onSaved={async (task) => {
           const recalculatedTask = {
@@ -1647,59 +1529,7 @@ const MaintenanceSchedulingCombined = () => {
           }
           setIsModalOpen(false);
           setEditingTask(null);
-          setIsOdometerUpdateOpen(false);
         }}
-      />
-
-      <ConfirmationModal
-        isOpen={Boolean(thresholdEditTask)}
-        busy={isSavingThreshold}
-        title="Edit Odometer Threshold"
-        variant="primary"
-        confirmLabel="Save Threshold"
-        confirmDisabled={!thresholdValue.trim() || !thresholdReason.trim()}
-        message={thresholdEditTask ? (
-          <div className="space-y-3 text-left">
-            <p>
-              The threshold is the odometer reading that triggers the next maintenance event. It must remain ahead of the truck's current reading; if the truck is already at the target, use the existing due work order rather than moving the target into the past.
-            </p>
-            <p className="font-semibold">{thresholdEditTask.title} — {thresholdEditTask.vehicleId}</p>
-            <p className="text-sm">
-              Current odometer: {Math.max(
-                vehicles.find((vehicle) => vehicle.value === thresholdEditTask.vehicleId)?.odometer ?? 0,
-                Number(thresholdEditTask.odometerReading ?? 0),
-              ).toLocaleString()} km
-            </p>
-            <label className="block text-sm font-medium">
-              New threshold (km)
-              <input
-                type="number"
-                min="1"
-                step="1"
-                inputMode="numeric"
-                value={thresholdValue}
-                disabled={isSavingThreshold}
-                onChange={(event) => setThresholdValue(event.target.value)}
-                className="mt-2 block w-full rounded-lg border border-[#c8ced8] bg-white p-3 text-sm outline-none focus:border-[#070b45]"
-              />
-            </label>
-            <label className="block text-sm font-medium">
-              Reason (required)
-              <textarea
-                required
-                maxLength={2000}
-                rows={3}
-                value={thresholdReason}
-                disabled={isSavingThreshold}
-                onChange={(event) => setThresholdReason(event.target.value)}
-                className="mt-2 block w-full rounded-lg border border-[#c8ced8] bg-white p-3 text-sm outline-none focus:border-[#070b45]"
-              />
-            </label>
-            {thresholdError && <p role="alert" className="text-sm text-red-700">{thresholdError}</p>}
-          </div>
-        ) : ""}
-        onConfirm={() => void saveOdometerThreshold()}
-        onCancel={() => { if (!isSavingThreshold) setThresholdEditTask(null); }}
       />
 
       <ConfirmationModal

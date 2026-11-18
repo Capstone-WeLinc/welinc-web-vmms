@@ -1,2 +1,12 @@
-export { getVehicles, updateVehicleStatus } from "./vmmsApi";
-export type { VehicleOption } from "./vmmsApi";
+export {
+  getVehicles,
+  getVehicleMaintenanceDefaults,
+  updateVehicleMaintenanceDefaults,
+  updateVehicleStatus,
+} from "./vmmsApi";
+export type {
+  VehicleOption,
+  VehicleMaintenanceDefaults,
+  VehicleMaintenanceCategoryDefault,
+  UpdateVehicleMaintenanceDefaultsInput,
+} from "./vmmsApi";

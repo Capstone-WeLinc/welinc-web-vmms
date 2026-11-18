@@ -633,6 +633,7 @@ export async function createMaintenanceSchedule(
     triggerType: schedule.triggerType,
     intervalKm: schedule.intervalKm,
     bufferDistanceKm: schedule.bufferDistanceKm,
+    useVehicleDefaults: schedule.useVehicleDefaults,
     startingReferenceReadingKm: schedule.startingReferenceReadingKm,
     intervalType: schedule.intervalType,
     startReferenceDate: schedule.startReferenceDate,
@@ -679,6 +680,7 @@ export async function updateMaintenanceSchedule(schedule: MaintenanceTask) {
     triggerType: schedule.triggerType,
     intervalKm: schedule.intervalKm,
     bufferDistanceKm: schedule.bufferDistanceKm,
+    useVehicleDefaults: schedule.useVehicleDefaults,
     startingReferenceReadingKm: schedule.startingReferenceReadingKm,
     intervalType: schedule.intervalType,
     startReferenceDate: schedule.startReferenceDate,
@@ -713,18 +715,6 @@ export async function updateWorkOrderPriority(
     { method: "PATCH", body: JSON.stringify({ priority }) },
   );
   return result;
-}
-
-export async function updateMaintenanceOdometerThreshold(
-  id: string,
-  thresholdKm: number,
-  reason: string,
-) {
-  if (!useMaintenanceScheduleBackend) throw new Error('Changing a schedule threshold requires the connected backend and audit trail.');
-  return fetchJSON<Pick<MaintenanceTask, 'id' | 'status' | 'odometerReading' | 'startingReferenceReadingKm' | 'intervalKm' | 'bufferDistanceKm' | 'dueOdometer'>>(
-    `/maintenance-schedules/${encodeURIComponent(id)}/odometer-threshold`,
-    { method: 'PATCH', body: JSON.stringify({ thresholdKm, reason: reason.trim() }) },
-  );
 }
 
 export async function cancelMaintenanceSchedule(schedule: MaintenanceTask, reason: string): Promise<MaintenanceTask> {
@@ -901,10 +891,39 @@ export type VehicleAuditEntry = {
   createdAt: string;
 };
 
-export type AuditLogSource = "accounts" | "business";
+export type VehicleMaintenanceCategoryDefault = {
+  checklistTemplateId: string;
+  type: string;
+  intervalKm: number | null;
+  bufferDistanceKm: number | null;
+};
+
+export type VehicleMaintenanceDefaults = {
+  vehicleId: string;
+  plateNumber: string;
+  baseIntervalKm: number | null;
+  baseBufferDistanceKm: number | null;
+  categories: VehicleMaintenanceCategoryDefault[];
+};
+
+export type UpdateVehicleMaintenanceDefaultsInput = {
+  baseIntervalKm: string;
+  baseBufferDistanceKm: string;
+  categoryOverrides: Array<{
+    checklistTemplateId: string;
+    intervalKm: string;
+    bufferDistanceKm: string;
+  }>;
+};
+
+const mockVehicleMaintenanceDefaults = new Map<
+  string,
+  VehicleMaintenanceDefaults
+>();
+
 export type AuditLogRecord = {
   id: string;
-  source: AuditLogSource;
+  source: "business";
   actor: string;
   action: string;
   entity: string;
@@ -914,31 +933,10 @@ export type AuditLogRecord = {
   createdAt: string;
 };
 
-export async function getAuditLogs(source: AuditLogSource = "business", cursor: string | null = null): Promise<{ records: AuditLogRecord[]; nextCursor: string | null }> {
-  if (!useBackend) return { records: [], nextCursor: null };
-  if (source === "business") {
-    const result = await fetchJSON<{ records?: Omit<AuditLogRecord, "source">[] }>("/audit-logs/business");
-    return { records: (result.records ?? []).map((record) => ({ ...record, source: "business" })), nextCursor: null };
-  }
-  const result = await fetchJSON<{ data?: Array<{
-    id: string;
-    type: string;
-    createdAt: string;
-    device?: string | null;
-    address?: string | null;
-    user?: { name?: string; email?: string };
-  }>; nextCursor?: string | null }>(`/auth/activity?category=SIGN_IN&limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
-  return { records: (result.data ?? []).map((event) => ({
-    id: event.id,
-    source: "accounts",
-    actor: event.user?.email ?? event.user?.name ?? "Account",
-    action: event.type,
-    entity: "Account",
-    details: [event.device, event.address].filter(Boolean).join(" · ") || null,
-    previousValue: null,
-    newValue: null,
-    createdAt: event.createdAt,
-  })), nextCursor: result.nextCursor ?? null };
+export async function getAuditLogs(): Promise<AuditLogRecord[]> {
+  if (!useBackend) return [];
+  const result = await fetchJSON<{ records?: Omit<AuditLogRecord, "source">[] }>("/audit-logs/business");
+  return (result.records ?? []).map((record) => ({ ...record, source: "business" }));
 }
 export async function getVehicleRecords(): Promise<VehicleRecord[]> {
   if (!useBackend) return [...mockVehicleRecords];
@@ -949,6 +947,68 @@ export async function getVehicleRecords(): Promise<VehicleRecord[]> {
 export async function getVehicleAuditHistory(vehicleId: string): Promise<VehicleAuditEntry[]> {
   if (!useBackend) return [];
   return fetchJSON<VehicleAuditEntry[]>(`/vehicles/${encodeURIComponent(vehicleId)}/audit`);
+}
+
+export async function getVehicleMaintenanceDefaults(
+  vehicleId: string,
+): Promise<VehicleMaintenanceDefaults> {
+  if (!useBackend) {
+    return (
+      mockVehicleMaintenanceDefaults.get(vehicleId) ?? {
+        vehicleId,
+        plateNumber: "",
+        baseIntervalKm: null,
+        baseBufferDistanceKm: null,
+        categories: [],
+      }
+    );
+  }
+  return fetchJSON<VehicleMaintenanceDefaults>(
+    `/vehicles/${encodeURIComponent(vehicleId)}/maintenance-defaults`,
+  );
+}
+
+export async function updateVehicleMaintenanceDefaults(
+  vehicleId: string,
+  input: UpdateVehicleMaintenanceDefaultsInput,
+): Promise<VehicleMaintenanceDefaults> {
+  if (!useBackend) {
+    const existing = await getVehicleMaintenanceDefaults(vehicleId);
+    const updated = {
+      ...existing,
+      baseIntervalKm: input.baseIntervalKm
+        ? Number(input.baseIntervalKm)
+        : null,
+      baseBufferDistanceKm: input.baseBufferDistanceKm
+        ? Number(input.baseBufferDistanceKm)
+        : null,
+      categories: existing.categories.map((category) => {
+        const override = input.categoryOverrides.find(
+          (item) => item.checklistTemplateId === category.checklistTemplateId,
+        );
+        return override
+          ? {
+              ...category,
+              intervalKm: Number(override.intervalKm),
+              bufferDistanceKm: Number(override.bufferDistanceKm),
+            }
+          : {
+              ...category,
+              intervalKm: null,
+              bufferDistanceKm: null,
+            };
+      }),
+    };
+    mockVehicleMaintenanceDefaults.set(vehicleId, updated);
+    return updated;
+  }
+  return fetchJSON<VehicleMaintenanceDefaults>(
+    `/vehicles/${encodeURIComponent(vehicleId)}/maintenance-defaults`,
+    {
+      method: "PUT",
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 export async function createVehicleRecord(
@@ -1004,9 +1064,51 @@ export async function saveVehicleImport(rows: VehicleImportRow[]): Promise<Vehic
   });
 }
 
+export type OdometerImportStatus = "READY" | "UPDATED" | "UNCHANGED" | "ERROR";
+
+export type OdometerImportRow = {
+  row: number;
+  plateNumber: string;
+  odometerReading: string;
+  currentOdometer: number | null;
+  status: OdometerImportStatus;
+  errors: string[];
+};
+
+export type OdometerImportInput = Pick<
+  OdometerImportRow,
+  "row" | "plateNumber" | "odometerReading"
+>;
+
+export type OdometerImportResult = {
+  updated: number;
+  unchanged: number;
+  rows: OdometerImportRow[];
+};
+
+export async function previewOdometerImport(file: File): Promise<OdometerImportResult> {
+  if (!useBackend) throw new Error("Odometer import requires the VMMS backend.");
+  const body = new FormData();
+  body.append("file", file);
+  return apiRequest<OdometerImportResult>("/vehicles/odometer/import/preview", {
+    method: "POST",
+    body,
+  });
+}
+
+export async function saveOdometerImport(
+  rows: OdometerImportInput[],
+): Promise<OdometerImportResult> {
+  if (!useBackend) throw new Error("Odometer import requires the VMMS backend.");
+  return fetchJSON<OdometerImportResult>("/vehicles/odometer/import", {
+    method: "POST",
+    body: JSON.stringify({ rows }),
+  });
+}
+
 export async function updateVehicleRecord(
   id: string,
-  dto: Partial<Omit<VehicleRecord, "id" | "garageId" | "garageName">> & { garageId?: string },
+  dto: Partial<Omit<VehicleRecord, "id" | "garageId" | "garageName" | "odometer">> & { garageId?: string },
 ): Promise<VehicleRecord> {
   if (!useBackend) {
     const idx = mockVehicleRecords.findIndex((v) => v.id === id);
@@ -1017,6 +1119,30 @@ export async function updateVehicleRecord(
   return fetchJSON<VehicleRecord>(`/vehicles/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(dto),
+  });
+}
+
+export async function updateVehicleOdometerRecord(
+  id: string,
+  odometer: number,
+): Promise<VehicleRecord> {
+  if (!Number.isSafeInteger(odometer) || odometer < 1 || odometer > 2147483647) {
+    throw new Error("Enter a positive whole-number odometer reading.");
+  }
+  if (!useBackend) {
+    const idx = mockVehicleRecords.findIndex((vehicle) => vehicle.id === id);
+    if (idx < 0) throw new Error("Vehicle not found.");
+    const current = mockVehicleRecords[idx];
+    if (!current.isActive) throw new Error("Odometer updates are only allowed for active vehicles.");
+    if (odometer < current.odometer) {
+      throw new Error(`Odometer cannot be lower than the current reading (${current.odometer}).`);
+    }
+    mockVehicleRecords[idx] = { ...current, odometer };
+    return { ...mockVehicleRecords[idx] };
+  }
+  return fetchJSON<VehicleRecord>(`/vehicles/${encodeURIComponent(id)}/odometer`, {
+    method: "PATCH",
+    body: JSON.stringify({ odometer }),
   });
 }
 

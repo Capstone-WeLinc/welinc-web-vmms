@@ -4,7 +4,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   canSeeVmmsNavigationPath,
 } from "../../lib/utils/permissions";
-import { ConfirmationModal, Modal } from "../ui";
+import { Button, ConfirmationModal, Modal } from "../ui";
 import { fetchJSON } from "../../lib/api/httpClient";
 import { signOut } from "../../lib/session/session";
 import { canSwitchSystem, switchSystemUrl } from "../../lib/session/switchSystem";
@@ -156,6 +156,8 @@ export default function Sidebar({ currentUser }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [isSignOutErrorOpen, setIsSignOutErrorOpen] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
@@ -260,9 +262,18 @@ export default function Sidebar({ currentUser }: SidebarProps) {
     ? { systems: currentUser.systems ?? [], role: currentUser.role }
     : null);
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    const result = await signOut();
+    setIsSigningOut(false);
     setIsLogoutModalOpen(false);
-    void signOut();
+    if (result === "failed") setIsSignOutErrorOpen(true);
+  };
+
+  const retrySignOut = () => {
+    setIsSignOutErrorOpen(false);
+    void handleSignOut();
   };
 
   const handleSwitchSystem = () => {
@@ -455,6 +466,22 @@ export default function Sidebar({ currentUser }: SidebarProps) {
         onCancel={() => setIsLogoutModalOpen(false)}
         confirmLabel="Sign Out"
         variant="danger"
+      />
+
+      <Modal
+        isOpen={isSignOutErrorOpen}
+        title="Couldn't sign out"
+        message="VMMS could not reach the sign-in service, so your session may still be active. Check your connection and try again."
+        onClose={() => setIsSignOutErrorOpen(false)}
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setIsSignOutErrorOpen(false)}>
+              Stay here
+            </Button>
+            <Button onClick={retrySignOut}>Try again</Button>
+          </div>
+        }
       />
 
       <Modal
