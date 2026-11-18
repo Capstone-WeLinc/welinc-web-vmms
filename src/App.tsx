@@ -15,6 +15,7 @@ import OutsourcedProviders from './pages/OutsourcedProviders/OutsourcedProviders
 import MaintenanceReports from './pages/MaintenanceReports/MaintenanceReports';
 import MaintenanceCosting from './pages/MaintenanceCosting/MaintenanceCosting';
 import AuditLogs from './pages/AuditLogs/AuditLogs';
+import SessionExpiryNotice from './components/session/SessionExpiryNotice';
 import { useBackend } from './lib/api/httpClient';
 import { useAuthStore } from './store/authStore';
 import { bootSession, PORTAL_URL } from './lib/session/session';
@@ -83,6 +84,7 @@ export default function App() {
             <a className="font-semibold underline" href={`${PORTAL_URL}/admin`} target="_blank" rel="noreferrer">Open portal administration</a>
           </div>
         )}
+        <SessionExpiryNotice />
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/login" element={<Navigate to="/" replace />} />
@@ -100,7 +102,10 @@ export default function App() {
           <Route path="/vehicles" element={<Protected><Vehicles /></Protected>} />
           <Route path="/garages" element={<Protected><Garages /></Protected>} />
           <Route path="/outsourced-providers" element={<Protected><OutsourcedProviders /></Protected>} />
-          <Route path="/audit-logs" element={['ADMIN', 'OPERATIONS'].includes(currentUser?.role ?? '') ? <Protected><AuditLogs /></Protected> : <Navigate to="/dashboard" replace />} />
+          <Route
+            path="/audit-logs"
+            element={currentUser?.role === 'ADMIN' ? <Protected><AuditLogs /></Protected> : <Navigate to="/dashboard" replace />}
+          />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </main>

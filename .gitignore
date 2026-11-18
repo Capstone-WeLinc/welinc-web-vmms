@@ -21,6 +21,7 @@ dist-ssr
 .env.staging
 
 # Editor directories and files
+.claude/
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json

@@ -15,7 +15,6 @@ export {
   saveChecklistTemplates,
   updateMaintenanceSchedule,
   updateWorkOrderPriority,
-  updateMaintenanceOdometerThreshold,
   updateWorkOrder,
   updateWorkOrderProgress,
   uploadWorkOrderAttachment,

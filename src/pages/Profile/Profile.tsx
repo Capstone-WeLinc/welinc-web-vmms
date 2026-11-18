@@ -2,15 +2,8 @@ import { useEffect, useState } from 'react';
 import { CircleUserRound } from 'lucide-react';
 import PageHeader from '../../components/PageHeader/PageHeader';
 import { apiRequest, fetchJSON } from '../../lib/api/httpClient';
+import { PORTAL_URL } from '../../lib/session/session';
 import { useAuthStore } from '../../store/authStore';
-
-type Activity = {
-  id: string;
-  type: string;
-  category: string;
-  device: string | null;
-  createdAt: string;
-};
 
 type DeletionRequest = {
   id: string;
@@ -37,7 +30,6 @@ export default function Profile() {
   const user = useAuthStore((state) => state.currentUser);
   const [name, setName] = useState(user?.name ?? '');
   const [contact, setContact] = useState(user?.contact ?? '');
-  const [activity, setActivity] = useState<Activity[]>([]);
   const [request, setRequest] = useState<DeletionRequest | null>(null);
   const [password, setPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -49,15 +41,13 @@ export default function Profile() {
     let active = true;
     void Promise.all([
       fetchJSON<SharedProfile>('/auth/me'),
-      fetchJSON<{ data?: Activity[] }>('/auth/profile/activity?limit=5'),
       fetchJSON<{ request: DeletionRequest | null }>('/auth/profile/deletion-request'),
-    ]).then(([profile, events, deletion]) => {
+    ]).then(([profile, deletion]) => {
       if (!active) return;
       setName(profile.name);
       setContact(profile.contact ?? '');
       const currentUser = useAuthStore.getState().currentUser;
       if (currentUser) useAuthStore.setState({ currentUser: { ...currentUser, name: profile.name, contact: profile.contact, profilePicture: profile.profilePicture } });
-      setActivity(events.data ?? []);
       setRequest(deletion.request ?? null);
     }).catch(() => {
       if (active) setMessage('Some account details could not be loaded.');
@@ -175,10 +165,13 @@ export default function Profile() {
         <label className="block text-sm">New password<input type="password" className="mt-1 block w-full rounded border p-2" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label>
         <button className="rounded bg-blue-700 px-4 py-2 text-white disabled:opacity-50" disabled={busy || !password || !newPassword} onClick={() => void changePassword()}>Update password</button>
       </section>
-      <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6">
-        <h2 className="mb-3 text-lg font-semibold">Recent account activity</h2>
-        {activity.length ? <ul className="divide-y">{activity.map((event) => <li className="py-2 text-sm" key={event.id}>{event.type.replaceAll('_', ' ')} · {event.device ?? 'Device unavailable'} · {new Date(event.createdAt).toLocaleString()}</li>)}</ul> : <p className="text-sm text-gray-600">No recent account activity.</p>}
-      </section>
+      {user?.role === 'ADMIN' && <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6">
+        <h2 className="mb-2 text-lg font-semibold">Sign-in activity</h2>
+        <p className="mb-3 text-sm text-[var(--color-text-secondary)]">Review account sign-ins and changes in the WeLinc portal.</p>
+        <a className="font-semibold text-[var(--color-brand-primary)] underline underline-offset-4" href={`${PORTAL_URL}/admin/activity?system=VMMS`} target="_blank" rel="noreferrer">
+          Open portal activity
+        </a>
+      </section>}
       <section className="space-y-4 rounded-xl border border-red-200 bg-[var(--color-card-bg)] p-6">
         <h2 className="text-lg font-semibold">Delete account</h2>
         {request?.status === 'PENDING' ? <>

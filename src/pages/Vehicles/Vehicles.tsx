@@ -1,18 +1,25 @@
 import { useState, useEffect, useCallback, useRef, type ChangeEvent, type MouseEvent } from "react";
-import { Eye, FileSpreadsheet, Plus, Truck } from "lucide-react";
+import { Eye, FileSpreadsheet, Gauge, Plus, Settings2, Truck } from "lucide-react";
 import {
   getVehicleRecords,
   createVehicleRecord,
   updateVehicleRecord,
+  updateVehicleOdometerRecord,
   deleteVehicleRecord,
   previewVehicleImport,
   saveVehicleImport,
+  previewOdometerImport,
+  saveOdometerImport,
   getGarageRecords,
   getVehicleAuditHistory,
+  getVehicleMaintenanceDefaults,
+  updateVehicleMaintenanceDefaults,
   type VehicleRecord,
   type VehicleAuditEntry,
   type GarageFullRecord,
   type VehicleImportRow,
+  type OdometerImportRow,
+  type VehicleMaintenanceDefaults,
 } from "../../lib/api/vmmsApi";
 import {
   DataTable,
@@ -75,6 +82,24 @@ export default function Vehicles() {
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
+  const [odometerVehicle, setOdometerVehicle] = useState<VehicleRecord | null>(null);
+  const [odometerInput, setOdometerInput] = useState("");
+  const [odometerError, setOdometerError] = useState("");
+  const [odometerSaving, setOdometerSaving] = useState(false);
+  const [maintenanceDefaultsVehicle, setMaintenanceDefaultsVehicle] =
+    useState<VehicleRecord | null>(null);
+  const [maintenanceDefaults, setMaintenanceDefaults] =
+    useState<VehicleMaintenanceDefaults | null>(null);
+  const [baseIntervalKm, setBaseIntervalKm] = useState("");
+  const [baseBufferDistanceKm, setBaseBufferDistanceKm] = useState("");
+  const [categoryOverrideInputs, setCategoryOverrideInputs] = useState<
+    Record<string, { intervalKm: string; bufferDistanceKm: string }>
+  >({});
+  const [maintenanceDefaultsLoading, setMaintenanceDefaultsLoading] =
+    useState(false);
+  const [maintenanceDefaultsSaving, setMaintenanceDefaultsSaving] =
+    useState(false);
+  const [maintenanceDefaultsError, setMaintenanceDefaultsError] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm());
   const [formError, setFormError] = useState("");
@@ -82,6 +107,8 @@ export default function Vehicles() {
   const [importing, setImporting] = useState(false);
   const [importRows, setImportRows] = useState<VehicleImportRow[] | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const [odometerImportRows, setOdometerImportRows] = useState<OdometerImportRow[] | null>(null);
+  const odometerImportInputRef = useRef<HTMLInputElement>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deletePlate, setDeletePlate] = useState("");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -181,7 +208,7 @@ export default function Vehicles() {
     if (!form.engineType.trim()) { setFormError("Engine type is required."); return; }
     if (!form.truckSizeCategory.trim()) { setFormError("Truck size/category is required."); return; }
     const odometer = Number(form.odometer);
-    if (!form.odometer.trim() || !Number.isInteger(odometer) || odometer < 0) { setFormError("Enter a valid odometer baseline."); return; }
+    if (modalMode === "create" && (!form.odometer.trim() || !Number.isInteger(odometer) || odometer < 0)) { setFormError("Enter a valid odometer baseline."); return; }
     if (!form.garageId) { setFormError("Garage branch is required."); return; }
     setSaving(true);
     try {
@@ -192,11 +219,10 @@ export default function Vehicles() {
         year,
         engineType: form.engineType.trim(),
         truckSizeCategory: form.truckSizeCategory.trim(),
-        odometer,
         garageId: form.garageId,
       };
       if (modalMode === "create") {
-        await createVehicleRecord(vehicleInput);
+        await createVehicleRecord({ ...vehicleInput, odometer });
         showToast("Vehicle created successfully.");
       } else if (selectedId) {
         await updateVehicleRecord(selectedId, { ...vehicleInput, isActive: form.isActive });
@@ -208,6 +234,168 @@ export default function Vehicles() {
       setFormError(err instanceof Error ? err.message : "Failed to save vehicle.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const openOdometerUpdate = (vehicle: VehicleRecord) => {
+    if (!canManage || !vehicle.isActive) return;
+    setOpenMenuId(null);
+    setOdometerVehicle(vehicle);
+    setOdometerInput("");
+    setOdometerError("");
+  };
+
+  const openMaintenanceDefaults = async (vehicle: VehicleRecord) => {
+    setOpenMenuId(null);
+    setMaintenanceDefaultsVehicle(vehicle);
+    setMaintenanceDefaults(null);
+    setMaintenanceDefaultsError("");
+    setMaintenanceDefaultsLoading(true);
+    try {
+      const defaults = await getVehicleMaintenanceDefaults(vehicle.id);
+      setMaintenanceDefaults(defaults);
+      setBaseIntervalKm(
+        defaults.baseIntervalKm == null ? "" : String(defaults.baseIntervalKm),
+      );
+      setBaseBufferDistanceKm(
+        defaults.baseBufferDistanceKm == null
+          ? ""
+          : String(defaults.baseBufferDistanceKm),
+      );
+      setCategoryOverrideInputs(
+        Object.fromEntries(
+          defaults.categories.map((category) => [
+            category.checklistTemplateId,
+            {
+              intervalKm:
+                category.intervalKm == null ? "" : String(category.intervalKm),
+              bufferDistanceKm:
+                category.bufferDistanceKm == null
+                  ? ""
+                  : String(category.bufferDistanceKm),
+            },
+          ]),
+        ),
+      );
+    } catch (error) {
+      setMaintenanceDefaultsError(
+        error instanceof Error
+          ? error.message
+          : "Failed to load vehicle maintenance defaults.",
+      );
+    } finally {
+      setMaintenanceDefaultsLoading(false);
+    }
+  };
+
+  const handleSaveMaintenanceDefaults = async () => {
+    if (
+      !maintenanceDefaultsVehicle ||
+      !maintenanceDefaults ||
+      maintenanceDefaultsLoading ||
+      maintenanceDefaultsSaving
+    )
+      return;
+    setMaintenanceDefaultsError("");
+    const baseValues = [baseIntervalKm.trim(), baseBufferDistanceKm.trim()];
+    if (baseValues.some(Boolean) && baseValues.some((value) => !value)) {
+      setMaintenanceDefaultsError(
+        "Set both vehicle default values, or leave both blank.",
+      );
+      return;
+    }
+    const isValidKm = (value: string, allowZero: boolean) => {
+      if (!/^\d+$/.test(value)) return false;
+      const parsed = Number(value);
+      return (
+        Number.isSafeInteger(parsed) &&
+        parsed <= 2147483647 &&
+        (allowZero ? parsed >= 0 : parsed > 0)
+      );
+    };
+    if (
+      (baseValues[0] &&
+        (!isValidKm(baseValues[0], false) ||
+          !isValidKm(baseValues[1], true))) ||
+      Object.values(categoryOverrideInputs).some(
+        ({ intervalKm, bufferDistanceKm }) =>
+          Boolean(intervalKm.trim()) !== Boolean(bufferDistanceKm.trim()) ||
+          (intervalKm.trim() &&
+            (!isValidKm(intervalKm.trim(), false) ||
+              !isValidKm(bufferDistanceKm.trim(), true))),
+      )
+    ) {
+      setMaintenanceDefaultsError(
+        "Intervals must be positive whole kilometres and buffers must be non-negative whole kilometres. Enter both values for each default.",
+      );
+      return;
+    }
+
+    setMaintenanceDefaultsSaving(true);
+    try {
+      const saved = await updateVehicleMaintenanceDefaults(
+        maintenanceDefaultsVehicle.id,
+        {
+          baseIntervalKm: baseIntervalKm.trim(),
+          baseBufferDistanceKm: baseBufferDistanceKm.trim(),
+          categoryOverrides: Object.entries(categoryOverrideInputs)
+            .filter(
+              ([, values]) =>
+                values.intervalKm.trim() && values.bufferDistanceKm.trim(),
+            )
+            .map(([checklistTemplateId, values]) => ({
+              checklistTemplateId,
+              intervalKm: values.intervalKm.trim(),
+              bufferDistanceKm: values.bufferDistanceKm.trim(),
+            })),
+        },
+      );
+      setMaintenanceDefaults(saved);
+      setMaintenanceDefaultsVehicle(null);
+      showToast("Vehicle maintenance defaults saved.");
+    } catch (error) {
+      setMaintenanceDefaultsError(
+        error instanceof Error
+          ? error.message
+          : "Failed to save vehicle maintenance defaults.",
+      );
+    } finally {
+      setMaintenanceDefaultsSaving(false);
+    }
+  };
+
+  const handleOdometerUpdate = async () => {
+    if (!canManage || !odometerVehicle || odometerSaving) return;
+    setOdometerError("");
+    const odometer = Number(odometerInput);
+    if (
+      !odometerInput.trim() ||
+      !Number.isSafeInteger(odometer) ||
+      odometer < 1 ||
+      odometer > 2147483647
+    ) {
+      setOdometerError("Enter a positive whole-number odometer reading.");
+      return;
+    }
+    if (odometer < odometerVehicle.odometer) {
+      setOdometerError(
+        `Reading cannot be lower than the current value (${odometerVehicle.odometer.toLocaleString()} km).`,
+      );
+      return;
+    }
+
+    setOdometerSaving(true);
+    try {
+      await updateVehicleOdometerRecord(odometerVehicle.id, odometer);
+      setOdometerVehicle(null);
+      showToast("Odometer updated successfully.");
+      await load();
+    } catch (error) {
+      setOdometerError(
+        error instanceof Error ? error.message : "Failed to update odometer.",
+      );
+    } finally {
+      setOdometerSaving(false);
     }
   };
 
@@ -241,12 +429,69 @@ export default function Vehicles() {
     }
     setImporting(true);
     setImportRows(null);
+    setOdometerImportRows(null);
     try {
       const preview = await previewVehicleImport(file);
       setImportRows(preview.rows);
       showToast(`Preview ready: review ${preview.rows.length} row${preview.rows.length === 1 ? "" : "s"}, then save.`, "success");
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Vehicle import failed.", "error");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleOdometerImportFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !canManage) return;
+    if (!file.name.toLowerCase().endsWith(".xlsx")) {
+      showToast("Choose an .xlsx workbook.", "error");
+      return;
+    }
+    setImporting(true);
+    setImportRows(null);
+    setOdometerImportRows(null);
+    try {
+      const preview = await previewOdometerImport(file);
+      setOdometerImportRows(preview.rows);
+      showToast(
+        `Preview ready: review ${preview.rows.length} odometer row${preview.rows.length === 1 ? "" : "s"}, then save.`,
+        "success",
+      );
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Odometer import failed.", "error");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const updateOdometerImportRow = (
+    index: number,
+    field: "plateNumber" | "odometerReading",
+    value: string,
+  ) => {
+    setOdometerImportRows((current) => current?.map((row, rowIndex) =>
+      rowIndex === index
+        ? { ...row, [field]: value, status: "READY", errors: [] }
+        : row,
+    ) ?? null);
+  };
+
+  const handleSaveOdometerImport = async () => {
+    if (!canManage || !odometerImportRows?.length || importing) return;
+    setImporting(true);
+    try {
+      const result = await saveOdometerImport(odometerImportRows);
+      setOdometerImportRows(result.rows);
+      if (result.updated > 0) await load();
+      const failed = result.rows.filter((row) => row.status === "ERROR").length;
+      showToast(
+        `Updated ${result.updated}; unchanged ${result.unchanged}; failed ${failed}.`,
+        failed ? "error" : "success",
+      );
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not save odometer import.", "error");
     } finally {
       setImporting(false);
     }
@@ -358,6 +603,16 @@ export default function Vehicles() {
           items={[
             { label: "View details", icon: Eye, onClick: () => { setOpenMenuId(null); setVehicleDetails(v); } },
             ...(canManage ? [
+              ...(v.isActive ? [{
+                label: "Update odometer",
+                icon: Gauge,
+                onClick: () => openOdometerUpdate(v),
+              }] : []),
+              ...(v.isActive ? [{
+                label: "Maintenance defaults",
+                icon: Settings2,
+                onClick: () => void openMaintenanceDefaults(v),
+              }] : []),
               { label: "Edit", onClick: () => { setOpenMenuId(null); openEdit(v); } },
               { label: "Delete", onClick: () => confirmDelete(v), danger: true },
             ] : []),
@@ -386,9 +641,14 @@ export default function Vehicles() {
         </div>
         {canManage && <div className="flex flex-wrap gap-2">
           <input ref={importInputRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={handleImportFile} />
+          <input ref={odometerImportInputRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={handleOdometerImportFile} />
           <button type="button" onClick={() => importInputRef.current?.click()} disabled={importing} className="flex items-center gap-2 rounded-xl border border-[#c8ced8] bg-white px-4 py-2.5 text-sm font-semibold text-[#141827] transition hover:bg-slate-50 disabled:opacity-60">
             <FileSpreadsheet className="h-4 w-4" />
-            {importing ? "Preparing…" : "Upload .xlsx"}
+            {importing ? "Working…" : "Import vehicles"}
+          </button>
+          <button type="button" onClick={() => odometerImportInputRef.current?.click()} disabled={importing} className="flex items-center gap-2 rounded-xl border border-[#c8ced8] bg-white px-4 py-2.5 text-sm font-semibold text-[#141827] transition hover:bg-slate-50 disabled:opacity-60">
+            <Gauge className="h-4 w-4" />
+            {importing ? "Working…" : "Bulk odometer update"}
           </button>
           <button
             id="create-vehicle-btn"
@@ -403,6 +663,65 @@ export default function Vehicles() {
 
       {/* Table Card */}
       <div className="overflow-hidden rounded-2xl border border-[#dde4ef] bg-white shadow-sm">
+        {odometerImportRows && (
+          <section className="border-b border-[#dde4ef] bg-slate-50 p-5" aria-label="Odometer import preview">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold text-[#141827]">Review bulk odometer update</h2>
+                <p className="text-sm text-[#64748b]">
+                  Review each vehicle reading. Valid rows save independently; errors leave that vehicle unchanged.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setOdometerImportRows(null)} disabled={importing} className="rounded-lg border border-[#c8ced8] bg-white px-3 py-2 text-sm font-semibold text-[#344158] disabled:opacity-60">Cancel</button>
+                <button
+                  type="button"
+                  onClick={handleSaveOdometerImport}
+                  disabled={importing || !odometerImportRows.some((row) => row.status === "READY" || row.status === "ERROR")}
+                  className="rounded-lg bg-[#070b45] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {importing ? "Saving…" : "Save valid rows"}
+                </button>
+              </div>
+            </div>
+            <div className="overflow-x-auto rounded-lg border border-[#dde4ef] bg-white">
+              <table className="min-w-[760px] w-full text-left text-xs">
+                <thead className="bg-slate-100 text-[#344158]"><tr>
+                  <th className="p-2">Row</th><th className="p-2">Plate Number</th><th className="p-2">Current Odometer</th><th className="p-2">New Odometer (km)</th><th className="p-2">Result</th>
+                </tr></thead>
+                <tbody className="divide-y divide-[#dde4ef]">{odometerImportRows.map((row, index) => {
+                  const cellClass = "w-full min-w-28 rounded border border-[#c8ced8] px-2 py-1.5 text-xs";
+                  return <tr key={`${row.row}-${index}`}>
+                    <td className="p-2 font-semibold">{row.row}</td>
+                    <td className="p-2">
+                      <input
+                        aria-label={`Row ${row.row} plate number`}
+                        className={cellClass}
+                        value={row.plateNumber}
+                        onChange={(event) => updateOdometerImportRow(index, "plateNumber", event.target.value)}
+                      />
+                    </td>
+                    <td className="p-2">{row.currentOdometer === null ? "—" : `${row.currentOdometer.toLocaleString()} km`}</td>
+                    <td className="p-2">
+                      <input
+                        aria-label={`Row ${row.row} odometer reading`}
+                        className={cellClass}
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={row.odometerReading}
+                        onChange={(event) => updateOdometerImportRow(index, "odometerReading", event.target.value)}
+                      />
+                    </td>
+                    <td className={`max-w-72 p-2 ${row.status === "ERROR" ? "text-red-700" : row.status === "UPDATED" ? "text-green-700" : "text-[#344158]"}`}>
+                      {row.errors.length ? row.errors.join(" ") : row.status === "READY" ? "Ready to save" : row.status === "UPDATED" ? "Updated" : "Unchanged"}
+                    </td>
+                  </tr>;
+                })}</tbody>
+              </table>
+            </div>
+          </section>
+        )}
         {importRows && (
           <section className="border-b border-[#dde4ef] bg-slate-50 p-5" aria-label="Vehicle import preview">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -578,13 +897,18 @@ export default function Vehicles() {
             </select>
           </div>
 
-          <FormInput
-            id="vehicle-odometer"
-            label="Odometer Baseline (km)"
-            type="number"
-            value={form.odometer}
-            onChange={(e) => setForm({ ...form, odometer: e.target.value })}
-          />
+          {modalMode === "create" && (
+            <FormInput
+              id="vehicle-odometer"
+              label="Initial Odometer Baseline (km)"
+              type="number"
+              min={0}
+              max={2147483647}
+              step={1}
+              value={form.odometer}
+              onChange={(e) => setForm({ ...form, odometer: e.target.value })}
+            />
+          )}
 
           {modalMode === "edit" && (
             <label className="flex cursor-pointer select-none items-center gap-2">
@@ -599,6 +923,207 @@ export default function Vehicles() {
             </label>
           )}
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={canManage && maintenanceDefaultsVehicle !== null}
+        title={
+          maintenanceDefaultsVehicle
+            ? `Maintenance Defaults — ${maintenanceDefaultsVehicle.plateNumber}`
+            : "Maintenance Defaults"
+        }
+        onClose={() => setMaintenanceDefaultsVehicle(null)}
+        onConfirm={handleSaveMaintenanceDefaults}
+        confirmLabel={maintenanceDefaultsSaving ? "Saving…" : "Save Defaults"}
+        size="lg"
+        className="!p-0 flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden"
+      >
+        {maintenanceDefaultsLoading ? (
+          <p className="py-8 text-center text-sm text-[#64748b]">
+            Loading vehicle maintenance defaults…
+          </p>
+        ) : maintenanceDefaultsError && !maintenanceDefaults ? (
+          <div
+            role="alert"
+            className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700"
+          >
+            {maintenanceDefaultsError}
+          </div>
+        ) : maintenanceDefaults ? (
+          <div className="space-y-5">
+            {maintenanceDefaultsError && (
+              <div
+                role="alert"
+                className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700"
+              >
+                {maintenanceDefaultsError}
+              </div>
+            )}
+            <section className="space-y-3">
+              <div>
+                <h3 className="text-sm font-bold text-[#141827]">
+                  Vehicle base default
+                </h3>
+                <p className="mt-1 text-xs text-[#64748b]">
+                  Used when no value is configured for the selected checklist
+                  type. Leave both blank to require Custom values.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FormInput
+                  id="vehicle-default-interval"
+                  label="Default interval (km)"
+                  type="number"
+                  min={1}
+                  max={2147483647}
+                  step={1}
+                  value={baseIntervalKm}
+                  onChange={(event) => setBaseIntervalKm(event.target.value)}
+                  placeholder="e.g. 5000"
+                />
+                <FormInput
+                  id="vehicle-default-buffer"
+                  label="Default buffer (km)"
+                  type="number"
+                  min={0}
+                  max={2147483647}
+                  step={1}
+                  value={baseBufferDistanceKm}
+                  onChange={(event) =>
+                    setBaseBufferDistanceKm(event.target.value)
+                  }
+                  placeholder="e.g. 500"
+                />
+              </div>
+            </section>
+
+            <section className="space-y-3 border-t border-[#dde4ef] pt-4">
+              <div>
+                <h3 className="text-sm font-bold text-[#141827]">
+                  Checklist-type overrides
+                </h3>
+                <p className="mt-1 text-xs text-[#64748b]">
+                  Configure only types that differ from the vehicle base.
+                  Leave both fields blank to inherit it.
+                </p>
+              </div>
+              {maintenanceDefaults.categories.length === 0 ? (
+                <p className="rounded-lg bg-slate-50 p-4 text-sm text-[#64748b]">
+                  No active checklist types are available. Add a checklist
+                  template before configuring type-specific defaults.
+                </p>
+              ) : (
+                <div className="max-h-64 overflow-auto rounded-lg border border-[#dde4ef]">
+                  <table className="w-full min-w-[34rem] text-left text-sm">
+                    <thead className="sticky top-0 bg-slate-100 text-xs font-semibold uppercase tracking-wide text-[#64748b]">
+                      <tr>
+                        <th className="p-3">Checklist type</th>
+                        <th className="p-3">Interval override (km)</th>
+                        <th className="p-3">Buffer override (km)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#dde4ef]">
+                      {maintenanceDefaults.categories.map((category) => {
+                        const values = categoryOverrideInputs[
+                          category.checklistTemplateId
+                        ] ?? { intervalKm: "", bufferDistanceKm: "" };
+                        return (
+                          <tr key={category.checklistTemplateId}>
+                            <th className="p-3 font-semibold text-[#141827]">
+                              {category.type}
+                            </th>
+                            <td className="p-3">
+                              <input
+                                aria-label={`${category.type} interval override in km`}
+                                type="number"
+                                min={1}
+                                max={2147483647}
+                                step={1}
+                                value={values.intervalKm}
+                                onChange={(event) =>
+                                  setCategoryOverrideInputs((current) => ({
+                                    ...current,
+                                    [category.checklistTemplateId]: {
+                                      ...values,
+                                      intervalKm: event.target.value,
+                                    },
+                                  }))
+                                }
+                                placeholder="Inherit base"
+                                className="h-10 w-full rounded-lg border border-[#c8ced8] bg-white px-3 text-sm text-[#141827] outline-none focus:border-[#070b45] focus:ring-2 focus:ring-[#070b45]/10"
+                              />
+                            </td>
+                            <td className="p-3">
+                              <input
+                                aria-label={`${category.type} buffer override in km`}
+                                type="number"
+                                min={0}
+                                max={2147483647}
+                                step={1}
+                                value={values.bufferDistanceKm}
+                                onChange={(event) =>
+                                  setCategoryOverrideInputs((current) => ({
+                                    ...current,
+                                    [category.checklistTemplateId]: {
+                                      ...values,
+                                      bufferDistanceKm: event.target.value,
+                                    },
+                                  }))
+                                }
+                                placeholder="Inherit base"
+                                className="h-10 w-full rounded-lg border border-[#c8ced8] bg-white px-3 text-sm text-[#141827] outline-none focus:border-[#070b45] focus:ring-2 focus:ring-[#070b45]/10"
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            <p className="rounded-lg bg-blue-50 p-3 text-xs leading-5 text-blue-900">
+              Defaults affect newly created schedules only. Existing schedules
+              keep their saved interval, buffer, and due threshold.
+            </p>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        isOpen={canManage && odometerVehicle !== null}
+        title={odometerVehicle ? `Update Odometer — ${odometerVehicle.plateNumber}` : "Update Odometer"}
+        onClose={() => setOdometerVehicle(null)}
+        onConfirm={handleOdometerUpdate}
+        confirmLabel={odometerSaving ? "Updating…" : "Update Odometer"}
+        size="sm"
+      >
+        {odometerVehicle && (
+          <div className="space-y-4">
+            <p className="text-sm text-[#64748b]">
+              Current reading: <strong className="text-[#141827]">{odometerVehicle.odometer.toLocaleString()} km</strong>
+            </p>
+            {odometerError && (
+              <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-600">
+                {odometerError}
+              </div>
+            )}
+            <FormInput
+              id="vehicle-odometer-update"
+              label="New odometer reading (km)"
+              type="number"
+              min={1}
+              max={2147483647}
+              step={1}
+              required
+              autoFocus
+              value={odometerInput}
+              onChange={(event) => setOdometerInput(event.target.value)}
+              helperText="The reading must be equal to or greater than the current value."
+            />
+          </div>
+        )}
       </Modal>
 
       {/* Vehicle Details */}
