@@ -2,7 +2,7 @@ import type { FuelFillUp } from '../types';
 import { Download } from 'lucide-react';
 import { exportRowsAsXlsx } from '../../../lib/utils/excelExport';
 import { exportRowsToPDF } from '../../../lib/utils/fuelExport';
-import { summarizeFuelFillUps } from '../fuelReportData';
+import { formatFuelExportDate, summarizeFuelFillUps } from '../fuelReportData';
 
 export default function FleetWideReport({ fillUps, onExport }: { fillUps: FuelFillUp[]; onExport?: (format: string) => void }) {
   const rows = summarizeFuelFillUps(fillUps).map((summary) => ({
@@ -17,7 +17,7 @@ export default function FleetWideReport({ fillUps, onExport }: { fillUps: FuelFi
     onExport?.('excel');
     const headers = ['Vehicle', 'Model', 'Fill-ups', 'Total Liters', 'Total Fuel Cost (PHP)', 'Average Efficiency (km/L)'];
     const data = rows.map((row) => [row.plate, row.model, row.count, row.liters, row.cost, row.efficiency ?? 'Insufficient Data']);
-    exportRowsAsXlsx(`fleet_fuel_cost_${new Date().toISOString().slice(0, 10)}.xlsx`, 'Fleet Fuel Cost', [headers, ...data]);
+    exportRowsAsXlsx(`fleet_fuel_cost_${formatFuelExportDate(new Date())}.xlsx`, 'Fleet Fuel Cost', [headers, ...data]);
   };
 
   return (

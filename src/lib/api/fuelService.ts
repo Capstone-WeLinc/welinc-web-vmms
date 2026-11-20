@@ -2,6 +2,28 @@ import { apiRequest, fetchJSON } from './httpClient';
 import type { FuelFillUp } from '../../pages/FuelManagement/types';
 
 export type FuelStation = { id: string; name: string };
+export type FuelFillUpInput = {
+  vehicleId: string;
+  stationId: string;
+  date: string;
+  liters: number;
+  pricePerLiter: number;
+  odometer: number;
+  filledBy: string;
+  isFullTank: boolean;
+};
+export type FuelReceiptSuggestion<T> = {
+  value: T | null;
+  confidence: number | null;
+  needsReview: boolean;
+};
+export type FuelReceiptScanResult = {
+  merchantName: FuelReceiptSuggestion<string>;
+  date: FuelReceiptSuggestion<string>;
+  liters: FuelReceiptSuggestion<number>;
+  pricePerLiter: FuelReceiptSuggestion<number>;
+  printedTotal: FuelReceiptSuggestion<number>;
+};
 export type FuelAnomalyThreshold = { thresholdPercent: number; updatedAt: string | null; updatedByEmail: string | null };
 export type FuelVehicle = { id: string; value: string; plateNumber?: string; label: string; model?: string };
 export type FuelAnomalyRecord = { id: string; vehicle: { plateNumber: string; model: string }; efficiency: number; rollingAverage: number; status: string; severity: string; note: string | null; acknowledgedAt: string | null; createdAt: string; attachments?: Array<{ id: string; name: string; contentType: string; createdAt: string }>; fillUp: { date: string; station: { name: string } } };
@@ -15,7 +37,19 @@ export const getFuelStations = () => fetchJSON<FuelStation[]>('/fuel/stations');
 export const getFuelAnomalyThreshold = () => fetchJSON<FuelAnomalyThreshold>('/fuel/anomaly-threshold');
 export const updateFuelAnomalyThreshold = (thresholdPercent: number) => fetchJSON<FuelAnomalyThreshold>('/fuel/anomaly-threshold', { method: 'PATCH', body: JSON.stringify({ thresholdPercent }) });
 export const createFuelStation = (name: string) => fetchJSON<FuelStation>('/fuel/stations', { method: 'POST', body: JSON.stringify({ name }) });
-export const createFuelEntry = (input: unknown) => fetchJSON<FuelFillUp>('/fuel', { method: 'POST', body: JSON.stringify(input) });
+export const scanFuelReceipt = (file: File, signal?: AbortSignal) => {
+  const form = new FormData();
+  form.append('file', file);
+  return apiRequest<FuelReceiptScanResult>('/fuel/receipt/scan', { method: 'POST', body: form, signal });
+};
+export const createFuelEntry = (input: FuelFillUpInput, receipt?: File) => {
+  if (!receipt) return fetchJSON<FuelFillUp>('/fuel', { method: 'POST', body: JSON.stringify(input) });
+  const form = new FormData();
+  Object.entries(input).forEach(([key, value]) => form.append(key, String(value)));
+  form.append('file', receipt);
+  return apiRequest<FuelFillUp>('/fuel/with-receipt', { method: 'POST', body: form });
+};
+export const getFuelReceiptAttachment = (fillUpId: string) => apiRequest<Blob>(`/fuel/${fillUpId}/receipt`);
 export const voidFuelEntry = (id: string, reason: string) => fetchJSON<FuelFillUp>(`/fuel/${id}/void`, { method: 'POST', body: { reason } as unknown as BodyInit });
 export const getFuelAnomalies = () => fetchJSON<FuelAnomalyRecord[]>('/fuel/anomalies');
 export const updateFuelAnomaly = (id: string, note?: string) => fetchJSON<FuelAnomalyRecord>(`/fuel/anomalies/${id}`, { method: 'PATCH', body: JSON.stringify(note === undefined ? {} : { note }) });
