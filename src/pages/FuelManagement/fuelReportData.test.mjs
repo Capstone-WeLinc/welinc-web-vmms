@@ -4,6 +4,7 @@ import {
   buildFuelLogExportRows,
   excludeVoidedFuelFillUps,
   filterFuelFillUps,
+  formatFuelExportDate,
   summarizeFuelFillUps,
 } from './fuelReportData.ts';
 
@@ -43,4 +44,9 @@ test('fuel log export preserves filters and excludes voided entries', () => {
   assert.equal(rows[0][0], 'NDG 5821');
   assert.equal(rows[0][12], 'Shell');
   assert.equal(rows[0][8], 'N/A');
+});
+
+test('formats fuel export filenames using the browser local calendar date', () => {
+  const date = new Date(2026, 10, 21, 0, 30);
+  assert.equal(formatFuelExportDate(date), '2026-11-21');
 });

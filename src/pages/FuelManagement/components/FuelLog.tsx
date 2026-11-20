@@ -1,10 +1,10 @@
 import type { FuelFillUp } from '../types';
-import { Filter, Droplet, Eye, AlertTriangle } from 'lucide-react';
+import { Filter, Droplet, Eye, AlertTriangle, Download } from 'lucide-react';
 import { useEffect, useState, useMemo } from 'react';
 import { exportRowsToPDF } from "../../../lib/utils/fuelExport";
 import { exportRowsAsXlsx } from '../../../lib/utils/excelExport';
 import ViewFuelLogModal from './ViewFuelLogModal';
-import { buildFuelLogExportRows, filterFuelFillUps, fuelLogExportHeaders } from '../fuelReportData';
+import { buildFuelLogExportRows, filterFuelFillUps, formatFuelExportDate, fuelLogExportHeaders } from '../fuelReportData';
 import {
   ActionMenu,
   ConfirmationModal,
@@ -86,12 +86,13 @@ const filtersPanelClasses = 'grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-
 interface FuelLogProps {
   fillUps: FuelFillUp[];
   onDelete?: (id: string, reason: string) => Promise<void> | void;
+  onDownloadReceipt?: (fillUpId: string, name: string) => void;
   onLogFillUp?: () => void;
   onExport?: (format: string) => void;
   onFilteredFillUpsChange?: (fillUps: FuelFillUp[]) => void;
 }
 
-export default function FuelLog({ fillUps = [], onDelete, onLogFillUp, onExport, onFilteredFillUpsChange }: FuelLogProps) {
+export default function FuelLog({ fillUps = [], onDelete, onDownloadReceipt, onLogFillUp, onExport, onFilteredFillUpsChange }: FuelLogProps) {
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [vehicleFilter, setVehicleFilter] = useState('All');
@@ -186,7 +187,7 @@ export default function FuelLog({ fillUps = [], onDelete, onLogFillUp, onExport,
     onExport?.('excel');
     const rows = buildFuelLogExportRows(filteredFillUps);
     if (rows.length === 0) return;
-    exportRowsAsXlsx(`fuel_log_${new Date().toISOString().split('T')[0]}.xlsx`, 'Fuel Log', [fuelLogExportHeaders, ...rows]);
+    exportRowsAsXlsx(`fuel_log_${formatFuelExportDate(new Date())}.xlsx`, 'Fuel Log', [fuelLogExportHeaders, ...rows]);
   };
 
   const handleExportPDF = () => {
@@ -417,6 +418,15 @@ export default function FuelLog({ fillUps = [], onDelete, onLogFillUp, onExport,
                         handleView(fillUp);
                       },
                     },
+                    ...(fillUp.receipt && onDownloadReceipt ? [{
+                      label: 'Download receipt',
+                      icon: Download,
+                      onClick: () => {
+                        setOpenActionMenuId(null);
+                        if (fillUp.receipt)
+                          onDownloadReceipt?.(fillUp.id, fillUp.receipt.name);
+                      },
+                    }] : []),
                     ...(!fillUp.isVoided && onDelete ? [{
                       label: 'Void',
                       danger: true,

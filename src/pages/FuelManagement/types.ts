@@ -17,6 +17,7 @@ export interface FuelFillUp {
   voidReason?: string | null;
   stationId?: string;
   fuelClassification?: string;
+  receipt?: { id: string; name: string; contentType: string; createdAt: string } | null;
   anomaly?: { id: string; status: string; severity?: string; note?: string | null; acknowledgedAt?: string | null } | null;
 }
 

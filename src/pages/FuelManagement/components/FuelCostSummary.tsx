@@ -3,7 +3,7 @@ import { Download, Calendar, ChevronLeft, ChevronRight, Filter } from 'lucide-re
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { exportRowsToPDF } from "../../../lib/utils/fuelExport";
 import { exportRowsAsXlsx } from '../../../lib/utils/excelExport';
-import { excludeVoidedFuelFillUps, summarizeFuelFillUps } from '../fuelReportData';
+import { excludeVoidedFuelFillUps, formatFuelExportDate, summarizeFuelFillUps } from '../fuelReportData';
 
 interface FuelCostSummaryProps {
   fillUps: FuelFillUp[];
@@ -82,7 +82,7 @@ export default function FuelCostSummary({ fillUps = [], onExport }: FuelCostSumm
       item.totalCost,
       item.averageEfficiency ?? 'Insufficient Data',
     ]);
-    exportRowsAsXlsx(`fuel_cost_summary_${new Date().toISOString().split('T')[0]}.xlsx`, 'Fuel Cost Summary', [headers, ...rows]);
+    exportRowsAsXlsx(`fuel_cost_summary_${formatFuelExportDate(new Date())}.xlsx`, 'Fuel Cost Summary', [headers, ...rows]);
   };
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedSummaryData = useMemo(() => {

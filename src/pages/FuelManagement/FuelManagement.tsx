@@ -10,7 +10,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useBackend } from '../../lib/api/httpClient';
 import { getMaintenanceCostPeriod, type MaintenanceCostHalf, type MaintenanceCostPeriodType } from '../../lib/utils/maintenanceCostingPeriod';
 import { getVehicles } from '../../lib/api/vmmsApi';
-import { acknowledgeFuelAnomaly, createFuelEntry, createFuelStation, getFuelAnomalies, getFuelAnomalyAttachment, getFuelAnomalyThreshold, getFuelEntries, getFuelStations, recordFuelReportExport, updateFuelAnomaly, updateFuelAnomalyThreshold, uploadFuelAnomalyAttachment, voidFuelEntry, type FuelAnomalyRecord, type FuelStation, type FuelVehicle } from '../../lib/api/fuelService';
+import { acknowledgeFuelAnomaly, createFuelEntry, createFuelStation, getFuelAnomalies, getFuelAnomalyAttachment, getFuelAnomalyThreshold, getFuelEntries, getFuelReceiptAttachment, getFuelStations, recordFuelReportExport, updateFuelAnomaly, updateFuelAnomalyThreshold, uploadFuelAnomalyAttachment, voidFuelEntry, type FuelAnomalyRecord, type FuelFillUpInput, type FuelStation, type FuelVehicle } from '../../lib/api/fuelService';
 import type { FuelFillUp } from './types';
 import { excludeVoidedFuelFillUps } from './fuelReportData';
 
@@ -158,8 +158,25 @@ export default function FuelManagement() {
     await voidFuelEntry(id, reason); await refresh();
   };
 
-  const handleAdd = async (input: unknown) => {
-    await createFuelEntry(input); await refresh();
+  const handleAdd = async (input: FuelFillUpInput, receipt?: File) => {
+    await createFuelEntry(input, receipt); await refresh();
+  };
+
+  const handleDownloadReceipt = async (fillUpId: string, name: string) => {
+    setPageError('');
+    try {
+      const blob = await getFuelReceiptAttachment(fillUpId);
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = name;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 0);
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : 'Unable to download receipt.');
+    }
   };
 
   const handleSaveThreshold = async (event: React.FormEvent) => {
@@ -324,6 +341,7 @@ export default function FuelManagement() {
           <FuelLog
             fillUps={fillUps}
             onDelete={canWrite ? handleVoid : undefined}
+            onDownloadReceipt={canWrite ? handleDownloadReceipt : undefined}
             onLogFillUp={canWrite ? () => setShowLogForm(true) : undefined}
             onFilteredFillUpsChange={handleFilteredFillUpsChange}
             onExport={(format) => { void recordFuelReportExport(format, appliedFrom || undefined, appliedTo || undefined).catch((error) => setPageError(error instanceof Error ? error.message : 'Unable to record export.')); }}
