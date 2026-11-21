@@ -1,9 +1,11 @@
 import type { FuelFillUp } from '../types';
-import { Filter, Droplet, Eye, AlertTriangle, Download } from 'lucide-react';
+import { Filter, Droplet, Eye, AlertTriangle, Download, FileSpreadsheet } from 'lucide-react';
 import { useEffect, useState, useMemo } from 'react';
 import { exportRowsToPDF } from "../../../lib/utils/fuelExport";
 import { exportRowsAsXlsx } from '../../../lib/utils/excelExport';
 import ViewFuelLogModal from './ViewFuelLogModal';
+import ImportFuelStatement from './ImportFuelStatement';
+import type { FuelStation, FuelVehicle } from '../../../lib/api/fuelService';
 import { buildFuelLogExportRows, filterFuelFillUps, formatFuelExportDate, fuelLogExportHeaders } from '../fuelReportData';
 import {
   ActionMenu,
@@ -88,17 +90,21 @@ interface FuelLogProps {
   onDelete?: (id: string, reason: string) => Promise<void> | void;
   onDownloadReceipt?: (fillUpId: string, name: string) => void;
   onLogFillUp?: () => void;
+  stations?: FuelStation[];
+  vehicles?: FuelVehicle[];
+  onImportComplete?: () => Promise<void>;
   onExport?: (format: string) => void;
   onFilteredFillUpsChange?: (fillUps: FuelFillUp[]) => void;
 }
 
-export default function FuelLog({ fillUps = [], onDelete, onDownloadReceipt, onLogFillUp, onExport, onFilteredFillUpsChange }: FuelLogProps) {
+export default function FuelLog({ fillUps = [], onDelete, onDownloadReceipt, onLogFillUp, stations = [], vehicles = [], onImportComplete, onExport, onFilteredFillUpsChange }: FuelLogProps) {
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [vehicleFilter, setVehicleFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState('');
   const [stationFilter, setStationFilter] = useState('');
   const [isViewOpen, setIsViewOpen] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [selectedViewRecord, setSelectedViewRecord] = useState<FuelFillUp | null>(null);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
@@ -238,6 +244,12 @@ export default function FuelLog({ fillUps = [], onDelete, onDownloadReceipt, onL
             <button type="button" onClick={onLogFillUp} className={successActionButton}>
               <Droplet size={16} strokeWidth={1.8} />
               Log Fill-up
+            </button>
+          )}
+          {onImportComplete && (
+            <button type="button" onClick={() => setShowImport(true)} className={actionButtonFilter}>
+              <FileSpreadsheet size={16} strokeWidth={1.8} />
+              Import Statement
             </button>
           )}
         </div>
@@ -483,6 +495,14 @@ export default function FuelLog({ fillUps = [], onDelete, onDownloadReceipt, onL
             setSelectedViewRecord(null);
           }}
           fillUp={selectedViewRecord}
+        />
+      )}
+      {showImport && onImportComplete && (
+        <ImportFuelStatement
+          stations={stations}
+          vehicles={vehicles}
+          onClose={() => setShowImport(false)}
+          onImported={onImportComplete}
         />
       )}
       <ConfirmationModal

@@ -152,6 +152,28 @@ export default function ViewFuelLogModal({ isOpen, onClose, fillUp }: ViewFuelLo
               </div>
             </div>
           </div>
+          {(fillUp.poNumber || fillUp.siNumber || fillUp.product) && (
+            <div className="grid grid-cols-1 gap-4 border-t border-[var(--color-border)] pt-4 sm:grid-cols-3">
+              {fillUp.poNumber && (
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">PO Number</div>
+                  <div className="mt-0.5 break-words text-sm">{fillUp.poNumber}</div>
+                </div>
+              )}
+              {fillUp.siNumber && (
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">SI Number</div>
+                  <div className="mt-0.5 break-words text-sm">{fillUp.siNumber}</div>
+                </div>
+              )}
+              {fillUp.product && (
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Product</div>
+                  <div className="mt-0.5 break-words text-sm">{fillUp.product}</div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
           <div className="flex items-center justify-end px-6 py-4 border-t border-[var(--color-border)] bg-[var(--color-card-bg)]">
