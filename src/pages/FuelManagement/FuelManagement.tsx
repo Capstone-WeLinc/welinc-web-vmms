@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Droplet, TrendingUp, AlertTriangle, BarChart3 } from 'lucide-react';
+import { Droplet, TrendingUp, AlertTriangle, BarChart3, Settings2 } from 'lucide-react';
+import Button from '../../components/ui/Button';
 import PageHeader from '../../components/PageHeader/PageHeader';
 import FuelLog from './components/FuelLog';
 import EfficiencyTrendsWithFilters from './components/EfficiencyTrendsWithFilters';
 import LogFuelFillUp from './components/LogFuelFillUp';
+import ConfigureFuelStations from './components/ConfigureFuelStations';
 import FuelCostSummary from './components/FuelCostSummary';
 import FleetWideFuelReport from './components/FleetWideFuelReport';
 import { useAuthStore } from '../../store/authStore';
 import { useBackend } from '../../lib/api/httpClient';
 import { getMaintenanceCostPeriod, type MaintenanceCostHalf, type MaintenanceCostPeriodType } from '../../lib/utils/maintenanceCostingPeriod';
 import { getVehicles } from '../../lib/api/vmmsApi';
-import { acknowledgeFuelAnomaly, createFuelEntry, createFuelStation, getFuelAnomalies, getFuelAnomalyAttachment, getFuelAnomalyThreshold, getFuelEntries, getFuelReceiptAttachment, getFuelStations, recordFuelReportExport, updateFuelAnomaly, updateFuelAnomalyThreshold, uploadFuelAnomalyAttachment, voidFuelEntry, type FuelAnomalyRecord, type FuelFillUpInput, type FuelStation, type FuelVehicle } from '../../lib/api/fuelService';
+import { acknowledgeFuelAnomaly, createFuelEntry, createFuelStation, getFuelAnomalies, getFuelAnomalyAttachment, getFuelAnomalyThreshold, getFuelEntries, getFuelReceiptAttachment, getFuelStations, recordFuelReportExport, updateFuelAnomaly, updateFuelAnomalyThreshold, updateFuelStation, uploadFuelAnomalyAttachment, voidFuelEntry, type FuelAnomalyRecord, type FuelFillUpInput, type FuelStation, type FuelStationManagement, type FuelStationUpdate, type FuelVehicle } from '../../lib/api/fuelService';
 import type { FuelFillUp } from './types';
 import { excludeVoidedFuelFillUps } from './fuelReportData';
 
@@ -74,6 +76,7 @@ export default function FuelManagement() {
   const [activeTab, setActiveTab] = useState<Tab>('fuel-log');
   const [activeReport, setActiveReport] = useState<ReportTab>('fleet-wide');
   const [showLogForm, setShowLogForm] = useState(false);
+  const [showStationConfig, setShowStationConfig] = useState(false);
   const [fillUps, setFillUps] = useState<FuelFillUp[]>([]);
   const [fuelLogFilteredFillUps, setFuelLogFilteredFillUps] = useState<FuelFillUp[]>([]);
   const [hasFuelLogFilterSnapshot, setHasFuelLogFilterSnapshot] = useState(false);
@@ -161,6 +164,33 @@ export default function FuelManagement() {
   const handleAdd = async (input: FuelFillUpInput, receipt?: File) => {
     await createFuelEntry(input, receipt); await refresh();
   };
+  const handleAddStation = async (name: string): Promise<FuelStationManagement> => {
+    const station = await createFuelStation(name);
+    setStations((current) =>
+      [...current, station].sort((first, second) =>
+        first.name.localeCompare(second.name),
+      ),
+    );
+    return station;
+  };
+  const handleUpdateStation = async (
+    id: string,
+    update: FuelStationUpdate,
+  ): Promise<FuelStationManagement> => {
+    const station = await updateFuelStation(id, update);
+    setStations((current) => {
+      const activeStations = current.filter((item) => item.id !== station.id);
+      if (station.isActive)
+        activeStations.push({ id: station.id, name: station.name });
+      return activeStations.sort((first, second) =>
+        first.name.localeCompare(second.name),
+      );
+    });
+    return station;
+  };
+  const handleImportComplete = async () => {
+    await refresh();
+  };
 
   const handleDownloadReceipt = async (fillUpId: string, name: string) => {
     setPageError('');
@@ -235,10 +265,21 @@ export default function FuelManagement() {
         icon={Droplet}
         title="Fuel Management"
         subtitle="Consumption tracking, efficiency analysis, and anomaly detection"
+        action={canWrite ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="md"
+            icon={<Settings2 size={16} aria-hidden="true" />}
+            onClick={() => setShowStationConfig(true)}
+            className="min-h-11 w-full sm:w-auto"
+          >
+            Configure fuel stations
+          </Button>
+        ) : undefined}
       />
       {pageError && <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">{pageError}</div>}
       {loading && <div className="text-sm text-[var(--color-text-secondary)]">Loading fuel records...</div>}
-      {canWrite && <button className="rounded-lg border px-3 py-2 text-sm" onClick={async () => { const name = window.prompt('Add a registered fuel station'); if (name?.trim()) { try { await createFuelStation(name.trim()); await refresh(); } catch (error) { setPageError(error instanceof Error ? error.message : 'Unable to add station.'); } } }}>Configure fuel stations</button>}
       <form onSubmit={handleSaveThreshold} className="flex flex-wrap items-end gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
         <div><div className="text-sm font-semibold">Fuel anomaly threshold</div><p className="text-xs text-[var(--color-text-secondary)]">Flag efficiency when it falls this far below the truck's rolling average.</p></div>
         {role === 'ADMIN' ? <label className="text-sm">Percent<input required type="number" min="1" max="99" step="0.01" value={thresholdDraft} onChange={(event) => setThresholdDraft(event.target.value)} className="ml-2 w-24 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2 py-1.5" /></label> : <strong>{anomalyThreshold}%</strong>}
@@ -343,6 +384,9 @@ export default function FuelManagement() {
             onDelete={canWrite ? handleVoid : undefined}
             onDownloadReceipt={canWrite ? handleDownloadReceipt : undefined}
             onLogFillUp={canWrite ? () => setShowLogForm(true) : undefined}
+            stations={stations}
+            vehicles={vehicles}
+            onImportComplete={canWrite ? handleImportComplete : undefined}
             onFilteredFillUpsChange={handleFilteredFillUpsChange}
             onExport={(format) => { void recordFuelReportExport(format, appliedFrom || undefined, appliedTo || undefined).catch((error) => setPageError(error instanceof Error ? error.message : 'Unable to record export.')); }}
           />
@@ -481,6 +525,13 @@ export default function FuelManagement() {
           onAdd={handleAdd}
           vehicles={vehicles}
           stations={stations}
+        />
+      )}
+      {showStationConfig && (
+        <ConfigureFuelStations
+          onClose={() => setShowStationConfig(false)}
+          onAddStation={handleAddStation}
+          onUpdateStation={handleUpdateStation}
         />
       )}
 

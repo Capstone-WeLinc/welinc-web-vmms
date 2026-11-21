@@ -10,6 +10,9 @@ export interface FuelFillUp {
   odometer: number;
   station: string;
   filledBy: string;
+  poNumber?: string | null;
+  siNumber?: string | null;
+  product?: string | null;
   efficiency: number | null;
   trend: 'above' | 'below' | 'normal';
   isFullTank?: boolean;

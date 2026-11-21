@@ -2,6 +2,10 @@ import { apiRequest, fetchJSON } from './httpClient';
 import type { FuelFillUp } from '../../pages/FuelManagement/types';
 
 export type FuelStation = { id: string; name: string };
+export type FuelStationManagement = FuelStation & { isActive: boolean };
+export type FuelStationUpdate = Partial<
+  Pick<FuelStationManagement, 'name' | 'isActive'>
+>;
 export type FuelFillUpInput = {
   vehicleId: string;
   stationId: string;
@@ -11,6 +15,48 @@ export type FuelFillUpInput = {
   odometer: number;
   filledBy: string;
   isFullTank: boolean;
+  poNumber?: string;
+  siNumber?: string;
+  product?: string;
+};
+export type FuelImportRow = {
+  key: string;
+  sheetName: string;
+  worksheetRow: number;
+  plateNumber: string;
+  date: string;
+  odometer: number | null;
+  poNumber: string;
+  siNumber: string;
+  product: string;
+  liters: number | null;
+  pricePerLiter: number | null;
+  vehicleId: string | null;
+  stationId: string;
+  filledBy: string;
+  isFullTank: boolean | null;
+  errors: string[];
+  status: 'READY' | 'SAVED' | 'ERROR';
+  fillUpId?: string;
+};
+export type FuelImportResult = {
+  saved: number;
+  failed: number;
+  rows: FuelImportRow[];
+};
+export type FuelImportDraft = {
+  id: string;
+  sourceName: string;
+  rows: FuelImportRow[];
+  createdAt: string;
+  updatedAt: string;
+};
+export type FuelImportDraftSummary = Pick<
+  FuelImportDraft,
+  'id' | 'sourceName' | 'updatedAt'
+> & {
+  rowCount: number;
+  sheetNames: string[];
 };
 export type FuelReceiptSuggestion<T> = {
   value: T | null;
@@ -23,6 +69,8 @@ export type FuelReceiptScanResult = {
   liters: FuelReceiptSuggestion<number>;
   pricePerLiter: FuelReceiptSuggestion<number>;
   printedTotal: FuelReceiptSuggestion<number>;
+  product: FuelReceiptSuggestion<string>;
+  siNumber: FuelReceiptSuggestion<string>;
 };
 export type FuelAnomalyThreshold = { thresholdPercent: number; updatedAt: string | null; updatedByEmail: string | null };
 export type FuelVehicle = { id: string; value: string; plateNumber?: string; label: string; model?: string };
@@ -34,9 +82,60 @@ export const getFuelEntries = (from?: string, to?: string) => {
   return fetchJSON<FuelFillUp[]>(`/fuel${query.size ? `?${query}` : ''}`);
 };
 export const getFuelStations = () => fetchJSON<FuelStation[]>('/fuel/stations');
+export const getFuelStationManagement = () =>
+  fetchJSON<FuelStationManagement[]>('/fuel/stations/management');
 export const getFuelAnomalyThreshold = () => fetchJSON<FuelAnomalyThreshold>('/fuel/anomaly-threshold');
 export const updateFuelAnomalyThreshold = (thresholdPercent: number) => fetchJSON<FuelAnomalyThreshold>('/fuel/anomaly-threshold', { method: 'PATCH', body: JSON.stringify({ thresholdPercent }) });
-export const createFuelStation = (name: string) => fetchJSON<FuelStation>('/fuel/stations', { method: 'POST', body: JSON.stringify({ name }) });
+export const createFuelStation = (name: string) => fetchJSON<FuelStationManagement>('/fuel/stations', { method: 'POST', body: JSON.stringify({ name }) });
+export const updateFuelStation = (id: string, update: FuelStationUpdate) =>
+  fetchJSON<FuelStationManagement>(`/fuel/stations/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(update),
+  });
+export const previewFuelImport = (file: File) => {
+  const form = new FormData();
+  form.append('file', file);
+  return apiRequest<{ rows: FuelImportRow[]; sheets: string[]; skippedSheets: string[] }>(
+    '/fuel/import/preview',
+    { method: 'POST', body: form },
+  );
+};
+export const listFuelImportDrafts = () =>
+  fetchJSON<FuelImportDraftSummary[]>('/fuel/import/drafts');
+export const getFuelImportDraft = (id: string) =>
+  fetchJSON<FuelImportDraft>(
+    `/fuel/import/drafts/${encodeURIComponent(id)}`,
+  );
+export const createFuelImportDraft = (
+  sourceName: string,
+  rows: FuelImportRow[],
+) =>
+  fetchJSON<FuelImportDraft>('/fuel/import/drafts', {
+    method: 'POST',
+    body: JSON.stringify({ sourceName, rows }),
+  });
+export const updateFuelImportDraft = (
+  id: string,
+  sourceName: string,
+  rows: FuelImportRow[],
+) =>
+  fetchJSON<FuelImportDraft>(
+    `/fuel/import/drafts/${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ sourceName, rows }),
+    },
+  );
+export const deleteFuelImportDraft = (id: string) =>
+  fetchJSON<{ deleted: boolean }>(
+    `/fuel/import/drafts/${encodeURIComponent(id)}`,
+    { method: 'DELETE' },
+  );
+export const saveFuelImport = (rows: FuelImportRow[]) =>
+  fetchJSON<FuelImportResult>('/fuel/import', {
+    method: 'POST',
+    body: JSON.stringify({ rows }),
+  });
 export const scanFuelReceipt = (file: File, signal?: AbortSignal) => {
   const form = new FormData();
   form.append('file', file);

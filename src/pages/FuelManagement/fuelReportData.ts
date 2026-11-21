@@ -68,6 +68,7 @@ export function summarizeFuelFillUps(fillUps: FuelFillUp[]): FuelVehicleSummary[
 export const fuelLogExportHeaders = [
   'Vehicle', 'ID', 'Model', 'Date', 'Liters', 'Price/L', 'Total Cost', 'Odometer',
   'Efficiency', 'Classification', 'Anomaly Status', 'Resolution Note', 'Station', 'Filled By',
+  'PO Number', 'SI Number', 'Product',
 ];
 
 export function buildFuelLogExportRows(fillUps: FuelFillUp[]): Array<Array<string | number>> {
@@ -76,5 +77,6 @@ export function buildFuelLogExportRows(fillUps: FuelFillUp[]): Array<Array<strin
     fillUp.pricePerLiter, fillUp.totalCost, fillUp.odometer, fillUp.efficiency ?? 'N/A',
     fillUp.fuelClassification ?? 'Insufficient Data', fillUp.anomaly?.status ?? '',
     fillUp.anomaly?.note ?? '', fillUp.station, fillUp.filledBy,
+    fillUp.poNumber ?? '', fillUp.siNumber ?? '', fillUp.product ?? '',
   ]);
 }
