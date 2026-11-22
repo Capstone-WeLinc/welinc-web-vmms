@@ -11,7 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
-import { ConfirmationModal } from '../../../components/ui';
+import { ConfirmationModal, SearchableSelect } from '../../../components/ui';
 import { useBodyScrollLock } from '../../../lib/hooks/useBodyScrollLock';
 import {
   createFuelImportDraft,
@@ -927,20 +927,22 @@ export default function ImportFuelStatement({
                   {sheets.map((sheet) => (
                     <label key={sheet} className="min-w-0 rounded-xl border border-[var(--color-border)] p-3 text-sm font-medium text-[var(--color-text-primary)]">
                       <span className="block truncate" title={sheet}>{sheet}</span>
-                      <select
+                      <SearchableSelect
                         className={fieldClass}
                         value={rows.find((row) => row.sheetName === sheet)?.stationId ?? ''}
-                        disabled={busy}
-                        onChange={(event) => updateSheetStation(sheet, event.target.value)}
+                        options={stations.map((station) => ({
+                          value: station.id,
+                          label: station.name,
+                        }))}
+                        disabled={busy || stations.length === 0}
+                        onChange={(stationId) => updateSheetStation(sheet, stationId)}
+                        placeholder={
+                          stations.length > 0
+                            ? 'Search registered stations'
+                            : 'No active stations available'
+                        }
                         aria-label={`Fuel station for worksheet ${sheet}`}
-                      >
-                        <option value="">Select registered station</option>
-                        {stations.map((station) => (
-                          <option key={station.id} value={station.id}>
-                            {station.name}
-                          </option>
-                        ))}
-                      </select>
+                      />
                       {stations.length === 0 && (
                         <span className="mt-1 block text-xs font-normal text-red-700">
                           No active fuel stations are available.

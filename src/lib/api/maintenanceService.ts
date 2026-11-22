@@ -11,18 +11,30 @@ export {
   getChecklistTemplates,
   getChecklistTemplateId,
   getMaintenanceSchedules,
+  getMaintenancePredictions,
+  getMaintenanceScheduleExtensionHistory,
+  getPendingMaintenanceScheduleExtensions,
   getWorkOrders,
   saveChecklistTemplates,
   updateMaintenanceSchedule,
   updateWorkOrderPriority,
   updateWorkOrder,
   updateWorkOrderProgress,
+  reviewMaintenanceScheduleExtension,
   uploadWorkOrderAttachment,
   deleteWorkOrderAttachment,
   openWorkOrderAttachment,
 } from "./vmmsApi";
 
-export type { WorkOrderAttachment, MaintenanceLogEditValues } from "./vmmsApi";
+export type {
+  WorkOrderAttachment,
+  MaintenanceLogEditValues,
+  MaintenanceScheduleExtensionHistory,
+  MaintenanceScheduleExtensionReviewResult,
+  PendingMaintenanceScheduleExtension,
+} from "./vmmsApi";
+
+export type { MaintenancePrediction } from "../../types/maintenance";
 
 export type {
   ChecklistItemTemplate,

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef, useId } from "react";
 import {
   Wrench,
   FileDown,
@@ -16,9 +16,10 @@ import {
   ConfirmationModal,
   DataTable,
   FilterDropdown,
+  MaintenanceStatusBadge,
+  MaintenanceStatusLegend,
   Pagination,
   SearchInput,
-  StatusBadge,
   ToastNotification,
 } from "../../components/ui";
 import {
@@ -216,6 +217,7 @@ const checklistHeaderClasses = 'grid grid-cols-[minmax(12rem,1fr)_64px_64px_minm
 const warningBannerClasses = 'mt-6 flex items-start gap-3 rounded-lg border border-[var(--color-status-error)]/20 bg-[var(--color-status-error)]/10 px-5 py-4 shadow-[0_0_15px_rgba(239,68,68,0.06)]';
 
 export default function WorkOrders() {
+  const partsSuggestionsId = `work-order-parts-${useId().replace(/:/g, "")}`;
   const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
   const [selectedTask, setSelectedTask] = useState<MaintenanceTask | null>(
     null,
@@ -567,6 +569,17 @@ export default function WorkOrders() {
         technicianSignature: "",
       }
     : { done: false, items: [] };
+  const partsSuggestions = useMemo(() => {
+    const values = new Map<string, string>();
+    for (const task of tasks) {
+      const progress = mapWorkOrderProgress(task.workOrderProgress);
+      for (const item of progress?.execution?.items ?? []) {
+        const partName = item.partsUsed?.trim();
+        if (partName) values.set(partName.toLocaleLowerCase(), partName);
+      }
+    }
+    return [...values.values()].sort((left, right) => left.localeCompare(right));
+  }, [tasks]);
 
   useEffect(() => {
     if (!selectedTask || !isMechanic || !isInProgressStatus(selectedTask.status)) return;
@@ -689,7 +702,7 @@ export default function WorkOrders() {
       : triggerType;
   };
 
-  const getGarageName = (garageId?: string) => {
+  const getGarageName = (garageId?: string | null) => {
     if (!garageId) return "";
     return garages.find((garage) => garage.id === garageId)?.name ?? garageId;
   };
@@ -1677,12 +1690,19 @@ export default function WorkOrders() {
       <div className="fixed right-6 top-6 z-50 flex w-[340px] max-w-[calc(100vw-2rem)] flex-col gap-3">
         {toast && <ToastNotification type={toast.type} message={toast.message} />}
       </div>
+      <datalist id={partsSuggestionsId}>
+        {partsSuggestions.map((partName) => (
+          <option key={partName} value={partName} />
+        ))}
+      </datalist>
 
       <PageHeader
         icon={Wrench}
         title="WORK ORDERS"
         subtitle="Complete your assigned tasks and vehicle checklists"
       />
+
+      <MaintenanceStatusLegend />
 
       {!selectedTask ? (
         <section className="overflow-visible">
@@ -1847,7 +1867,7 @@ export default function WorkOrders() {
                 key: "status",
                 header: "Status",
                 width: "17%",
-                render: (task) => <StatusBadge status={task.status} />,
+                render: (task) => <MaintenanceStatusBadge status={task.status} />,
               },
               {
                 key: "actions",
@@ -2251,6 +2271,7 @@ export default function WorkOrders() {
                       </label>
                       <input
                         type="text"
+                        list={partsSuggestionsId}
                         value={item.partsUsed || ""}
                         disabled={!canModifySelectedTask}
                         onChange={(event) =>
@@ -2264,6 +2285,9 @@ export default function WorkOrders() {
                         placeholder="Part(s) used"
                         className={`mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)] ${!canModifySelectedTask ? "cursor-not-allowed opacity-70" : ""}`}
                       />
+                      <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                        Suggestions come from prior work orders; new part names are allowed.
+                      </p>
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-[var(--color-text-secondary)]">

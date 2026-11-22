@@ -131,7 +131,7 @@ export interface MaintenanceTask {
   chiefMechanicId?: string;
   chiefMechanic?: string;
   notes: string;
-  garageId?: string;
+  garageId?: string | null;
   accountType?: AccountType;
   outsourcedProvider?: string;
   odometerReading?: string;
@@ -149,4 +149,21 @@ export interface MaintenanceTask {
   totalCost?: number | string;
   materialCost?: number | string;
   deletedAt?: string | null;
+}
+
+export interface MaintenancePrediction {
+  scheduleId: string;
+  workOrderNumber: string;
+  vehicleId: string;
+  title: string;
+  currentOdometer: number;
+  status: MaintenanceStatus;
+  dueOdometer: number;
+  remainingKm: number;
+  daysUntilDue: number;
+  dailyRateKm: number;
+  estimatedDueDate: string;
+  historyCount: number;
+  historyStartDate: string;
+  historyEndDate: string;
 }
