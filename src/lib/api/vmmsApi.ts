@@ -18,6 +18,7 @@ export interface VehicleOption {
   plateNumber?: string;
   status?: string;
   odometer?: number;
+  branchGarageId?: string | null;
 }
 
 export interface MaintenanceLogEditValues {
@@ -28,18 +29,18 @@ export interface MaintenanceLogEditValues {
 }
 
 const fallbackVehicleOptions: VehicleOption[] = [
-  { value: "ABC 1234", label: "ABC 1234 - Truck Alpha", status: "AVAILABLE" },
-  { value: "DEF 5678", label: "DEF 5678 - Truck Bravo", status: "AVAILABLE" },
-  { value: "GHI 9012", label: "GHI 9012 - Truck Charlie", status: "AVAILABLE" },
-  { value: "JKL 3456", label: "JKL 3456 - Truck Delta", status: "AVAILABLE" },
-  { value: "MNO 7890", label: "MNO 7890 - Truck Echo", status: "AVAILABLE" },
-  { value: "PQR 2345", label: "PQR 2345 - Truck Foxtrot", status: "AVAILABLE" },
-  { value: "STU 6789", label: "STU 6789 - Truck Golf", status: "AVAILABLE" },
-  { value: "VWX 0123", label: "VWX 0123 - Truck Hotel", status: "AVAILABLE" },
-  { value: "YZA 4567", label: "YZA 4567 - Truck India", status: "AVAILABLE" },
-  { value: "BCD 8901", label: "BCD 8901 - Truck Juliet", status: "AVAILABLE" },
-  { value: "EFG 2345", label: "EFG 2345 - Truck Kilo", status: "AVAILABLE" },
-  { value: "HU 6789", label: "HU 6789 - Truck Lima", status: "AVAILABLE" },
+  { value: "ABC 1234", label: "ABC 1234 - Truck Alpha", status: "AVAILABLE", branchGarageId: "g1" },
+  { value: "DEF 5678", label: "DEF 5678 - Truck Bravo", status: "AVAILABLE", branchGarageId: "g2" },
+  { value: "GHI 9012", label: "GHI 9012 - Truck Charlie", status: "AVAILABLE", branchGarageId: "g3" },
+  { value: "JKL 3456", label: "JKL 3456 - Truck Delta", status: "AVAILABLE", branchGarageId: "g1" },
+  { value: "MNO 7890", label: "MNO 7890 - Truck Echo", status: "AVAILABLE", branchGarageId: "g2" },
+  { value: "PQR 2345", label: "PQR 2345 - Truck Foxtrot", status: "AVAILABLE", branchGarageId: "g3" },
+  { value: "STU 6789", label: "STU 6789 - Truck Golf", status: "AVAILABLE", branchGarageId: "g1" },
+  { value: "VWX 0123", label: "VWX 0123 - Truck Hotel", status: "AVAILABLE", branchGarageId: "g2" },
+  { value: "YZA 4567", label: "YZA 4567 - Truck India", status: "AVAILABLE", branchGarageId: "g3" },
+  { value: "BCD 8901", label: "BCD 8901 - Truck Juliet", status: "AVAILABLE", branchGarageId: "g1" },
+  { value: "EFG 2345", label: "EFG 2345 - Truck Kilo", status: "AVAILABLE", branchGarageId: "g2" },
+  { value: "HU 6789", label: "HU 6789 - Truck Lima", status: "AVAILABLE", branchGarageId: "g3" },
 ];
 import {
   AccountType,
@@ -47,6 +48,7 @@ import {
   MaintenancePriority,
   MaintenanceStatus,
   MaintenanceTriggerType,
+  type MaintenancePrediction,
   type MaintenanceTask,
 } from "../../types/maintenance";
 import {
@@ -170,7 +172,10 @@ function formatLocalDateText(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
-function normalizeMaintenanceTask(task: MaintenanceTask): MaintenanceTask {
+function normalizeMaintenanceTask(
+  task: MaintenanceTask,
+  recalculateStatus = false,
+): MaintenanceTask {
   const rawTask = task as MaintenanceTask & {
     createdAt?: string | null;
     log_number?: string | null;
@@ -206,7 +211,9 @@ function normalizeMaintenanceTask(task: MaintenanceTask): MaintenanceTask {
 
   return {
     ...normalizedTask,
-    status: getCalculatedMaintenanceStatus(normalizedTask),
+    status: recalculateStatus
+      ? getCalculatedMaintenanceStatus(normalizedTask)
+      : normalizedTask.status,
   };
 }
 
@@ -422,9 +429,11 @@ export async function updateOutsourcedProvider(id: string, values: { name?: stri
 
 export async function updateWorkOrder(task: MaintenanceTask) {
   if (!useMaintenanceScheduleBackend) {
-    const schedules = readLocalMaintenanceSchedules().map(normalizeMaintenanceTask);
+    const schedules = readLocalMaintenanceSchedules().map((schedule) =>
+      normalizeMaintenanceTask(schedule, true),
+    );
     const index = schedules.findIndex((current) => current.id === task.id);
-    const updatedTask = normalizeMaintenanceTask(task);
+    const updatedTask = normalizeMaintenanceTask(task, true);
     if (index >= 0) {
       schedules[index] = updatedTask;
       writeLocalMaintenanceSchedules(schedules);
@@ -452,7 +461,9 @@ export async function updateWorkOrderProgress(
   progress: unknown,
 ) {
   if (!useMaintenanceScheduleBackend) {
-    const schedules = readLocalMaintenanceSchedules().map(normalizeMaintenanceTask);
+    const schedules = readLocalMaintenanceSchedules().map((schedule) =>
+      normalizeMaintenanceTask(schedule, true),
+    );
     const index = schedules.findIndex((current) => current.id === taskId);
     if (index >= 0) {
       schedules[index] = {
@@ -548,6 +559,70 @@ export async function saveChecklistTemplates(
 
 export type CreateMaintenanceScheduleInput = Omit<MaintenanceTask, "id">;
 
+export interface MaintenanceScheduleExtensionRequest {
+  id: string;
+  actorName: string;
+  requestedDueDate: string;
+  reason: string;
+  reviewStatus: "PENDING" | "APPROVED" | "REJECTED";
+  reviewedByName: string | null;
+  reviewReason: string | null;
+  requestedAt: string;
+  reviewedAt: string | null;
+}
+
+export interface MaintenanceScheduleExtensionHistory {
+  currentTargetDueDate: string | null;
+  requests: MaintenanceScheduleExtensionRequest[];
+  extensionEvents: {
+    extensionId: string;
+    eventType: "REQUESTED" | "APPROVED" | "REJECTED";
+    actorName: string;
+    previousDueDate: string | null;
+    requestedDueDate: string;
+    reason: string | null;
+    recordedAt: string;
+  }[];
+  rescheduleEvents: {
+    source: "MANUAL" | "EXTENSION_APPROVAL";
+    actorName: string;
+    previousStartDate: string | null;
+    newStartDate: string | null;
+    previousTargetDueDate: string | null;
+    newTargetDueDate: string | null;
+    changedAt: string;
+  }[];
+}
+
+export interface PendingMaintenanceScheduleExtension {
+  id: string;
+  scheduleId: string;
+  actorName: string;
+  requestedDueDate: string;
+  reason: string;
+  requestedAt: string;
+  schedule: {
+    workOrderNumber: string | null;
+    vehicleId: string;
+    title: string;
+    status: MaintenanceStatus;
+    targetDueDate: string | null;
+    assignedMechanic: string;
+  };
+}
+
+export interface MaintenanceScheduleExtensionReviewResult {
+  id: string;
+  scheduleId: string;
+  reviewStatus: "APPROVED" | "REJECTED";
+  requestedDueDate: string;
+  targetDueDate: string | null;
+  status: MaintenanceStatus;
+  reviewedByName: string;
+  reviewReason: string | null;
+  reviewedAt: string;
+}
+
 export async function getMaintenanceSchedules(options?: {
   statuses?: string[];
   includeDeleted?: boolean;
@@ -556,7 +631,9 @@ export async function getMaintenanceSchedules(options?: {
   const includeDeleted = options?.includeDeleted === true;
 
   if (!useMaintenanceScheduleBackend) {
-    const schedules = readLocalMaintenanceSchedules().map(normalizeMaintenanceTask);
+    const schedules = readLocalMaintenanceSchedules().map((schedule) =>
+      normalizeMaintenanceTask(schedule, true),
+    );
     return schedules.filter(
       (schedule) =>
         (includeDeleted || !schedule.deletedAt) &&
@@ -573,14 +650,16 @@ export async function getMaintenanceSchedules(options?: {
   try {
       schedules = (await fetchJSON<MaintenanceTask[]>(
         `/maintenance-schedules${query}`,
-      )).map(normalizeMaintenanceTask);
+      )).map((schedule) => normalizeMaintenanceTask(schedule));
   } catch (error) {
     if (error instanceof ApiError && error.status >= 500) {
       console.warn(
         "Backend maintenance schedule list failed; using local fallback schedules.",
         error,
       );
-      schedules = mockWorkOrders.map(normalizeMaintenanceTask);
+      schedules = mockWorkOrders.map((schedule) =>
+        normalizeMaintenanceTask(schedule, true),
+      );
     } else {
       throw error;
     }
@@ -589,6 +668,15 @@ export async function getMaintenanceSchedules(options?: {
   return allowedStatuses?.length
     ? schedules.filter((schedule) => allowedStatuses.includes(schedule.status))
     : schedules;
+}
+
+export async function getMaintenancePredictions(): Promise<
+  MaintenancePrediction[]
+> {
+  if (!useMaintenanceScheduleBackend) {
+    throw new Error("Predictive maintenance requires the VMMS API.");
+  }
+  return fetchJSON<MaintenancePrediction[]>("/maintenance-schedules/predictions");
 }
 
 export async function createMaintenanceSchedule(
@@ -652,7 +740,7 @@ export async function updateMaintenanceSchedule(schedule: MaintenanceTask) {
       (current) => current.id === schedule.id,
     );
     if (index >= 0) {
-      const updatedSchedule = normalizeMaintenanceTask(schedule);
+      const updatedSchedule = normalizeMaintenanceTask(schedule, true);
       schedules[index] = updatedSchedule;
       writeLocalMaintenanceSchedules(schedules);
       return updatedSchedule;
@@ -703,7 +791,7 @@ export async function updateWorkOrderPriority(
     const schedules = readLocalMaintenanceSchedules();
     const current = schedules.find((schedule) => schedule.id === id);
     if (!current) throw new Error("Work order not found.");
-    const updated = normalizeMaintenanceTask({ ...current, priority });
+    const updated = normalizeMaintenanceTask({ ...current, priority }, true);
     writeLocalMaintenanceSchedules(
       schedules.map((schedule) => schedule.id === id ? updated : schedule),
     );
@@ -738,6 +826,55 @@ export async function reviewMaintenanceScheduleCancellation(
     { method: 'POST', body: JSON.stringify({ decision, reason: reason?.trim() }) },
   );
   return result;
+}
+
+export async function getMaintenanceScheduleExtensionHistory(
+  scheduleId: string,
+): Promise<MaintenanceScheduleExtensionHistory> {
+  if (!useMaintenanceScheduleBackend) {
+    throw new Error("Schedule extension history requires the connected backend audit trail.");
+  }
+  return fetchJSON<MaintenanceScheduleExtensionHistory>(
+    `/maintenance-schedules/${encodeURIComponent(scheduleId)}/extensions`,
+  );
+}
+
+export async function getPendingMaintenanceScheduleExtensions(
+  cursor?: string | null,
+): Promise<{
+  items: PendingMaintenanceScheduleExtension[];
+  nextCursor: string | null;
+}> {
+  if (!useMaintenanceScheduleBackend) {
+    throw new Error("Extension review requires the connected backend.");
+  }
+  const query = cursor
+    ? `?cursor=${encodeURIComponent(cursor)}`
+    : "";
+  return fetchJSON<{
+    items: PendingMaintenanceScheduleExtension[];
+    nextCursor: string | null;
+  }>(
+    `/maintenance-schedules/extensions/pending${query}`,
+  );
+}
+
+export async function reviewMaintenanceScheduleExtension(
+  scheduleId: string,
+  requestId: string,
+  decision: "APPROVE" | "REJECT",
+  reason?: string,
+): Promise<MaintenanceScheduleExtensionReviewResult> {
+  if (!useMaintenanceScheduleBackend) {
+    throw new Error("Extension review requires the connected backend.");
+  }
+  return fetchJSON<MaintenanceScheduleExtensionReviewResult>(
+    `/maintenance-schedules/${encodeURIComponent(scheduleId)}/extensions/${encodeURIComponent(requestId)}/review`,
+    {
+      method: "POST",
+      body: JSON.stringify({ decision, reason: reason?.trim() }),
+    },
+  );
 }
 
 export async function cancelMaintenanceLog(schedule: MaintenanceTask, reason: string): Promise<MaintenanceTask> {
@@ -809,7 +946,7 @@ export async function deleteMaintenanceSchedule(id: string) {
   });
 }
 
-export async function getVehicles(): Promise<VehicleOption[]> {
+export async function getVehicles(activeOnly = true): Promise<VehicleOption[]> {
   if (!useBackend) {
     const statuses = loadMockVehicleStatuses();
     return fallbackVehicleOptions.map((vehicle) => ({
@@ -825,8 +962,9 @@ export async function getVehicles(): Promise<VehicleOption[]> {
       model: string;
       status?: string;
       odometer?: number;
+      garageId?: string | null;
     }>
-  >("/vehicles?activeOnly=true");
+  >(`/vehicles${activeOnly ? "?activeOnly=true" : ""}`);
 
   return vehicles.map((vehicle) => ({
     id: vehicle.id,
@@ -835,6 +973,7 @@ export async function getVehicles(): Promise<VehicleOption[]> {
     plateNumber: vehicle.plateNumber,
     status: vehicle.status,
     odometer: vehicle.odometer,
+    branchGarageId: vehicle.garageId,
   }));
 }
 

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Calendar as CalendarIcon,
@@ -31,7 +31,8 @@ import {
   Modal,
   Pagination,
   SearchInput,
-  StatusBadge as StandardStatusBadge,
+  MaintenanceStatusBadge,
+  MaintenanceStatusLegend,
   ToastNotification,
 } from "../../components/ui";
 import CreateSchedule from "./CreateSchedule";
@@ -45,25 +46,32 @@ import {
   maintenancePriorityLabels,
   maintenanceStatusLabels,
   maintenanceTriggerTypeLabels,
+  type MaintenancePrediction,
   type MaintenanceTask,
 } from "../../types/maintenance";
 import {
+  getMaintenancePredictions,
   getMaintenanceSchedules,
   cancelMaintenanceSchedule,
   reviewMaintenanceScheduleCancellation,
   updateMaintenanceSchedule,
   updateWorkOrderPriority,
+  getMaintenanceScheduleExtensionHistory,
+  getPendingMaintenanceScheduleExtensions,
+  reviewMaintenanceScheduleExtension,
+  type MaintenanceScheduleExtensionHistory,
+  type PendingMaintenanceScheduleExtension,
 } from "../../lib/api/maintenanceService";
 import { getVehicles, type VehicleOption } from "../../lib/api/vehicleService";
 import { getGarages } from "../../lib/api/locationService";
 import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
 import {
-  getCalculatedMaintenanceStatus,
   isInProgressStatus,
   isDueStatus,
   isOverdueStatus,
   isPendingStatus,
 } from "../../lib/utils/workOrders";
+import { getMaintenanceStatusClasses } from "../../lib/utils/maintenanceStatusPresentation";
 
 type GarageOption = { id: string; name: string };
 type ToastState = {
@@ -71,7 +79,18 @@ type ToastState = {
   message: string;
 };
 
+const formatExtensionTimestamp = (value: string) =>
+  new Date(value).toLocaleString("en-PH", { timeZone: "Asia/Manila" });
+
 type ScheduleStatusAction = "request-cancel" | "approve-cancel" | "reject-cancel" | "activate";
+type ScheduleSortOrder =
+  | "NONE"
+  | "PRIORITY_DESC"
+  | "PRIORITY_ASC"
+  | "TYPE_ASC"
+  | "TYPE_DESC"
+  | "BRANCH_ASC"
+  | "BRANCH_DESC";
 type PendingScheduleAction = {
   action: ScheduleStatusAction;
   task: MaintenanceTask;
@@ -176,33 +195,6 @@ const Button = ({
   );
 };
 
-const StatusBadge = ({ status }: { status: MaintenanceStatus }) => {
-  const getStatusDetails = () => {
-    switch (status) {
-      case MaintenanceStatus.OVERDUE:
-        return "text-[#c41c3b] bg-[var(--color-status-error)]/15 border-[var(--color-status-error)]/30";
-      case MaintenanceStatus.DUE:
-        return "text-[#6d28d9] bg-[#ede9fe] border-[#c4b5fd]";
-      case MaintenanceStatus.IN_PROGRESS:
-        return "text-[#047857] bg-[var(--color-status-success)]/15 border-[var(--color-status-success)]/30";
-      case MaintenanceStatus.COMPLETED:
-        return "text-[var(--color-text-secondary)] bg-[var(--color-card-bg)] border-[var(--color-border)]";
-      case MaintenanceStatus.CANCELLED:
-        return "text-slate-600 bg-slate-100 border-slate-300";
-      case MaintenanceStatus.PENDING:
-      default:
-        return "text-[#0369a1] bg-[var(--color-status-info)]/15 border-[var(--color-status-info)]/30";
-    }
-  };
-
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${getStatusDetails()}`}
-    >
-      {maintenanceStatusLabels[status] ?? status}
-    </span>
-  );
-};
 const SelectField = ({
   label,
   id,
@@ -261,18 +253,7 @@ const formatDateStr = (year: number, month: number, day: number) => {
 };
 
 const getTaskStyle = (status: MaintenanceStatus) => {
-  switch (status) {
-    case MaintenanceStatus.OVERDUE:
-      return "border border-rose-500/40 bg-rose-500/15 text-rose-700 shadow-sm";
-    case MaintenanceStatus.DUE:
-      return "border border-violet-500/40 bg-violet-500/15 text-violet-700 shadow-sm";
-    case MaintenanceStatus.IN_PROGRESS:
-      return "border border-emerald-500/40 bg-emerald-500/15 text-emerald-700 shadow-sm";
-    case MaintenanceStatus.PENDING:
-      return "border border-[var(--color-status-info)]/40 bg-[var(--color-status-info)]/15 text-[#0369a1] shadow-sm";
-    default:
-      return "border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-primary)] shadow-sm";
-  }
+  return `border ${getMaintenanceStatusClasses(status)} shadow-sm`;
 };
 
 const getPendingCancellationRequest = (task: MaintenanceTask) =>
@@ -297,20 +278,24 @@ const MaintenanceSchedulingCombined = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatusFilters, setSelectedStatusFilters] = useState<string[]>([]);
   const [priorityFilter, setPriorityFilter] = useState<MaintenancePriority | "All">("All");
-  const [priorityOrder, setPriorityOrder] = useState<"NONE" | "HIGH_TO_LOW" | "LOW_TO_HIGH">("NONE");
   const [vehicleFilter, setVehicleFilter] = useState<string>("All");
+  const [garageBranchFilter, setGarageBranchFilter] = useState("All");
   const [checklistTemplateFilter, setChecklistTemplateNameFilter] =
     useState<string>("All");
   const [dateRangeFilter, setDateRangeFilter] = useState<string>("All");
   const [dateFromFilter, setDateFromFilter] = useState("");
   const [dateToFilter, setDateToFilter] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [sortOrder, setSortOrder] = useState<ScheduleSortOrder>("NONE");
   const [dateSortDirection, setDateSortDirection] = useState<"asc" | "desc">(
     "desc",
   );
   const [currentPage, setCurrentPage] = useState(1);
   const [schedulesPerPage, setSchedulesPerPage] = useState(8);
   const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
+  const [predictions, setPredictions] = useState<MaintenancePrediction[]>([]);
+  const [predictionsLoading, setPredictionsLoading] = useState(true);
+  const [predictionsError, setPredictionsError] = useState("");
   const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
   const [garages, setGarages] = useState<GarageOption[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -333,8 +318,42 @@ const MaintenanceSchedulingCombined = () => {
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [savingPriorityId, setSavingPriorityId] = useState<string | null>(null);
+  const [extensionQueueOpen, setExtensionQueueOpen] = useState(false);
+  const [extensionRequests, setExtensionRequests] = useState<
+    PendingMaintenanceScheduleExtension[]
+  >([]);
+  const [extensionCursor, setExtensionCursor] = useState<string | null>(null);
+  const [extensionQueueLoading, setExtensionQueueLoading] = useState(false);
+  const [extensionQueueError, setExtensionQueueError] = useState("");
+  const [extensionReviewingId, setExtensionReviewingId] = useState<string | null>(null);
+  const [extensionReviewReasons, setExtensionReviewReasons] = useState<
+    Record<string, string>
+  >({});
+  const [extensionHistory, setExtensionHistory] =
+    useState<MaintenanceScheduleExtensionHistory | null>(null);
+  const [extensionHistoryLoading, setExtensionHistoryLoading] = useState(false);
+  const [extensionHistoryError, setExtensionHistoryError] = useState("");
+  const extensionHistoryRequest = useRef(0);
 
   useBodyScrollLock(Boolean(pendingAction));
+
+  const loadMaintenancePredictions = useCallback(async () => {
+    if (!canSchedule) return;
+    setPredictionsLoading(true);
+    setPredictionsError("");
+    try {
+      setPredictions(await getMaintenancePredictions());
+    } catch (error) {
+      setPredictions([]);
+      setPredictionsError(
+        error instanceof Error
+          ? error.message
+          : "Could not load maintenance predictions.",
+      );
+    } finally {
+      setPredictionsLoading(false);
+    }
+  }, [canSchedule]);
 
   const loadMaintenanceSchedules = async () => {
     const loadedTasks = await getMaintenanceSchedules();
@@ -342,9 +361,116 @@ const MaintenanceSchedulingCombined = () => {
     return loadedTasks;
   };
 
+  const loadExtensionHistory = useCallback(async (scheduleId: string) => {
+    const requestId = ++extensionHistoryRequest.current;
+    setExtensionHistoryLoading(true);
+    setExtensionHistoryError("");
+    setExtensionHistory(null);
+    try {
+      const history = await getMaintenanceScheduleExtensionHistory(scheduleId);
+      if (requestId === extensionHistoryRequest.current) {
+        setExtensionHistory(history);
+      }
+    } catch (error) {
+      if (requestId === extensionHistoryRequest.current) {
+        setExtensionHistoryError(
+          error instanceof Error
+            ? error.message
+            : "Could not load schedule extension history.",
+        );
+      }
+    } finally {
+      if (requestId === extensionHistoryRequest.current) {
+        setExtensionHistoryLoading(false);
+      }
+    }
+  }, []);
+
+  const loadPendingExtensions = async (
+    cursor: string | null = null,
+    append = false,
+  ) => {
+    setExtensionQueueLoading(true);
+    setExtensionQueueError("");
+    try {
+      const page = await getPendingMaintenanceScheduleExtensions(cursor);
+      setExtensionRequests((current) =>
+        append ? [...current, ...page.items] : page.items,
+      );
+      setExtensionCursor(page.nextCursor);
+    } catch (error) {
+      setExtensionQueueError(
+        error instanceof Error
+          ? error.message
+          : "Could not load pending extension requests.",
+      );
+    } finally {
+      setExtensionQueueLoading(false);
+    }
+  };
+
+  const reviewExtension = async (
+    request: PendingMaintenanceScheduleExtension,
+    decision: "APPROVE" | "REJECT",
+  ) => {
+    const reason = extensionReviewReasons[request.id]?.trim() ?? "";
+    if (decision === "REJECT" && !reason) {
+      setExtensionQueueError("Enter a reason before rejecting this request.");
+      return;
+    }
+
+    setExtensionReviewingId(request.id);
+    setExtensionQueueError("");
+    try {
+      const result = await reviewMaintenanceScheduleExtension(
+        request.scheduleId,
+        request.id,
+        decision,
+        reason,
+      );
+      const updateSchedule = (schedule: MaintenanceTask) =>
+        schedule.id === result.scheduleId
+          ? {
+              ...schedule,
+              status: result.status,
+              targetDueDate: result.targetDueDate,
+              dueDate: result.targetDueDate ?? schedule.dueDate,
+            }
+          : schedule;
+      setTasks((current) => current.map(updateSchedule));
+      setSelectedSchedules((current) => current.map(updateSchedule));
+      setExtensionRequests((current) =>
+        current.filter((entry) => entry.id !== request.id),
+      );
+      setExtensionReviewReasons((current) => {
+        const next = { ...current };
+        delete next[request.id];
+        return next;
+      });
+      setToast({
+        type: "success",
+        message:
+          decision === "APPROVE"
+            ? "Schedule extension approved."
+            : "Schedule extension rejected.",
+      });
+      if (selectedSchedule?.id === result.scheduleId) {
+        void loadExtensionHistory(result.scheduleId);
+      }
+    } catch (error) {
+      setExtensionQueueError(
+        error instanceof Error
+          ? error.message
+          : "Could not review the extension request.",
+      );
+    } finally {
+      setExtensionReviewingId(null);
+    }
+  };
+
   useEffect(() => {
     const initialLoad = window.setTimeout(() => loadMaintenanceSchedules().catch(console.error), 0);
-    getVehicles()
+    getVehicles(false)
       .then((loadedVehicles) => setVehicles(loadedVehicles))
       .catch(() => console.error("Failed to load vehicles"));
     getGarages()
@@ -352,6 +478,10 @@ const MaintenanceSchedulingCombined = () => {
       .catch(() => console.error("Failed to load garages"));
     return () => window.clearTimeout(initialLoad);
   }, []);
+
+  useEffect(() => {
+    if (canSchedule) void loadMaintenancePredictions();
+  }, [canSchedule, loadMaintenancePredictions]);
 
   useEffect(() => {
     if (!canSchedule || new URLSearchParams(location.search).get("create") !== "true") return;
@@ -416,7 +546,7 @@ const MaintenanceSchedulingCombined = () => {
     new Set(tasks.map((task) => task.title)),
   ).sort();
   const checklistTemplateOptions = [
-    { value: "All", label: "All Types" },
+    { value: "All", label: "All Maintenance Types" },
     ...checklistTemplates.map((template) => ({
       value: template,
       label: template,
@@ -424,13 +554,46 @@ const MaintenanceSchedulingCombined = () => {
   ];
 
   const vehicleOptions = [{ value: "All", label: "All Vehicles" }, ...vehicles];
+  const vehiclesByIdentifier = useMemo(() => {
+    const lookup = new Map<string, VehicleOption>();
+    for (const vehicle of vehicles) {
+      lookup.set(vehicle.value, vehicle);
+      if (vehicle.id) lookup.set(vehicle.id, vehicle);
+      if (vehicle.plateNumber) lookup.set(vehicle.plateNumber, vehicle);
+    }
+    return lookup;
+  }, [vehicles]);
   const getVehicleOption = (vehicleId?: string) =>
-    vehicles.find(
-      (vehicle) =>
-        vehicle.value === vehicleId ||
-        vehicle.id === vehicleId ||
-        vehicle.plateNumber === vehicleId,
-    );
+    vehicleId ? vehiclesByIdentifier.get(vehicleId) : undefined;
+  const garageNameById = useMemo(
+    () => new Map(garages.map((garage) => [garage.id, garage.name])),
+    [garages],
+  );
+  const branchGarageIds = Array.from(
+    new Set(
+      vehicles.flatMap((vehicle) =>
+        vehicle.branchGarageId ? [vehicle.branchGarageId] : [],
+      ),
+    ),
+  );
+  const branchFilterOptions = [
+    { value: "All", label: "All Garage Branches" },
+    ...branchGarageIds
+      .map((id) => ({
+        value: id,
+        label: garageNameById.get(id) ?? "Unknown Garage",
+      }))
+      .sort((left, right) => left.label.localeCompare(right.label)),
+    ...(vehicles.some((vehicle) => !vehicle.branchGarageId)
+      ? [{ value: "unassigned", label: "Unassigned" }]
+      : []),
+  ];
+  const getVehicleBranchName = (vehicleId?: string) => {
+    const branchGarageId = getVehicleOption(vehicleId)?.branchGarageId;
+    return branchGarageId
+      ? garageNameById.get(branchGarageId) ?? "Unknown Garage"
+      : "Unassigned";
+  };
   const getVehiclePlateNumber = (vehicleId?: string) => {
     if (!vehicleId) return "";
     const vehicle = getVehicleOption(vehicleId);
@@ -472,6 +635,12 @@ const MaintenanceSchedulingCombined = () => {
       const templateMatches =
         checklistTemplateFilter === "All" ||
         task.title === checklistTemplateFilter;
+      const taskBranchGarageId = taskVehicle?.branchGarageId;
+      const garageBranchMatches =
+        garageBranchFilter === "All" ||
+        (garageBranchFilter === "unassigned"
+          ? Boolean(taskVehicle) && !taskBranchGarageId
+          : taskBranchGarageId === garageBranchFilter);
       const candidateDates = viewMode === 'calendar' ? [task.startDate, task.dueDate] : [task.startDate];
       const dateMatches = (dateRangeFilter === 'All' && !dateFromFilter && !dateToFilter) ||
         candidateDates.some((date) => date && dateFilter(new Date(`${date}T00:00:00`)) &&
@@ -488,24 +657,41 @@ const MaintenanceSchedulingCombined = () => {
         statusMatches &&
         priorityMatches &&
         vehicleMatches &&
+        garageBranchMatches &&
         templateMatches &&
         dateMatches &&
         searchMatches
       );
     })
     .sort((left, right) => {
-      if (priorityOrder !== "NONE") {
+      let comparison = 0;
+      if (sortOrder === "PRIORITY_ASC" || sortOrder === "PRIORITY_DESC") {
         const rank: Record<MaintenancePriority, number> = {
           [MaintenancePriority.HIGH]: 3,
           [MaintenancePriority.MEDIUM]: 2,
           [MaintenancePriority.LOW]: 1,
         };
-        const priorityDifference = rank[left.priority ?? MaintenancePriority.MEDIUM] - rank[right.priority ?? MaintenancePriority.MEDIUM];
-        if (priorityDifference !== 0) {
-          return priorityOrder === "HIGH_TO_LOW" ? -priorityDifference : priorityDifference;
-        }
+        comparison =
+          rank[left.priority ?? MaintenancePriority.MEDIUM] -
+          rank[right.priority ?? MaintenancePriority.MEDIUM];
+        if (sortOrder === "PRIORITY_DESC") comparison *= -1;
+      } else if (sortOrder === "TYPE_ASC" || sortOrder === "TYPE_DESC") {
+        comparison = left.title.localeCompare(right.title, undefined, {
+          sensitivity: "base",
+        });
+        if (sortOrder === "TYPE_DESC") comparison *= -1;
+      } else if (sortOrder === "BRANCH_ASC" || sortOrder === "BRANCH_DESC") {
+        comparison = getVehicleBranchName(left.vehicleId).localeCompare(
+          getVehicleBranchName(right.vehicleId),
+          undefined,
+          { sensitivity: "base" },
+        );
+        if (sortOrder === "BRANCH_DESC") comparison *= -1;
       }
-      const dateComparison = (left.startDate ?? '').localeCompare(right.startDate ?? '');
+      if (comparison !== 0) return comparison;
+      const dateComparison = (left.startDate ?? "").localeCompare(
+        right.startDate ?? "",
+      );
       if (dateComparison !== 0) {
         return dateSortDirection === "asc" ? dateComparison : -dateComparison;
       }
@@ -580,12 +766,23 @@ const MaintenanceSchedulingCombined = () => {
   }, [focusScheduleId, location.pathname, navigate, tasks]);
 
   const closeScheduleDetails = () => {
+    extensionHistoryRequest.current += 1;
+    setExtensionHistory(null);
+    setExtensionHistoryError("");
+    setExtensionHistoryLoading(false);
     setSelectedSchedules([]);
     setSelectedSchedulePage(0);
   };
 
   const selectedSchedule =
     selectedSchedules[selectedSchedulePage] ?? selectedSchedules[0] ?? null;
+  const selectedScheduleId = selectedSchedule?.id;
+
+  useEffect(() => {
+    if (selectedScheduleId) {
+      void loadExtensionHistory(selectedScheduleId);
+    }
+  }, [loadExtensionHistory, selectedScheduleId]);
 
   const handlePriorityChange = async (task: MaintenanceTask, priority: MaintenancePriority) => {
     if (!canEditPriority || priority === (task.priority ?? MaintenancePriority.MEDIUM)) return;
@@ -602,7 +799,7 @@ const MaintenanceSchedulingCombined = () => {
     }
   };
 
-  const getGarageName = (garageId?: string) => {
+  const getGarageName = (garageId?: string | null) => {
     if (!garageId) return undefined;
     return garages.find((garage) => garage.id === garageId)?.name ?? garageId;
   };
@@ -707,19 +904,281 @@ const MaintenanceSchedulingCombined = () => {
         subtitle="Manage and track fleet maintenance schedules and tasks"
       />
 
-      {canSchedule && <div className="flex justify-end mb-4">
-        <ActionButton
-          variant="primary"
-          className="flex items-center gap-2"
-          onClick={() => {
-            setEditingTask(null);
-            setIsModalOpen(true);
-          }}
+      <MaintenanceStatusLegend />
+
+      {canSchedule && (
+        <section
+          aria-labelledby="maintenance-predictions-title"
+          className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)]"
         >
-          <Plus className="w-4 h-4" />
-          <span>{"Create Schedule"}</span>
-        </ActionButton>
-      </div>}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-divider)] px-5 py-4">
+            <div>
+              <h2
+                id="maintenance-predictions-title"
+                className="text-base font-bold text-[var(--color-text-primary)]"
+              >
+                Projected odometer due dates
+              </h2>
+              <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                Read-only suggestions based on recent vehicle readings. They do not create or change schedules.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={predictionsLoading}
+              onClick={() => void loadMaintenancePredictions()}
+              className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm font-medium text-[var(--color-text-primary)] transition hover:bg-[var(--color-card-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {predictionsLoading ? "Refreshing..." : "Refresh"}
+            </button>
+          </div>
+
+          {predictionsLoading && (
+            <p role="status" className="px-5 py-4 text-sm text-[var(--color-text-secondary)]">
+              Loading odometer projections...
+            </p>
+          )}
+          {predictionsError && (
+            <div role="alert" className="px-5 py-4 text-sm text-red-700">
+              {predictionsError} Use Refresh to try again.
+            </div>
+          )}
+          {!predictionsLoading && !predictionsError && predictions.length === 0 && (
+            <p role="status" className="px-5 py-4 text-sm text-[var(--color-text-secondary)]">
+              No eligible odometer schedules are projected to reach their due reading within 30 days.
+            </p>
+          )}
+          {predictions.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="min-w-[52rem] w-full text-left text-sm">
+                <caption className="sr-only">
+                  Odometer-based maintenance schedules projected due within 30 days
+                </caption>
+                <thead className="bg-[var(--color-card-bg-hover)] text-xs uppercase tracking-wide text-[var(--color-text-secondary)]">
+                  <tr>
+                    <th scope="col" className="px-5 py-3">Vehicle and schedule</th>
+                    <th scope="col" className="px-5 py-3">Odometer</th>
+                    <th scope="col" className="px-5 py-3">Projected due</th>
+                    <th scope="col" className="px-5 py-3">Reading history</th>
+                    <th scope="col" className="px-5 py-3">
+                      <span className="sr-only">Action</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--color-divider)]">
+                  {predictions.map((prediction) => (
+                    <tr key={prediction.scheduleId}>
+                      <td className="px-5 py-4">
+                        <p className="font-semibold text-[var(--color-text-primary)]">
+                          {prediction.vehicleId}
+                        </p>
+                        <p className="mt-1 text-[var(--color-text-secondary)]">
+                          {prediction.title} · {prediction.workOrderNumber}
+                        </p>
+                      </td>
+                      <td className="whitespace-nowrap px-5 py-4 text-[var(--color-text-primary)]">
+                        {prediction.currentOdometer.toLocaleString("en-PH")} km
+                        <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                          Due at {prediction.dueOdometer.toLocaleString("en-PH")} km
+                        </p>
+                        <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                          {prediction.remainingKm.toLocaleString("en-PH")} km remaining
+                        </p>
+                      </td>
+                      <td className="whitespace-nowrap px-5 py-4">
+                        <p className="font-semibold text-[var(--color-text-primary)]">
+                          {new Date(`${prediction.estimatedDueDate}T00:00:00+08:00`).toLocaleDateString(
+                            "en-PH",
+                            { timeZone: "Asia/Manila", dateStyle: "medium" },
+                          )}
+                        </p>
+                        <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                          {prediction.daysUntilDue === 0
+                            ? "Expected today"
+                            : `Expected in ${prediction.daysUntilDue} days`}
+                        </p>
+                      </td>
+                      <td className="px-5 py-4 text-[var(--color-text-secondary)]">
+                        <p>{prediction.historyCount} readings</p>
+                        <p className="mt-1 text-xs">
+                          {prediction.historyStartDate} to {prediction.historyEndDate}
+                        </p>
+                      </td>
+                      <td className="px-5 py-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            navigate(
+                              `${location.pathname}?scheduleId=${encodeURIComponent(prediction.scheduleId)}`,
+                            )
+                          }
+                          aria-label={`Open ${prediction.vehicleId} ${prediction.title} schedule`}
+                          className="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold text-[var(--color-brand-primary)] underline underline-offset-4 transition hover:bg-[var(--color-card-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)]"
+                        >
+                          Open schedule
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {(canSchedule || isAdmin) && (
+        <div className="mb-4 flex flex-wrap justify-end gap-3">
+          {isAdmin && (
+            <ActionButton
+              variant={extensionQueueOpen ? "secondary" : "primary"}
+              onClick={() => {
+                const nextOpen = !extensionQueueOpen;
+                setExtensionQueueOpen(nextOpen);
+                if (nextOpen) void loadPendingExtensions();
+              }}
+            >
+              {extensionQueueOpen ? "Hide Extension Requests" : "Review Extensions"}
+            </ActionButton>
+          )}
+          {canSchedule && (
+            <ActionButton
+              variant="primary"
+              className="flex items-center gap-2"
+              onClick={() => {
+                setEditingTask(null);
+                setIsModalOpen(true);
+              }}
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create Schedule</span>
+            </ActionButton>
+          )}
+        </div>
+      )}
+
+      {isAdmin && extensionQueueOpen && (
+        <section
+          aria-labelledby="schedule-extension-queue-title"
+          className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)]"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-divider)] px-5 py-4">
+            <div>
+              <h2
+                id="schedule-extension-queue-title"
+                className="text-base font-bold text-[var(--color-text-primary)]"
+              >
+                Pending schedule extensions
+              </h2>
+              <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                Review requests from assigned Mechanics. Rejections require a reason.
+              </p>
+            </div>
+            <span className="text-xs font-medium text-[var(--color-text-secondary)]">
+              Up to 50 requests per page
+            </span>
+          </div>
+
+          {extensionQueueError && (
+            <div role="alert" className="mx-5 mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+              {extensionQueueError}
+            </div>
+          )}
+          {extensionQueueLoading && (
+            <p role="status" className="px-5 py-4 text-sm text-[var(--color-text-secondary)]">
+              Loading extension requests…
+            </p>
+          )}
+          {!extensionQueueLoading && !extensionQueueError && extensionRequests.length === 0 && (
+            <p role="status" className="px-5 py-4 text-sm text-[var(--color-text-secondary)]">
+              No pending extension requests.
+            </p>
+          )}
+
+          {extensionRequests.length > 0 && (
+            <div className="divide-y divide-[var(--color-divider)]">
+              {extensionRequests.map((request) => (
+                <article
+                  key={request.id}
+                  className="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.8fr)]"
+                >
+                  <div className="min-w-0 space-y-1">
+                    <p className="font-semibold text-[var(--color-text-primary)]">
+                      {request.schedule.workOrderNumber ?? request.schedule.title}
+                      {" · "}
+                      {getVehiclePlateNumber(request.schedule.vehicleId)}
+                    </p>
+                    <p className="text-sm text-[var(--color-text-secondary)]">
+                      {request.schedule.title} · {maintenanceStatusLabels[request.schedule.status]}
+                    </p>
+                    <p className="text-sm text-[var(--color-text-secondary)]">
+                      Requested by {request.actorName} on {formatExtensionTimestamp(request.requestedAt)}
+                    </p>
+                    <p className="text-sm text-[var(--color-text-primary)]">
+                      Current due date: {request.schedule.targetDueDate ?? "Not recorded"} · Requested: {request.requestedDueDate}
+                    </p>
+                    <p className="whitespace-pre-wrap text-sm text-[var(--color-text-secondary)]">
+                      {request.reason}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <label
+                      htmlFor={`extension-review-reason-${request.id}`}
+                      className="block text-xs font-semibold text-[var(--color-text-secondary)]"
+                    >
+                      Rejection reason (required to reject)
+                    </label>
+                    <textarea
+                      id={`extension-review-reason-${request.id}`}
+                      maxLength={2000}
+                      rows={2}
+                      value={extensionReviewReasons[request.id] ?? ""}
+                      disabled={extensionReviewingId === request.id}
+                      onChange={(event) =>
+                        setExtensionReviewReasons((current) => ({
+                          ...current,
+                          [request.id]: event.target.value,
+                        }))
+                      }
+                      className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-primary)]/20 disabled:opacity-60"
+                    />
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <ActionButton
+                        disabled={extensionReviewingId === request.id}
+                        onClick={() => void reviewExtension(request, "APPROVE")}
+                      >
+                        Approve
+                      </ActionButton>
+                      <ActionButton
+                        variant="danger"
+                        disabled={
+                          extensionReviewingId === request.id ||
+                          !(extensionReviewReasons[request.id] ?? "").trim()
+                        }
+                        onClick={() => void reviewExtension(request, "REJECT")}
+                      >
+                        Reject
+                      </ActionButton>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+
+          {extensionCursor && (
+            <div className="border-t border-[var(--color-divider)] px-5 py-3 text-right">
+              <ActionButton
+                variant="secondary"
+                disabled={extensionQueueLoading}
+                onClick={() => void loadPendingExtensions(extensionCursor, true)}
+              >
+                Load more requests
+              </ActionButton>
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="space-y-6">
         <div className="grid gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
@@ -736,16 +1195,16 @@ const MaintenanceSchedulingCombined = () => {
             value={pendingCount}
             label="Pending"
             subtitle="Awaiting start"
-            iconColor="#3b82f6"
-            iconBgColor="rgba(59, 130, 246, 0.12)"
+            iconColor="#047857"
+            iconBgColor="rgba(4, 120, 87, 0.12)"
           />
           <KPIStatCard
             icon={<AlertCircle size={20} strokeWidth={1.8} />}
             value={dueCount}
             label="Due"
             subtitle="Ready to start"
-            iconColor="#7c3aed"
-            iconBgColor="rgba(124, 58, 237, 0.12)"
+            iconColor="#c2410c"
+            iconBgColor="rgba(194, 65, 12, 0.12)"
           />
           <KPIStatCard
             icon={<Play size={20} strokeWidth={1.8} />}
@@ -850,7 +1309,8 @@ const MaintenanceSchedulingCombined = () => {
                 onClear={() => {
                   setSelectedStatusFilters([]);
                   setPriorityFilter("All");
-                  setPriorityOrder("NONE");
+                  setGarageBranchFilter("All");
+                  setSortOrder("NONE");
                   setDateFromFilter("");
                   setDateToFilter("");
                   setVehicleFilter("All");
@@ -871,8 +1331,18 @@ const MaintenanceSchedulingCombined = () => {
                     }}
                   />
                   <SelectField
-                    label="Checklist Template"
-                    id="typeF"
+                    label="Garage Branch"
+                    id="garageBranchF"
+                    options={branchFilterOptions}
+                    value={garageBranchFilter}
+                    onChange={(e) => {
+                      setGarageBranchFilter(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                  />
+                  <SelectField
+                    label="Maintenance Type"
+                    id="maintenanceTypeF"
                     options={checklistTemplateOptions}
                     value={checklistTemplateFilter}
                     onChange={(e) => {
@@ -897,16 +1367,20 @@ const MaintenanceSchedulingCombined = () => {
                     }}
                   />
                   <SelectField
-                    label="Priority Order"
-                    id="priorityOrderF"
+                    label="Sort by"
+                    id="sortOrderF"
                     options={[
-                      { value: "NONE", label: "Use Start Date" },
-                      { value: "HIGH_TO_LOW", label: "High to Low" },
-                      { value: "LOW_TO_HIGH", label: "Low to High" },
+                      { value: "NONE", label: "Start Date" },
+                      { value: "PRIORITY_DESC", label: "Priority: High to Low" },
+                      { value: "PRIORITY_ASC", label: "Priority: Low to High" },
+                      { value: "TYPE_ASC", label: "Maintenance Type: A to Z" },
+                      { value: "TYPE_DESC", label: "Maintenance Type: Z to A" },
+                      { value: "BRANCH_ASC", label: "Garage Branch: A to Z" },
+                      { value: "BRANCH_DESC", label: "Garage Branch: Z to A" },
                     ]}
-                    value={priorityOrder}
+                    value={sortOrder}
                     onChange={(e) => {
-                      setPriorityOrder(e.target.value as typeof priorityOrder);
+                      setSortOrder(e.target.value as ScheduleSortOrder);
                       setCurrentPage(1);
                     }}
                   />
@@ -962,7 +1436,7 @@ const MaintenanceSchedulingCombined = () => {
                   },
                   {
                     key: "workOrder",
-                    header: "Work Order",
+                    header: "Maintenance Type",
                     width: "17%",
                     render: (task) => task.title,
                   },
@@ -1028,7 +1502,7 @@ const MaintenanceSchedulingCombined = () => {
                     width: "15%",
                     render: (task) => (
                       <div className="flex flex-col items-start gap-1">
-                        <StandardStatusBadge status={task.status} />
+                        <MaintenanceStatusBadge status={task.status} />
                         {getPendingCancellationRequest(task) && (
                           <span className="text-xs font-medium text-amber-700">Cancellation awaiting Admin review</span>
                         )}
@@ -1432,7 +1906,7 @@ const MaintenanceSchedulingCombined = () => {
                   </p>
                   <p className="mt-1 text-sm font-medium text-[var(--color-text-primary)]">
                     {detail.label === "Status" ? (
-                      <StatusBadge status={selectedSchedule.status} />
+                      <MaintenanceStatusBadge status={selectedSchedule.status} />
                     ) : detail.label === "Priority" ? (
                       <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${detail.value === MaintenancePriority.HIGH ? "bg-rose-100 text-rose-800" : detail.value === MaintenancePriority.LOW ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
                         {maintenancePriorityLabels[detail.value as MaintenancePriority]}
@@ -1481,6 +1955,101 @@ const MaintenanceSchedulingCombined = () => {
                 {entry.reviewReason && <p className="text-sm">Admin note: {entry.reviewReason}</p>}
               </div>
             ))}
+            <section
+              aria-labelledby="schedule-extension-history-title"
+              className="space-y-3 rounded-xl border border-[var(--color-border)] p-4 sm:col-span-2"
+            >
+              <div>
+                <h4
+                  id="schedule-extension-history-title"
+                  className="font-semibold text-[var(--color-text-primary)]"
+                >
+                  Extension and reschedule history
+                </h4>
+                <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                  Request decisions and date changes are retained for audit.
+                </p>
+              </div>
+              {extensionHistoryLoading && (
+                <p role="status" className="text-sm text-[var(--color-text-secondary)]">
+                  Loading schedule history…
+                </p>
+              )}
+              {extensionHistoryError && (
+                <p role="alert" className="text-sm text-red-700">
+                  {extensionHistoryError}
+                </p>
+              )}
+              {extensionHistory && (
+                <>
+                  {extensionHistory.requests.map((request) => (
+                    <article
+                      key={request.id}
+                      className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-3"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                          {request.reviewStatus === "PENDING"
+                            ? "Extension requested"
+                            : `Extension ${request.reviewStatus.toLowerCase()}`}
+                        </p>
+                        <span className="text-xs text-[var(--color-text-secondary)]">
+                          {formatExtensionTimestamp(request.requestedAt)}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                        Requested by {request.actorName} · New due date {request.requestedDueDate}
+                      </p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--color-text-primary)]">
+                        {request.reason}
+                      </p>
+                      {request.reviewedByName && (
+                        <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+                          Reviewed by {request.reviewedByName}
+                          {request.reviewedAt
+                            ? ` · ${formatExtensionTimestamp(request.reviewedAt)}`
+                            : ""}
+                        </p>
+                      )}
+                      {request.reviewReason && (
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--color-text-primary)]">
+                          Rejection reason: {request.reviewReason}
+                        </p>
+                      )}
+                    </article>
+                  ))}
+                  {extensionHistory.rescheduleEvents.map((event, index) => (
+                    <article
+                      key={`${event.changedAt}-${event.source}-${index}`}
+                      className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-3"
+                    >
+                      <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                        {event.source === "EXTENSION_APPROVAL"
+                          ? "Extension date change"
+                          : "Manual schedule date change"}
+                      </p>
+                      <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                        Changed by {event.actorName} · {formatExtensionTimestamp(event.changedAt)}
+                      </p>
+                      <p className="mt-1 text-sm text-[var(--color-text-primary)]">
+                        Due date: {event.previousTargetDueDate ?? "Not recorded"} → {event.newTargetDueDate ?? "Not recorded"}
+                      </p>
+                      {(event.previousStartDate || event.newStartDate) && (
+                        <p className="mt-1 text-sm text-[var(--color-text-primary)]">
+                          Start date: {event.previousStartDate ?? "Not recorded"} → {event.newStartDate ?? "Not recorded"}
+                        </p>
+                      )}
+                    </article>
+                  ))}
+                  {extensionHistory.requests.length === 0 &&
+                    extensionHistory.rescheduleEvents.length === 0 && (
+                      <p role="status" className="text-sm text-[var(--color-text-secondary)]">
+                        No extension or reschedule history recorded.
+                      </p>
+                    )}
+                </>
+              )}
+            </section>
             {selectedSchedule.notes && (
               <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4 sm:col-span-2">
                 <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
@@ -1505,21 +2074,16 @@ const MaintenanceSchedulingCombined = () => {
           setEditingTask(null);
         }}
         onSaved={async (task) => {
-          const recalculatedTask = {
-            ...task,
-            status: getCalculatedMaintenanceStatus(task),
-          };
-
           // Update immediately, then refresh the entire collection so schedules
           // on every pagination page receive server-calculated status changes.
           setTasks((current) =>
-            current.some((existingTask) => existingTask.id === recalculatedTask.id)
+            current.some((existingTask) => existingTask.id === task.id)
               ? current.map((existingTask) =>
-                  existingTask.id === recalculatedTask.id
-                    ? { ...existingTask, ...recalculatedTask }
+                  existingTask.id === task.id
+                    ? { ...existingTask, ...task }
                     : existingTask,
                 )
-              : [recalculatedTask, ...current],
+              : [task, ...current],
           );
 
           try {
@@ -1527,6 +2091,7 @@ const MaintenanceSchedulingCombined = () => {
           } catch (error) {
             console.error("Failed to refresh maintenance schedules", error);
           }
+          void loadMaintenancePredictions();
           setIsModalOpen(false);
           setEditingTask(null);
         }}

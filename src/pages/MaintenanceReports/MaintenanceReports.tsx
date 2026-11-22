@@ -18,10 +18,9 @@ import {
   Pagination,
   SearchInput,
   SortSelect,
-  StatusBadge,
+  MaintenanceStatusBadge,
   TableToolbar,
 } from "../../components/ui";
-import { getStatusTone } from "../../components/ui/tableUtils";
 import { getVmmsDashboardData, type VmmsDashboardData } from "../../lib/api/dashboardService";
 import { getFuelReport, recordFuelReportExport, type FuelReport } from "../../lib/api/fuelService";
 import { getScheduledFleetReports, type ScheduledFleetReport } from "../../lib/api/scheduledReportsService";
@@ -32,6 +31,7 @@ import {
   type TimeFilterValue,
 } from "../../lib/utils/timeFilters";
 import { MaintenanceStatus, maintenanceStatusLabels, type MaintenanceTask } from "../../types/maintenance";
+import { maintenanceStatusColors } from "../../lib/utils/maintenanceStatusPresentation";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("en-PH", {
@@ -587,7 +587,7 @@ export default function MaintenanceReports() {
             rows={report.statusBreakdown.map((item) => ({
               label: maintenanceStatusLabels[item.status],
               count: item.count,
-              color: getStatusTone(maintenanceStatusLabels[item.status]),
+              color: maintenanceStatusColors[item.status],
             }))}
           />
         </section>
@@ -727,7 +727,7 @@ export default function MaintenanceReports() {
                 key: "status",
                 header: "Status",
                 width: "18%",
-                render: (task) => <StatusBadge status={maintenanceStatusLabels[task.status]} />,
+                render: (task) => <MaintenanceStatusBadge status={task.status} />,
               },
               {
                 key: "date",

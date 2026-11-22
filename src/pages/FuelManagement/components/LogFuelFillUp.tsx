@@ -552,7 +552,7 @@ export default function LogFuelFillUp({ onClose, onAdd, vehicles, stations }: Pr
                     <span className="text-lg font-bold tabular-nums text-[var(--color-text-primary)]">₱{total.toFixed(2)}</span>
                   </div>
                   <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                    Calculated from liters × price per liter; the backend recalculates on save.
+                    Calculated from liters × price per liter.
                   </p>
                   {scanResult && scanResult.printedTotal.value !== null && (
                     <p className={`mt-2 text-xs ${totalMismatch ? 'font-medium text-amber-900' : 'text-[var(--color-text-secondary)]'}`}>

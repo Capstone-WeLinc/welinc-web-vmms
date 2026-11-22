@@ -20,19 +20,10 @@ import {
   type MaintenanceTask,
 } from "../../types/maintenance";
 import { getTaskTotalCost } from "../../lib/utils/maintenanceCosts";
+import { maintenanceStatusColors } from "../../lib/utils/maintenanceStatusPresentation";
 import { isMechanicRole } from "../../lib/utils/permissions";
 
 type DashboardFilter = "all" | "month";
-
-const statusColors: Record<MaintenanceStatus, string> = {
-  [MaintenanceStatus.PENDING]: "#64748b",
-  [MaintenanceStatus.DUE]: "#7c3aed",
-  [MaintenanceStatus.IN_PROGRESS]: "#0284c7",
-  [MaintenanceStatus.DONE]: "#d97706",
-  [MaintenanceStatus.COMPLETED]: "#059669",
-  [MaintenanceStatus.OVERDUE]: "#dc2626",
-  [MaintenanceStatus.CANCELLED]: "#94a3b8",
-};
 
 const dateOf = (task: MaintenanceTask) =>
   new Date(task.startReferenceDate || task.date || 0);
@@ -288,7 +279,7 @@ export default function Dashboard() {
                         <div
                           key={status}
                           className="h-full transition-all duration-300 first:rounded-l-full last:rounded-r-full"
-                          style={{ width: `${pct}%`, backgroundColor: statusColors[status] }}
+                          style={{ width: `${pct}%`, backgroundColor: maintenanceStatusColors[status] }}
                           title={`${maintenanceStatusLabels[status]}: ${count} (${pct}%)`}
                         />
                       );
@@ -314,7 +305,7 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2.5">
                         <span
                           className="h-3 w-3 rounded-full shadow-xs"
-                          style={{ backgroundColor: statusColors[status] }}
+                          style={{ backgroundColor: maintenanceStatusColors[status] }}
                         />
                         <span className="font-semibold text-[var(--color-text-primary)]">
                           {maintenanceStatusLabels[status]}

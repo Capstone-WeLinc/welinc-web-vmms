@@ -11,6 +11,44 @@ export function timeIntervalError(value: string, unit: string) {
   return !/^\d+$/.test(value) || !Number.isInteger(Number(value)) || Number(value) <= 0 || Number(value) > 2147483647 || !['DAYS', 'MONTHS'].includes(unit)
     ? 'Time interval must be a positive whole number of days or months.' : '';
 }
+
+export function timeIntervalReferenceDate(dueDate: string, value: string, unit: string) {
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(dueDate) ||
+    dueDate.startsWith('0000-') ||
+    timeIntervalError(value, unit)
+  ) {
+    return '';
+  }
+
+  const referenceDate = new Date(`${dueDate}T00:00:00.000Z`);
+  if (
+    !Number.isFinite(referenceDate.getTime()) ||
+    referenceDate.toISOString().slice(0, 10) !== dueDate
+  ) {
+    return '';
+  }
+
+  const interval = Number(value);
+  if (unit === 'DAYS') {
+    referenceDate.setUTCDate(referenceDate.getUTCDate() - interval);
+  } else {
+    const originalDay = referenceDate.getUTCDate();
+    referenceDate.setUTCDate(1);
+    referenceDate.setUTCMonth(referenceDate.getUTCMonth() - interval);
+    const monthEnd = new Date(referenceDate);
+    monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1);
+    monthEnd.setUTCDate(0);
+    const lastDayOfMonth = monthEnd.getUTCDate();
+    referenceDate.setUTCDate(Math.min(originalDay, lastDayOfMonth));
+  }
+
+  const year = referenceDate.getUTCFullYear();
+  return Number.isFinite(referenceDate.getTime()) && year >= 1 && year <= 9999
+    ? referenceDate.toISOString().slice(0, 10)
+    : '';
+}
+
 export function timeIntervalDueDate(reference: Date, source: IntervalSource): Date | null {
   const { value, unit } = timeIntervalFields(source);
   if (timeIntervalError(String(value), unit)) return null;

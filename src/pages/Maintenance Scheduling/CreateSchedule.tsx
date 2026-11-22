@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { useAuthStore } from "../../store/authStore";
 import { canManageSchedules } from "../../lib/utils/permissions";
-import { philippineToday, scheduleStartDateError } from "../../lib/utils/scheduleStartDate";
+import { philippineToday } from "../../lib/utils/scheduleStartDate";
 import { scheduleMileageError } from "../../lib/utils/scheduleMileage";
-import { timeIntervalFields, timeIntervalError } from "../../lib/utils/timeInterval";
+import {
+  timeIntervalFields,
+  timeIntervalError,
+  timeIntervalReferenceDate,
+} from "../../lib/utils/timeInterval";
 import {
   X,
   ClipboardCheck,
@@ -11,7 +15,7 @@ import {
   ShieldCheck,
   Clock3,
 } from "lucide-react";
-import { DatePicker, ToastNotification } from "../../components/ui";
+import { SearchableSelect, ToastNotification } from "../../components/ui";
 import {
   createMaintenanceSchedule,
   updateMaintenanceSchedule,
@@ -47,7 +51,6 @@ interface ChecklistItemTemplate {
   text: string;
 }
 
-const OTHER_GARAGE_VALUE = "__other__";
 const NON_NEGATIVE_NUMBER_PATTERN = /^\d+$/;
 const ACCOUNT_TYPE_OPTIONS = [
   AccountType.IN_HOUSE,
@@ -84,8 +87,6 @@ export default function CreateScheduleModal({
   >({});
   const [isTemplatesLoading, setIsTemplatesLoading] = useState(true);
   const [vehicleId, setVehicleId] = useState("");
-  const [startReferenceDate, setStartReferenceDate] = useState("");
-  const [startDate, setStartDate] = useState('');
   const [targetDueDate, setTargetDueDate] = useState('');
   const [assignedMechanic, setAssignedMechanic] = useState("");
   const [mechanics, setMechanics] = useState<UserRecord[]>([]);
@@ -95,9 +96,6 @@ export default function CreateScheduleModal({
   const [isChiefMechanicsLoading, setIsChiefMechanicsLoading] = useState(true);
   const [garages, setGarages] = useState<{ id: string; name: string }[]>([]);
   const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
-  const [garageId, setGarageId] = useState("");
-  const [isOtherGarage, setIsOtherGarage] = useState(false);
-  const [otherGarage, setOtherGarage] = useState("");
   const [accountType, setAccountType] = useState<AccountType | "">("");
   const [priority, setPriority] = useState<MaintenancePriority>(MaintenancePriority.MEDIUM);
   const [outsourcedProvider, setOutsourcedProvider] = useState("");
@@ -174,16 +172,12 @@ export default function CreateScheduleModal({
           setOdometerMileageMode("CUSTOM");
           setOdometerMileageModeTouched(true);
           setVehicleId(editingTask.vehicleId);
-          setStartDate(editingTask.startDate ?? '');
           setTargetDueDate(editingTask.targetDueDate ?? editingTask.dueDate ?? '');
           setChecklistTemplateName(editingTask.title);
           setAssignedMechanic(editingTask.assignedDriver ?? "");
           setChiefMechanicId(editingTask.chiefMechanicId ?? "");
           setChiefMechanic(editingTask.chiefMechanic ?? "");
           setNotes(editingTask.notes ?? "");
-          setGarageId(editingTask.garageId ?? "");
-          setIsOtherGarage(false);
-          setOtherGarage("");
           setAccountType(
             editingTask.accountType &&
             ACCOUNT_TYPE_OPTIONS.includes(editingTask.accountType)
@@ -195,7 +189,6 @@ export default function CreateScheduleModal({
           setSystemAffected(editingTask.systemAffected ?? "");
           setOdometerReading(editingTask.odometerReading ?? "");
           setTriggerType(editingTask.triggerType ?? MaintenanceTriggerType.ODOMETER);
-          setStartReferenceDate(editingTask.startReferenceDate ?? "");
           setIntervalKm(editingTask.intervalKm ?? "");
           setBufferDistanceKm(editingTask.bufferDistanceKm ?? "");
           setStartingReferenceReadingKm(
@@ -210,7 +203,6 @@ export default function CreateScheduleModal({
           // Reset all fields for new schedule
           setOdometerMileageMode("DEFAULT");
           setOdometerMileageModeTouched(false);
-          setStartDate('');
           setTargetDueDate('');
           setVehicleId("");
           setChecklistTemplateName("");
@@ -218,16 +210,12 @@ export default function CreateScheduleModal({
           setChiefMechanicId("");
           setChiefMechanic("");
           setNotes("");
-          setGarageId("");
-          setIsOtherGarage(false);
-          setOtherGarage("");
           setAccountType("");
           setPriority(MaintenancePriority.MEDIUM);
           setOutsourcedProvider("");
           setSystemAffected("");
           setOdometerReading("");
           setTriggerType(MaintenanceTriggerType.ODOMETER);
-          setStartReferenceDate("");
           setIntervalKm("");
           setBufferDistanceKm("");
           setStartingReferenceReadingKm("");
@@ -336,16 +324,20 @@ export default function CreateScheduleModal({
     setToast({ type: "info", message });
   };
 
-  const isEditingGarageOther =
-    Boolean(editingTask?.garageId) &&
-    garageId === editingTask?.garageId &&
-    garages.length > 0 &&
-    !garages.some((garage) => garage.id === editingTask?.garageId);
-  const garageIsOther = isOtherGarage || isEditingGarageOther;
-  const otherGarageValue =
-    isEditingGarageOther && !otherGarage
-      ? (editingTask?.garageId ?? "")
-      : otherGarage;
+  const selectedVehicle = vehicles.find(
+    (vehicle) => vehicle.value === vehicleId,
+  );
+  const selectedGarageId = selectedVehicle
+    ? selectedVehicle.branchGarageId ?? null
+    : editingTask?.vehicleId === vehicleId
+      ? editingTask.garageId ?? null
+      : null;
+  const selectedGarageName = selectedGarageId
+    ? garages.find((garage) => garage.id === selectedGarageId)?.name ??
+      selectedGarageId
+    : vehicleId
+      ? "Unassigned"
+      : "Select a vehicle";
   const selectableTemplateNames = Object.entries(templates)
     .filter(([, items]) => items.some((item) => item.text.trim() !== ""))
     .map(([templateName]) => templateName);
@@ -396,11 +388,11 @@ export default function CreateScheduleModal({
       ? maintenanceDefaultsError ||
         "No default is configured. Choose Custom and enter an interval and buffer."
       : "";
+  const internalStartDate = editingTask?.startDate || philippineToday();
   const requiredFieldValues = [
     vehicleId,
     targetDueDate,
     odometerReading,
-    garageIsOther ? otherGarageValue : garageId,
     accountType,
     ...(accountType === AccountType.OUTSOURCED ? [outsourcedProvider] : []),
     checklistTemplate,
@@ -413,14 +405,13 @@ export default function CreateScheduleModal({
         ]
       : []),
     ...(triggerType !== MaintenanceTriggerType.ODOMETER
-      ? [timeIntervalValue, timeIntervalUnit, startReferenceDate]
+      ? [timeIntervalValue, timeIntervalUnit]
       : []),
   ];
-  const startDateError = scheduleStartDateError(startDate, editingTask?.startDate);
   const targetDueDateError = !targetDueDate
-    ? 'Target due date is required.'
-    : targetDueDate < startDate
-      ? 'Target due date cannot be earlier than the schedule start date.'
+    ? 'Due date is required.'
+    : targetDueDate < internalStartDate
+      ? 'Due date cannot be earlier than the schedule start date.'
       : '';
   const mileageError = odometerDefaultsError || scheduleMileageError({
     vehicleId, title: checklistTemplate, triggerType, odometerReading,
@@ -441,7 +432,6 @@ export default function CreateScheduleModal({
     : '';
   const intervalError = triggerType === MaintenanceTriggerType.TIME ? timeIntervalError(timeIntervalValue, timeIntervalUnit) : '';
   const isFormComplete =
-    !startDateError &&
     !targetDueDateError &&
     !mileageError &&
     !maintenanceDefaultsLoading &&
@@ -461,8 +451,6 @@ export default function CreateScheduleModal({
 
   const saveSchedule = async () => {
     if (!canSchedule) return;
-    const dateError = scheduleStartDateError(startDate, editingTask?.startDate);
-    if (dateError) { setToast({ type: 'error', message: dateError }); return; }
     if (targetDueDateError) { setToast({ type: 'error', message: targetDueDateError }); return; }
     if (maintenanceDefaultsLoading) {
       setToast({ type: "error", message: "Wait for vehicle defaults to finish loading." });
@@ -470,12 +458,24 @@ export default function CreateScheduleModal({
     }
     if (mileageError) { setToast({ type: 'error', message: mileageError }); return; }
     if (intervalError) { setToast({ type: 'error', message: intervalError }); return; }
+    const isTimeBased = triggerType === MaintenanceTriggerType.TIME;
+    const submittedStartReferenceDate = isTimeBased
+      ? timeIntervalReferenceDate(
+          targetDueDate,
+          timeIntervalValue,
+          timeIntervalUnit,
+        )
+      : "";
+    if (isTimeBased && !submittedStartReferenceDate) {
+      setToast({
+        type: "error",
+        message: "The reference date could not be calculated. Check Due Date and the time interval.",
+      });
+      return;
+    }
     setIsSaving(true);
     try {
       const checklistTemplateId = await getChecklistTemplateId(checklistTemplate);
-      const savedGarageId = garageIsOther
-        ? otherGarageValue.trim()
-        : garageId;
       const selectedMechanic = mechanics.find(
         (mechanic) => mechanic.name === assignedMechanic,
       );
@@ -485,8 +485,6 @@ export default function CreateScheduleModal({
       const resolvedChiefMechanicId = selectedChiefMechanic?.id || (chiefMechanicId ? chiefMechanicId : undefined);
       const resolvedChiefMechanicName = selectedChiefMechanic?.name || (chiefMechanic ? chiefMechanic : undefined);
 
-      const isTimeBased = triggerType === MaintenanceTriggerType.TIME;
-      const submittedStartReferenceDate = isTimeBased ? startReferenceDate : "";
       const timeConfig = isTimeBased ? { timeIntervalValue: Number(timeIntervalValue), timeIntervalUnit } : {};
       const submittedIntervalKm = isTimeBased ? "" : effectiveIntervalKm;
       const submittedBufferDistanceKm = isTimeBased
@@ -502,7 +500,8 @@ export default function CreateScheduleModal({
         const updated: MaintenanceTask = {
           ...targetSchedule,
           vehicleId,
-          startDate,
+          startDate: internalStartDate,
+          targetDueDate,
           title: checklistTemplate,
           checklistTemplateId,
           assignedDriver: assignedMechanic,
@@ -511,7 +510,7 @@ export default function CreateScheduleModal({
           chiefMechanicId: resolvedChiefMechanicId,
           chiefMechanic: resolvedChiefMechanicName,
           notes,
-          garageId: savedGarageId,
+          garageId: selectedGarageId,
           accountType: accountType || undefined,
           priority,
           outsourcedProvider:
@@ -532,7 +531,7 @@ export default function CreateScheduleModal({
         await onSaved?.(saved);
       } else {
         const task = await createMaintenanceSchedule({
-          startDate,
+          startDate: internalStartDate,
           targetDueDate,
           vehicleId,
           title: checklistTemplate,
@@ -545,7 +544,7 @@ export default function CreateScheduleModal({
           chiefMechanicId: resolvedChiefMechanicId,
           chiefMechanic: resolvedChiefMechanicName,
           notes,
-          garageId: savedGarageId,
+          garageId: selectedGarageId,
           accountType: accountType || undefined,
           priority,
           outsourcedProvider:
@@ -566,7 +565,6 @@ export default function CreateScheduleModal({
       }
 
       // Reset form state
-      setStartDate('');
       setTargetDueDate('');
       setVehicleId("");
       setChecklistTemplateName("");
@@ -574,16 +572,12 @@ export default function CreateScheduleModal({
       setChiefMechanicId("");
       setChiefMechanic("");
       setNotes("");
-      setGarageId("");
-      setIsOtherGarage(false);
-      setOtherGarage("");
       setAccountType("");
       setPriority(MaintenancePriority.MEDIUM);
       setOutsourcedProvider("");
       setSystemAffected("");
       setOdometerReading("");
       setTriggerType(MaintenanceTriggerType.ODOMETER);
-      setStartReferenceDate("");
       setIntervalKm("");
       setBufferDistanceKm("");
       setStartingReferenceReadingKm("");
@@ -626,7 +620,9 @@ export default function CreateScheduleModal({
   };
 
   const availableVehicles = vehicles.filter(
-    (vehicle) => (vehicle.status ?? "AVAILABLE").trim().toUpperCase() === "AVAILABLE",
+    (vehicle) =>
+      (vehicle.status ?? "AVAILABLE").trim().toUpperCase() === "AVAILABLE" ||
+      vehicle.value === editingTask?.vehicleId,
   );
   const templateExists = Object.prototype.hasOwnProperty.call(
     templates,
@@ -734,22 +730,13 @@ export default function CreateScheduleModal({
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
           <section>
-            <label htmlFor="schedule-start-date" className="mb-1.5 block text-sm font-medium">Start date (required)</label>
-            <input id="schedule-start-date" type="date" required value={startDate}
-              min={startDate === editingTask?.startDate ? undefined : philippineToday()}
-              onChange={(event) => setStartDate(event.target.value)}
-              aria-invalid={Boolean(startDateError)} aria-describedby="schedule-start-date-error"
-              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-3" />
-            {startDateError && <p id="schedule-start-date-error" role="alert" className="mt-1 text-sm text-red-600">{startDateError}</p>}
-          </section>
-          <section>
-            <label htmlFor="schedule-target-due-date" className="mb-1.5 block text-sm font-medium">Target due date (required)</label>
-            <input id="schedule-target-due-date" type="date" required value={targetDueDate}
-              min={startDate || philippineToday()}
+            <label htmlFor="schedule-due-date" className="mb-1.5 block text-sm font-medium">Due Date (required)</label>
+            <input id="schedule-due-date" type="date" required value={targetDueDate}
+              min={internalStartDate}
               onChange={(event) => setTargetDueDate(event.target.value)}
-              aria-invalid={Boolean(targetDueDateError)} aria-describedby="schedule-target-due-date-error"
+              aria-invalid={Boolean(targetDueDateError)} aria-describedby="schedule-due-date-error"
               className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-3" />
-            {targetDueDateError && <p id="schedule-target-due-date-error" role="alert" className="mt-1 text-sm text-red-600">{targetDueDateError}</p>}
+            {targetDueDateError && <p id="schedule-due-date-error" role="alert" className="mt-1 text-sm text-red-600">{targetDueDateError}</p>}
           </section>
           <section>
             <label htmlFor="schedule-priority" className="mb-1.5 block text-sm font-medium">Work-order priority</label>
@@ -778,14 +765,17 @@ export default function CreateScheduleModal({
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
+                <label htmlFor="schedule-vehicle" className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
                   VEHICLE
                 </label>
-                <div className="relative">
-                  <select
+                <SearchableSelect
+                    id="schedule-vehicle"
+                    options={availableVehicles.map((vehicle) => ({
+                      value: vehicle.value,
+                      label: vehicle.label,
+                    }))}
                     value={vehicleId}
-                    onChange={(e) => {
-                      const nextVehicleId = e.target.value;
+                    onChange={(nextVehicleId) => {
                       const selectedVehicle = vehicles.find(
                         (vehicle) => vehicle.value === nextVehicleId,
                       );
@@ -796,31 +786,14 @@ export default function CreateScheduleModal({
                           : "",
                       );
                     }}
-                    className="select-control w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
-                  >
-                    {availableVehicles.length > 0 ? (
-                      <>
-                        <option value="" disabled>
-                          Select vehicle
-                        </option>
-                        {availableVehicles.map((vehicle) => (
-                          <option key={vehicle.value} value={vehicle.value}>
-                            {vehicle.label}
-                          </option>
-                        ))}
-                      </>
-                    ) : (
-                      <option value="" disabled>
-                        No vehicles available
-                      </option>
-                    )}
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--color-text-secondary)]">
-                    <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
-                      <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                    </svg>
-                  </div>
-                </div>
+                    placeholder={
+                      availableVehicles.length > 0
+                        ? "Search registered vehicles"
+                        : "No vehicles available"
+                    }
+                    disabled={availableVehicles.length === 0}
+                    className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 disabled:cursor-not-allowed disabled:opacity-60"
+                  />
               </div>
               <div className="flex gap-4">
                 <div className="flex-1">
@@ -843,50 +816,25 @@ export default function CreateScheduleModal({
               </div>
 
               <div className="col-start-2 row-start-1">
-                <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-                  GARAGE
+                <label
+                  htmlFor="schedule-garage"
+                  className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]"
+                >
+                  GARAGE (ASSIGNED TO VEHICLE)
                 </label>
-                <div className="relative">
-                  <select
-                    value={garageIsOther ? OTHER_GARAGE_VALUE : garageId}
-                    onChange={(e) => {
-                      if (e.target.value === OTHER_GARAGE_VALUE) {
-                        setGarageId("");
-                        setIsOtherGarage(true);
-                        return;
-                      }
-
-                      setGarageId(e.target.value);
-                      setIsOtherGarage(false);
-                      setOtherGarage("");
-                    }}
-                    className="select-control w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
-                  >
-                    <option value="" disabled>
-                      Select garage
-                    </option>
-                    {garages.map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.name}
-                      </option>
-                    ))}
-                    <option value={OTHER_GARAGE_VALUE}>Other</option>
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--color-text-secondary)]">
-                    <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
-                      <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                    </svg>
-                  </div>
-                </div>
-                {garageIsOther ? (
-                  <input
-                    type="text"
-                    value={otherGarageValue}
-                    onChange={(e) => setOtherGarage(e.target.value)}
-                    placeholder="Enter garage"
-                    className="mt-2 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
-                  />
-                ) : null}
+                <input
+                  id="schedule-garage"
+                  readOnly
+                  value={selectedGarageName}
+                  aria-describedby="schedule-garage-help"
+                  className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]"
+                />
+                <p
+                  id="schedule-garage-help"
+                  className="mt-1 text-xs text-[var(--color-text-secondary)]"
+                >
+                  Garage assignment comes from the vehicle record.
+                </p>
               </div>
 
               <div>
@@ -923,20 +871,22 @@ export default function CreateScheduleModal({
 
               {accountType === AccountType.OUTSOURCED ? (
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
+                  <label htmlFor="schedule-provider" className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
                     OUTSOURCED COMPANY / SERVICE PROVIDER
                   </label>
-                  <select
+                  <SearchableSelect
+                    id="schedule-provider"
+                    options={outsourcedProviders
+                      .filter((provider) => provider.isActive || provider.name === outsourcedProvider)
+                      .map((provider) => ({
+                        value: provider.name,
+                        label: `${provider.name}${provider.isActive ? "" : " (inactive)"}`,
+                      }))}
                     value={outsourcedProvider}
-                    onChange={(e) => setOutsourcedProvider(e.target.value)}
-                    required
-                    className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
-                  >
-                    <option value="">Select a registered provider</option>
-                    {outsourcedProviders.filter((provider) => provider.isActive || provider.name === outsourcedProvider).map((provider) => (
-                      <option key={provider.id} value={provider.name}>{provider.name}{!provider.isActive ? " (inactive)" : ""}</option>
-                    ))}
-                  </select>
+                    onChange={setOutsourcedProvider}
+                    placeholder="Search registered providers"
+                    className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
+                  />
                   {outsourcedProviders.filter((provider) => provider.isActive).length === 0 && (
                     <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Operations must register an active provider before outsourced work can be scheduled.</p>
                   )}
@@ -1257,23 +1207,11 @@ export default function CreateScheduleModal({
                   </div>
                 </div>
               </div>
-              <div
-                onPointerDownCapture={() => {
-                  if (triggerType === MaintenanceTriggerType.ODOMETER) {
-                    notifyDisabledField("Start reference date is disabled for odometer-based schedules because mileage rules determine activation.");
-                  }
-                }}
-              >
-                <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
-                  START REFERENCE DATE
-                </label>
-                <DatePicker
-                  value={startReferenceDate}
-                  onChange={setStartReferenceDate}
-                  disabled={triggerType === MaintenanceTriggerType.ODOMETER}
-                  placeholder="YYYY-MM-DD"
-                />
-              </div>
+              {triggerType === MaintenanceTriggerType.TIME && (
+                <p className="self-center text-sm text-[var(--color-text-secondary)]">
+                  The reference date is calculated from Due Date and this interval.
+                </p>
+              )}
             </div>
           </section>
 
@@ -1357,7 +1295,7 @@ export default function CreateScheduleModal({
                 </div>
               </div>
               <div>
-              <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
+              <label htmlFor="schedule-assigned-mechanic" className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
                 ASSIGNED MECHANIC
               </label>
               <div
@@ -1368,44 +1306,28 @@ export default function CreateScheduleModal({
                   }
                 }}
               >
-                <select
+                <SearchableSelect
+                  id="schedule-assigned-mechanic"
+                  options={[
+                    ...(assignedMechanic && !mechanicExists
+                      ? [{ value: assignedMechanic, label: assignedMechanic }]
+                      : []),
+                    ...mechanics.map((mechanic) => ({
+                      value: mechanic.name,
+                      label: mechanic.name,
+                    })),
+                  ]}
                   value={assignedMechanic}
                   disabled={mechanics.length === 0 && !assignedMechanic}
-                  onChange={(e) => setAssignedMechanic(e.target.value)}
-                  className="select-control w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
-                >
-                  {mechanics.length > 0 || assignedMechanic ? (
-                    <>
-                      <option value="" disabled>
-                        Select mechanic
-                      </option>
-                      {assignedMechanic && !mechanicExists ? (
-                        <option value={assignedMechanic}>
-                          {assignedMechanic}
-                        </option>
-                      ) : null}
-                      {mechanics.map((mechanic) => (
-                        <option key={mechanic.id} value={mechanic.name}>
-                          {mechanic.name}
-                        </option>
-                      ))}
-                    </>
-                  ) : (
-                    <option value="" disabled>
-                      No mechanics available
-                    </option>
-                  )}
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--color-text-secondary)]">
-                  <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
-                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                  </svg>
-                </div>
+                  onChange={setAssignedMechanic}
+                  placeholder={mechanics.length > 0 ? "Search mechanics" : "No mechanics available"}
+                  className="select-control w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 disabled:cursor-not-allowed disabled:opacity-60"
+                />
               </div>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
+              <label htmlFor="schedule-chief-mechanic" className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
                 CHIEF MECHANIC
               </label>
               <div
@@ -1416,11 +1338,25 @@ export default function CreateScheduleModal({
                   }
                 }}
               >
-                <select
+                <SearchableSelect
+                  id="schedule-chief-mechanic"
+                  options={[
+                    ...(chiefMechanic && !chiefMechanics.some(
+                      (mechanic) => mechanic.id === chiefMechanicId || mechanic.name === chiefMechanic,
+                    )
+                      ? [{
+                          value: chiefMechanicId || chiefMechanic,
+                          label: chiefMechanic,
+                        }]
+                      : []),
+                    ...chiefMechanics.map((mechanic) => ({
+                      value: mechanic.id,
+                      label: mechanic.name,
+                    })),
+                  ]}
                   value={chiefMechanicId || chiefMechanic}
                   disabled={isChiefMechanicsLoading || (chiefMechanics.length === 0 && !chiefMechanic)}
-                  onChange={(e) => {
-                    const val = e.target.value;
+                  onChange={(val) => {
                     const selected = chiefMechanics.find((cm) => cm.id === val || cm.name === val);
                     if (selected) {
                       setChiefMechanicId(selected.id);
@@ -1430,42 +1366,15 @@ export default function CreateScheduleModal({
                       setChiefMechanic(val);
                     }
                   }}
-                  className="select-control w-full appearance-none rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30"
-                >
-                  {isChiefMechanicsLoading ? (
-                    <option value="" disabled>
-                      Loading chief mechanics...
-                    </option>
-                  ) : chiefMechanics.length > 0 || chiefMechanic ? (
-                    <>
-                      <option value="" disabled>
-                        Select chief mechanic
-                      </option>
-                      {chiefMechanic &&
-                      !chiefMechanics.some(
-                        (cm) => cm.id === chiefMechanicId || cm.name === chiefMechanic,
-                      ) ? (
-                        <option value={chiefMechanicId || chiefMechanic}>
-                          {chiefMechanic}
-                        </option>
-                      ) : null}
-                      {chiefMechanics.map((cm) => (
-                        <option key={cm.id} value={cm.id}>
-                          {cm.name}
-                        </option>
-                      ))}
-                    </>
-                  ) : (
-                    <option value="" disabled>
-                      No chief mechanics available
-                    </option>
-                  )}
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--color-text-secondary)]">
-                  <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
-                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                  </svg>
-                </div>
+                  placeholder={
+                    isChiefMechanicsLoading
+                      ? "Loading chief mechanics"
+                      : chiefMechanics.length > 0
+                        ? "Search chief mechanics"
+                        : "No chief mechanics available"
+                  }
+                  className="select-control w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 disabled:cursor-not-allowed disabled:opacity-60"
+                />
               </div>
             </div>
             </div>

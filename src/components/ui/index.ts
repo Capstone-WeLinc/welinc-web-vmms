@@ -6,6 +6,9 @@ export { default as FormInput } from './FormInput';
 export { default as Alert } from './Alert';
 export { default as Modal } from './Modal';
 export { default as DatePicker } from './DatePicker';
+export { default as MaintenanceStatusBadge } from './MaintenanceStatusBadge';
+export { default as MaintenanceStatusLegend } from './MaintenanceStatusLegend';
+export { default as SearchableSelect } from './SearchableSelect';
 export * from './StandardTable';
 
 // Re-export types if needed
@@ -15,3 +18,4 @@ export type * from './Card';
 export type * from './FormInput';
 export type * from './Alert';
 export type * from './Modal';
+export type * from './SearchableSelect';
