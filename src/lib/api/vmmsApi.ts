@@ -406,7 +406,13 @@ export interface OutsourcedProviderRecord {
   id: string;
   name: string;
   isActive: boolean;
+  usageCount: number;
 }
+
+type OutsourcedProviderMutationRecord = Omit<
+  OutsourcedProviderRecord,
+  "usageCount"
+>;
 
 export async function getOutsourcedProviders() {
   if (!useBackend) return [] as OutsourcedProviderRecord[];
@@ -414,17 +420,27 @@ export async function getOutsourcedProviders() {
 }
 
 export async function createOutsourcedProvider(name: string) {
-  return fetchJSON<OutsourcedProviderRecord>("/config/outsourced-providers", {
+  return fetchJSON<OutsourcedProviderMutationRecord>("/config/outsourced-providers", {
     method: "POST",
     body: JSON.stringify({ name }),
   });
 }
 
 export async function updateOutsourcedProvider(id: string, values: { name?: string; isActive?: boolean }) {
-  return fetchJSON<OutsourcedProviderRecord>(`/config/outsourced-providers/${encodeURIComponent(id)}`, {
-    method: "PATCH",
-    body: JSON.stringify(values),
-  });
+  return fetchJSON<OutsourcedProviderMutationRecord>(
+    `/config/outsourced-providers/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(values),
+    },
+  );
+}
+
+export async function deleteOutsourcedProvider(id: string) {
+  return fetchJSON<OutsourcedProviderMutationRecord>(
+    `/config/outsourced-providers/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
 }
 
 export async function updateWorkOrder(task: MaintenanceTask) {
