@@ -274,6 +274,9 @@ const MaintenanceSchedulingCombined = () => {
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const today = useMemo(() => new Date(), []);
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(() =>
+    formatDateStr(today.getFullYear(), today.getMonth(), today.getDate()),
+  );
   const [viewMode, setViewMode] = useState<"calendar" | "list">("list");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatusFilters, setSelectedStatusFilters] = useState<string[]>([]);
@@ -641,7 +644,7 @@ const MaintenanceSchedulingCombined = () => {
         (garageBranchFilter === "unassigned"
           ? Boolean(taskVehicle) && !taskBranchGarageId
           : taskBranchGarageId === garageBranchFilter);
-      const candidateDates = viewMode === 'calendar' ? [task.startDate, task.dueDate] : [task.startDate];
+      const candidateDates = [task.dueDate];
       const dateMatches = (dateRangeFilter === 'All' && !dateFromFilter && !dateToFilter) ||
         candidateDates.some((date) => date && dateFilter(new Date(`${date}T00:00:00`)) &&
           (!dateFromFilter || date >= dateFromFilter) && (!dateToFilter || date <= dateToFilter));
@@ -689,8 +692,8 @@ const MaintenanceSchedulingCombined = () => {
         if (sortOrder === "BRANCH_DESC") comparison *= -1;
       }
       if (comparison !== 0) return comparison;
-      const dateComparison = (left.startDate ?? "").localeCompare(
-        right.startDate ?? "",
+      const dateComparison = (left.dueDate ?? "").localeCompare(
+        right.dueDate ?? "",
       );
       if (dateComparison !== 0) {
         return dateSortDirection === "asc" ? dateComparison : -dateComparison;
@@ -740,14 +743,46 @@ const MaintenanceSchedulingCombined = () => {
     },
   );
 
+  const selectedCalendarDateLabel = new Date(
+    `${selectedCalendarDate}T00:00:00`,
+  ).toLocaleDateString("en-PH", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  const selectedDaySchedules = filteredTasks.filter(
+    (task) => task.dueDate === selectedCalendarDate,
+  );
+  const currentMonthKey = formatDateStr(
+    currentDate.getFullYear(),
+    currentDate.getMonth(),
+    1,
+  ).slice(0, 7);
+  const monthDueScheduleCount = filteredTasks.filter((task) =>
+    task.dueDate?.startsWith(currentMonthKey),
+  ).length;
+
+  const setCalendarMonth = (date: Date) => {
+    setCurrentDate(date);
+    setSelectedCalendarDate(
+      formatDateStr(date.getFullYear(), date.getMonth(), 1),
+    );
+  };
   const prevMonth = () =>
-    setCurrentDate(
+    setCalendarMonth(
       new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1),
     );
   const nextMonth = () =>
-    setCurrentDate(
+    setCalendarMonth(
       new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1),
     );
+  const goToToday = () => {
+    setCalendarMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+    setSelectedCalendarDate(
+      formatDateStr(today.getFullYear(), today.getMonth(), today.getDate()),
+    );
+  };
 
   const openScheduleDetails = (schedules: MaintenanceTask[]) => {
     setSelectedSchedules(schedules);
@@ -1370,7 +1405,7 @@ const MaintenanceSchedulingCombined = () => {
                     label="Sort by"
                     id="sortOrderF"
                     options={[
-                      { value: "NONE", label: "Start Date" },
+                      { value: "NONE", label: "Due Date" },
                       { value: "PRIORITY_DESC", label: "Priority: High to Low" },
                       { value: "PRIORITY_ASC", label: "Priority: Low to High" },
                       { value: "TYPE_ASC", label: "Maintenance Type: A to Z" },
@@ -1467,7 +1502,7 @@ const MaintenanceSchedulingCombined = () => {
                     ),
                   },
                   {
-                    key: "createdDate",
+                    key: "dueDate",
                     header: (
                       <button
                         type="button"
@@ -1479,7 +1514,7 @@ const MaintenanceSchedulingCombined = () => {
                         }}
                         className="inline-flex items-center gap-2 uppercase tracking-wide hover:text-white/80"
                       >
-                        <span>Start Date</span>
+                        <span>Due Date</span>
                         {dateSortDirection === "asc" ? (
                           <ArrowUp className="h-3.5 w-3.5" />
                         ) : (
@@ -1488,7 +1523,7 @@ const MaintenanceSchedulingCombined = () => {
                       </button>
                     ),
                     width: "12%",
-                    render: (task) => task.startDate || 'Not recorded',
+                    render: (task) => task.dueDate || 'Not recorded',
                   },
                   {
                     key: "mechanic",
@@ -1610,7 +1645,7 @@ const MaintenanceSchedulingCombined = () => {
             </div>
           ) : (
             <Card padding="none" className="p-4 sm:p-5">
-              <div className="mb-4 flex items-center justify-between rounded-xl border border-[var(--color-border)] bg-white px-3 py-2">
+              <div className="mb-4 flex items-center justify-between gap-2 rounded-xl border border-[var(--color-border)] bg-white px-3 py-2">
                 <button
                   type="button"
                   onClick={prevMonth}
@@ -1624,9 +1659,17 @@ const MaintenanceSchedulingCombined = () => {
                     {monthName} {yearName}
                   </h2>
                   <p className="text-xs text-[var(--color-text-secondary)]">
-                    {filteredTasks.length} visible schedules
+                    {monthDueScheduleCount} due{" "}
+                    {monthDueScheduleCount === 1 ? "schedule" : "schedules"} this month
                   </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={goToToday}
+                  className="min-h-10 rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 text-sm font-medium text-[var(--color-text-primary)] transition hover:bg-[var(--color-card-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)]"
+                >
+                  Today
+                </button>
                 <button
                   type="button"
                   onClick={nextMonth}
@@ -1648,73 +1691,98 @@ const MaintenanceSchedulingCombined = () => {
               <div className="grid grid-cols-7 gap-1 sm:gap-2">
                 {calendarCells.map((cell, idx) => {
                   const schedulesForDay = filteredTasks.filter(
-                    (task) => Boolean(cell.dateStr) && (task.startDate === cell.dateStr || task.dueDate === cell.dateStr),
+                    (task) =>
+                      Boolean(cell.dateStr) && task.dueDate === cell.dateStr,
                   );
                   const isToday = Boolean(cell.dateStr) && cell.dateStr === formatLocalDate(today);
+                  const isSelected = cell.dateStr === selectedCalendarDate;
                   const visibleSchedules = schedulesForDay.slice(0, 2);
                   const hiddenScheduleCount = schedulesForDay.length - visibleSchedules.length;
+                  const dateLabel = cell.dateStr
+                    ? new Date(`${cell.dateStr}T00:00:00`).toLocaleDateString(
+                        "en-PH",
+                        {
+                          weekday: "long",
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        },
+                      )
+                    : "";
 
                   return (
                     <div
-                      key={idx}
-                      onClick={() => {
-                        if (schedulesForDay.length > 0) {
-                          openScheduleDetails(schedulesForDay);
-                        }
-                      }}
-                      className={`group min-h-28 rounded-lg border p-1.5 transition duration-200 sm:min-h-32 sm:p-2 ${
+                      key={cell.dateStr ?? `blank-${idx}`}
+                      className={`min-h-16 rounded-lg border p-1 sm:min-h-20 sm:p-1.5 lg:min-h-32 lg:p-2 ${
                         cell.day
-                          ? `bg-white ${isToday ? "border-[#070b45] shadow-sm" : "border-[#dde4ef]"} hover:border-[var(--color-brand-primary)] hover:bg-[#f8fafc] ${
-                              schedulesForDay.length > 0 ? "cursor-pointer" : ""
-                            }`
+                          ? `bg-white ${isSelected ? "border-[var(--color-brand-primary)] ring-1 ring-[var(--color-brand-primary)]/30" : isToday ? "border-[#070b45] shadow-sm" : "border-[#dde4ef]"}`
                           : "bg-transparent border-transparent"
                       }`}
                     >
                       {cell.day && (
                         <>
-                          <div className="mb-1.5 flex items-center justify-between">
-                            <span
-                              className={`flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs font-bold ${
-                                isToday
-                                  ? "bg-[#070b45] text-white"
-                                  : "text-[var(--color-text-secondary)]"
+                          <div className="mb-1 flex items-center justify-between">
+                            <button
+                              type="button"
+                              aria-pressed={isSelected}
+                              aria-label={`${dateLabel}, ${schedulesForDay.length} due ${
+                                schedulesForDay.length === 1 ? "schedule" : "schedules"
+                              }`}
+                              onClick={() =>
+                                cell.dateStr &&
+                                setSelectedCalendarDate(cell.dateStr)
+                              }
+                              className={`flex h-8 min-w-8 items-center justify-center rounded-full px-1 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)] sm:h-9 sm:min-w-9 ${
+                                isSelected
+                                  ? "bg-[var(--color-brand-primary)] text-white"
+                                  : isToday
+                                    ? "bg-[#070b45] text-white"
+                                    : "text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)]"
                               }`}
                             >
                               {cell.day}
-                            </span>
+                            </button>
                             {schedulesForDay.length > 0 ? (
-                              <span className="rounded-full bg-[#eef2ff] px-2 py-0.5 text-[10px] font-bold text-[#070b45]">
+                              <span className="rounded-full bg-[#eef2ff] px-1.5 py-0.5 text-[10px] font-bold text-[#070b45] sm:px-2">
                                 {schedulesForDay.length}
                               </span>
                             ) : null}
-                            <button
-                              type="button"
-                              onClick={(event) => event.stopPropagation()}
-                              className="rounded-md p-1 text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)] transition opacity-0 group-hover:opacity-100"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                            </button>
                           </div>
-                          <div className="space-y-1 text-xs">
+                          <div className="hidden space-y-1 text-xs lg:block">
                             {visibleSchedules.map((task) => (
                               <button
                                 type="button"
                                 key={task.id}
+                                aria-label={`${task.title}, ${getVehiclePlateNumber(task.vehicleId)}, due ${dateLabel}, ${maintenanceStatusLabels[task.status]}`}
+                                onClick={() => openScheduleDetails([task])}
                                 className={`block w-full rounded-md px-2 py-1.5 text-left transition hover:brightness-105 ${getTaskStyle(task.status)}`}
                               >
                                 <span className="block truncate text-[11px] font-bold">
-                                  {task.startDate === cell.dateStr ? 'Start' : 'Due'}{task.startDate === cell.dateStr && task.dueDate === cell.dateStr ? ' / Due' : ''}: {' '}
-                                  {task.workOrderNumber ?? "N/A"}
+                                  {task.title}
                                 </span>
-                                <span className="block truncate text-[11px]">
-                                  {getVehiclePlateNumber(task.vehicleId)}
+                                <span className="block truncate text-[11px] opacity-80">
+                                  {getVehiclePlateNumber(task.vehicleId)} ·{" "}
+                                  {task.workOrderNumber ?? "No work order"}
                                 </span>
                               </button>
                             ))}
                             {hiddenScheduleCount > 0 ? (
-                              <div className="rounded-md bg-[#f1f5f9] px-2 py-1 text-[11px] font-bold text-[#475569]">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openScheduleDetails(
+                                    schedulesForDay.slice(visibleSchedules.length),
+                                  )
+                                }
+                                aria-label={`Show ${hiddenScheduleCount} more due ${
+                                  hiddenScheduleCount === 1
+                                    ? "schedule"
+                                    : "schedules"
+                                } for ${dateLabel}`}
+                                className="min-h-9 w-full rounded-md bg-[#f1f5f9] px-2 py-1 text-left text-[11px] font-bold text-[#475569] hover:bg-[#e2e8f0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)]"
+                              >
                                 +{hiddenScheduleCount} more
-                              </div>
+                              </button>
                             ) : null}
                           </div>
                         </>
@@ -1723,6 +1791,48 @@ const MaintenanceSchedulingCombined = () => {
                   );
                 })}
               </div>
+              <section
+                aria-labelledby="selected-calendar-day"
+                className="mt-4 border-t border-[var(--color-border)] pt-4 lg:hidden"
+              >
+                <h3
+                  id="selected-calendar-day"
+                  className="text-base font-semibold text-[var(--color-text-primary)]"
+                >
+                  Due schedules for {selectedCalendarDateLabel}
+                </h3>
+                {selectedDaySchedules.length ? (
+                  <ul className="mt-3 divide-y divide-[var(--color-border)]">
+                    {selectedDaySchedules.map((task) => (
+                      <li key={task.id} className="py-2 first:pt-0 last:pb-0">
+                        <button
+                          type="button"
+                          onClick={() => openScheduleDetails([task])}
+                          className="flex min-h-12 w-full items-center justify-between gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-[var(--color-card-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)]"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-semibold text-[var(--color-text-primary)]">
+                              {task.title}
+                            </span>
+                            <span className="mt-0.5 block truncate text-xs text-[var(--color-text-secondary)]">
+                              {getVehiclePlateNumber(task.vehicleId)} ·{" "}
+                              {task.workOrderNumber ?? "No work order"}
+                              {task.dueOdometer != null
+                                ? ` · ${task.dueOdometer.toLocaleString()} km`
+                                : ""}
+                            </span>
+                          </span>
+                          <MaintenanceStatusBadge status={task.status} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+                    No due schedules on this day.
+                  </p>
+                )}
+              </section>
             </Card>
           )}
         </section>

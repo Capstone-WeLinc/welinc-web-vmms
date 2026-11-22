@@ -156,6 +156,7 @@ export default function ImportFuelStatement({
   const [draftToDelete, setDraftToDelete] =
     useState<FuelImportDraftSummary | null>(null);
   const [deletingDraft, setDeletingDraft] = useState(false);
+  const [rowToRemove, setRowToRemove] = useState<FuelImportRow | null>(null);
 
   const markDraftDirty = () => {
     draftVersionRef.current += 1;
@@ -435,13 +436,19 @@ export default function ImportFuelStatement({
   };
 
   const addManualRow = () => {
-    const sequence = ++manualRowSequence.current;
+    let sequence = manualRowSequence.current;
+    let key: string;
+    do {
+      sequence += 1;
+      key = `manual-${sequence}`;
+    } while (rows.some((row) => row.key === key));
+    manualRowSequence.current = sequence;
     const worksheetRow =
       rows
         .filter((row) => row.sheetName === MANUAL_SHEET_NAME)
         .reduce((highest, row) => Math.max(highest, row.worksheetRow), 0) + 1;
     const row: FuelImportRow = {
-      key: `manual-${Date.now()}-${sequence}`,
+      key,
       sheetName: MANUAL_SHEET_NAME,
       worksheetRow,
       plateNumber: '',
@@ -473,14 +480,18 @@ export default function ImportFuelStatement({
     setCurrentPage(targetPage);
   };
 
-  const removeRow = (key: string) => {
+  const confirmRemoveRow = () => {
+    if (!rowToRemove || rowToRemove.status === 'SAVED') return;
     setRows((current) =>
-      current.filter((row) => row.key !== key || row.status === 'SAVED'),
+      current.filter(
+        (row) => row.key !== rowToRemove.key || row.status === 'SAVED',
+      ),
     );
     markDraftDirty();
     setError('');
     setResultMessage('');
     setSaveHadFailures(false);
+    setRowToRemove(null);
   };
 
   const updateSheetStation = (sheetName: string, stationId: string) => {
@@ -1062,7 +1073,7 @@ export default function ImportFuelStatement({
                                   size="sm"
                                   icon={<Trash2 size={15} aria-hidden="true" />}
                                   disabled={busy}
-                                  onClick={() => removeRow(row.key)}
+                                  onClick={() => setRowToRemove(row)}
                                   className="min-h-9"
                                 >
                                   Remove row
@@ -1310,6 +1321,21 @@ export default function ImportFuelStatement({
         onCancel={() => {
           if (!deletingDraft) setDraftToDelete(null);
         }}
+      />
+      <ConfirmationModal
+        isOpen={rowToRemove !== null}
+        title="Remove import row"
+        variant="danger"
+        confirmLabel="Remove row"
+        message={
+          <p>
+            Remove {rowToRemove?.sheetName} row {rowToRemove?.worksheetRow}
+            {' '}from this unsaved import? This won’t remove any fuel fill-ups
+            that have already been saved.
+          </p>
+        }
+        onConfirm={confirmRemoveRow}
+        onCancel={() => setRowToRemove(null)}
       />
     </div>
   );
