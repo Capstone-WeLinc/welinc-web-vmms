@@ -5,6 +5,7 @@ import {
   createVehicleRecord,
   updateVehicleRecord,
   updateVehicleOdometerRecord,
+  bulkUpdateVehicleOdometerRecords,
   deleteVehicleRecord,
   previewVehicleImport,
   saveVehicleImport,
@@ -127,6 +128,17 @@ export default function Vehicles() {
     message?: string;
   }>>([]);
   const [manualBulkOdometerSaving, setManualBulkOdometerSaving] = useState(false);
+  const [manualBulkSaveConfirmOpen, setManualBulkSaveConfirmOpen] = useState(false);
+  const [manualBulkPreparedRows, setManualBulkPreparedRows] = useState<Array<{
+    vehicleId: string;
+    plateNumber: string;
+    makeModel: string;
+    isActive: boolean;
+    currentOdometer: number;
+    newReading: string;
+    status: "idle" | "ready" | "unchanged" | "invalid" | "updated" | "error";
+    message?: string;
+  }>>([]);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deletePlate, setDeletePlate] = useState("");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -314,6 +326,8 @@ export default function Vehicles() {
 
   const openManualBulkOdometer = () => {
     if (!canManage) return;
+    setManualBulkSaveConfirmOpen(false);
+    setManualBulkPreparedRows([]);
     setManualBulkOdometerRows(
       vehicles.map((vehicle) => ({
         vehicleId: String(vehicle.id),
@@ -344,7 +358,7 @@ export default function Vehicles() {
     );
   };
 
-  const handleSaveManualBulkOdometer = async () => {
+  const handleRequestSaveManualBulkOdometer = () => {
     if (!canManage || manualBulkOdometerSaving || manualBulkOdometerRows.length === 0) return;
 
     const preparedRows = manualBulkOdometerRows.map((row) => {
@@ -387,6 +401,20 @@ export default function Vehicles() {
     });
 
     const rowsToUpdate = preparedRows.filter((row) => row.status === "ready");
+    setManualBulkOdometerRows(preparedRows);
+    if (rowsToUpdate.length === 0) {
+      showToast("No odometer changes to save.", "error");
+      return;
+    }
+
+    setManualBulkPreparedRows(preparedRows);
+    setManualBulkSaveConfirmOpen(true);
+  };
+
+  const handleSaveManualBulkOdometer = async (preparedRows: typeof manualBulkOdometerRows) => {
+    if (!canManage || manualBulkOdometerSaving) return;
+
+    const rowsToUpdate = preparedRows.filter((row) => row.status === "ready");
     if (rowsToUpdate.length === 0) {
       setManualBulkOdometerRows(preparedRows);
       showToast("No odometer changes to save.", "error");
@@ -396,53 +424,74 @@ export default function Vehicles() {
     setManualBulkOdometerSaving(true);
     setManualBulkOdometerRows(preparedRows);
 
-    const outcomes = await Promise.allSettled(
-      rowsToUpdate.map(async (row) => {
-        await updateVehicleOdometerRecord(row.vehicleId, Number(row.newReading.trim()));
-        return row.vehicleId;
-      }),
-    );
-
-    let updatedCount = 0;
-    const errorById = new Map<string, string>();
-    outcomes.forEach((outcome, index) => {
-      const vehicleId = rowsToUpdate[index].vehicleId;
-      if (outcome.status === "fulfilled") {
-        updatedCount += 1;
-      } else {
-        errorById.set(
-          vehicleId,
-          outcome.reason instanceof Error ? outcome.reason.message : "Failed to update odometer.",
-        );
-      }
-    });
-
-    const finalRows = preparedRows.map((row) => {
-      if (row.status !== "ready") return row;
-      const errorMessage = errorById.get(row.vehicleId);
-      if (errorMessage) {
-        return { ...row, status: "error" as const, message: errorMessage };
-      }
-      return {
-        ...row,
-        status: "updated" as const,
-        message: "Odometer updated.",
-        currentOdometer: Number(row.newReading.trim()),
-      };
-    });
-
-    setManualBulkOdometerRows(finalRows);
-    setManualBulkOdometerSaving(false);
-
-    if (updatedCount > 0) {
-      await load();
-      showToast(
-        `Updated ${updatedCount} vehicle odometer${updatedCount === 1 ? "" : "s"}.`,
-        errorById.size > 0 ? "error" : "success",
+    try {
+      const result = await bulkUpdateVehicleOdometerRecords(
+        rowsToUpdate.map((row) => ({
+          vehicleId: row.vehicleId,
+          odometer: Number(row.newReading.trim()),
+        })),
       );
-    } else if (errorById.size > 0) {
-      showToast("Could not update odometer readings.", "error");
+
+      const resultById = new Map(result.results.map((item) => [item.vehicleId, item]));
+      const finalRows = preparedRows.map((row) => {
+        if (row.status !== "ready") return row;
+        const item = resultById.get(row.vehicleId);
+        if (!item) {
+          return { ...row, status: "error" as const, message: "No result returned for this vehicle." };
+        }
+        if (item.status === "ERROR") {
+          return {
+            ...row,
+            status: "error" as const,
+            message: item.message ?? "Failed to update odometer.",
+            currentOdometer: item.currentOdometer ?? row.currentOdometer,
+          };
+        }
+        if (item.status === "UNCHANGED") {
+          return {
+            ...row,
+            status: "unchanged" as const,
+            message: item.message ?? "No change.",
+            currentOdometer: item.currentOdometer ?? row.currentOdometer,
+          };
+        }
+        return {
+          ...row,
+          status: "updated" as const,
+          message: "Odometer updated.",
+          currentOdometer: item.currentOdometer ?? Number(row.newReading.trim()),
+        };
+      });
+
+      setManualBulkOdometerRows(finalRows);
+
+      if (result.updated > 0) {
+        await load();
+        showToast(
+          `Updated ${result.updated} vehicle odometer${result.updated === 1 ? "" : "s"}.`,
+          result.failed > 0 ? "error" : "success",
+        );
+      } else if (result.failed > 0) {
+        showToast("Could not update odometer readings.", "error");
+      } else {
+        showToast("No odometer changes to save.", "error");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update odometer readings.";
+      setManualBulkOdometerRows(
+        preparedRows.map((row) =>
+          row.status === "ready" ? { ...row, status: "error" as const, message } : row,
+        ),
+      );
+      showToast(message, "error");
+    } finally {
+      setManualBulkOdometerSaving(false);
     }
+  };
+
+  const handleConfirmSaveManualBulkOdometer = async () => {
+    setManualBulkSaveConfirmOpen(false);
+    await handleSaveManualBulkOdometer(manualBulkPreparedRows);
   };
 
   const openMaintenanceDefaults = async (vehicle: VehicleRecord) => {
@@ -1588,15 +1637,25 @@ export default function Vehicles() {
             </button>
             <button
               type="button"
-              onClick={handleSaveManualBulkOdometer}
+              onClick={handleRequestSaveManualBulkOdometer}
               disabled={manualBulkOdometerSaving || manualBulkOdometerRows.length === 0}
               className="rounded-xl bg-[#070b45] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#11175f] disabled:opacity-60"
             >
-              {manualBulkOdometerSaving ? "Saving?" : "Save odometer updates"}
+              {manualBulkOdometerSaving ? "Saving..." : "Save odometer updates"}
             </button>
           </div>
         </div>
       </Modal>
+
+      {/* Manual Bulk Odometer Save Confirmation */}
+      <ConfirmationModal
+        isOpen={canManage && manualBulkSaveConfirmOpen}
+        title="Save bulk odometer updates"
+        message={`Save ${manualBulkPreparedRows.filter((row) => row.status === "ready").length} odometer update${manualBulkPreparedRows.filter((row) => row.status === "ready").length === 1 ? "" : "s"}?`}
+        confirmLabel="Save updates"
+        onConfirm={() => void handleConfirmSaveManualBulkOdometer()}
+        onCancel={() => setManualBulkSaveConfirmOpen(false)}
+      />
 
       {/* Maintenance Defaults Save Confirmation */}
       <ConfirmationModal

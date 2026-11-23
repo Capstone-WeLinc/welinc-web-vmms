@@ -172,7 +172,7 @@ export default function Navbar() {
                   if (notification.maintenanceScheduleId) {
                     setIsNotificationsOpen(false);
                     navigate(
-                      `/maintenance-scheduling?scheduleId=${encodeURIComponent(notification.maintenanceScheduleId)}`,
+                      `/maintenance-scheduling?search=${encodeURIComponent(notification.maintenanceScheduleId)}`,
                     );
                   }
                 }}

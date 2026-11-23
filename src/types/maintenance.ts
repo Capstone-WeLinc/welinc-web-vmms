@@ -92,6 +92,7 @@ export interface MaintenanceTask {
   checklistTemplateId?: string | null;
   dueDate?: string | null;
   dueOdometer?: number | null;
+  computedStatus?: MaintenanceStatus;
   cancellations?: {
     id: string;
     actorId: string;
