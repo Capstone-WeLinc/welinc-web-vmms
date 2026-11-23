@@ -1,5 +1,5 @@
 import type { FuelFillUp } from '../types';
-import { Download, Calendar, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
+import { Download, Calendar, ChevronLeft, ChevronRight, Filter, X } from 'lucide-react';
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { exportRowsToPDF } from "../../../lib/utils/fuelExport";
 import { exportRowsAsXlsx } from '../../../lib/utils/excelExport';
@@ -125,8 +125,22 @@ export default function FuelCostSummary({ fillUps = [], onExport }: FuelCostSumm
                 setCurrentPage(1);
               }}
               placeholder="Search vehicle or model..."
-              className="bg-transparent text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none w-full font-medium"
+              className={`bg-transparent text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none w-full font-medium ${searchQuery ? 'pr-6' : ''}`}
             />
+            {searchQuery ? (
+              <button
+                type="button"
+                aria-label="Clear search"
+                title="Clear search"
+                onClick={() => {
+                  setSearchQuery('');
+                  setCurrentPage(1);
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[var(--color-text-secondary)] transition hover:text-[var(--color-text-primary)]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
           </div>
 
           <div className="relative flex items-center h-11 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-4 hover:bg-[var(--color-card-bg-hover)] transition-all duration-200 cursor-pointer">
@@ -156,7 +170,7 @@ export default function FuelCostSummary({ fillUps = [], onExport }: FuelCostSumm
               <span>{startDate || 'From'} - {endDate || 'To'}</span>
             </button>
             {isDatePickerOpen && (
-              <div className="absolute top-full left-0 z-50 mt-3 w-80 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-2xl">
+              <div className="absolute top-full left-0 z-50 mt-3 w-80 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="grid gap-1 text-xs font-semibold text-[var(--color-text-secondary)]">From
                     <input type="date" value={startDate} onChange={(event) => { setStartDate(event.target.value); setCurrentPage(1); }} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2 py-2 text-sm text-[var(--color-text-primary)]" />
@@ -187,7 +201,7 @@ export default function FuelCostSummary({ fillUps = [], onExport }: FuelCostSumm
 
       </div>
 
-      <div id="fuel-cost-summary-table" className="overflow-auto overscroll-contain rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card lg:max-h-[min(40rem,calc(100vh-12rem))]">
+      <div id="fuel-cost-summary-table" className="overflow-auto overscroll-contain rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] lg:max-h-[min(40rem,calc(100vh-12rem))]">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]">

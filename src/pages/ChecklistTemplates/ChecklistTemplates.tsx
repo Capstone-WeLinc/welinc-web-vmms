@@ -48,6 +48,7 @@ export default function ChecklistTemplates() {
   const [editingItems, setEditingItems] = useState<ChecklistItemTemplate[]>([]);
   const [isAddingType, setIsAddingType] = useState(false);
   const [newTypeName, setNewTypeName] = useState("");
+  const [isAddTypeConfirmOpen, setIsAddTypeConfirmOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [itemFilter, setItemFilter] = useState("");
   const [templatePage, setTemplatePage] = useState(1);
@@ -223,7 +224,7 @@ export default function ChecklistTemplates() {
     setIsEditingChecklist(false);
   };
 
-  const handleAddType = () => {
+  const handleRequestAddType = () => {
     const trimmed = newTypeName.trim();
     if (!trimmed) return;
 
@@ -236,6 +237,26 @@ export default function ChecklistTemplates() {
       return;
     }
 
+    setIsAddTypeConfirmOpen(true);
+  };
+
+  const handleConfirmAddType = () => {
+    const trimmed = newTypeName.trim();
+    if (!trimmed) {
+      setIsAddTypeConfirmOpen(false);
+      return;
+    }
+
+    const existingType = Object.keys(templates).find(
+      (type) => type.toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (existingType) {
+      setIsAddTypeConfirmOpen(false);
+      setDuplicateType(existingType);
+      setDuplicateTypeSource(null);
+      return;
+    }
+
     const newTemplates = { [trimmed]: [], ...templates };
     setTemplates(newTemplates);
     saveChecklistTemplates(newTemplates).catch((error) => {
@@ -243,6 +264,7 @@ export default function ChecklistTemplates() {
     });
     setNewTypeName("");
     setIsAddingType(false);
+    setIsAddTypeConfirmOpen(false);
     setSelectedType(trimmed);
     setTemplatePage(1);
     setChecklistPage(1);
@@ -457,7 +479,7 @@ export default function ChecklistTemplates() {
                 className="h-10 rounded-lg border border-[#cbd3df] bg-white px-3 text-sm text-[#141827] outline-none transition focus:border-[#070b45] focus:ring-2 focus:ring-[#070b45]/10"
                 autoFocus
                 onKeyDown={(event) => {
-                  if (event.key === "Enter") handleAddType();
+                  if (event.key === "Enter") handleRequestAddType();
                   if (event.key === "Escape") {
                     setIsAddingType(false);
                     setNewTypeName("");
@@ -475,7 +497,7 @@ export default function ChecklistTemplates() {
                 >
                   Cancel
                 </ActionButton>
-                <ActionButton className="w-full" onClick={handleAddType}>Add</ActionButton>
+                <ActionButton className="w-full" onClick={handleRequestAddType}>Add</ActionButton>
               </div>
             </div>
           ) : (
@@ -813,6 +835,19 @@ export default function ChecklistTemplates() {
           if (confirmDeleteType) performDeleteType(confirmDeleteType);
         }}
         onCancel={() => setConfirmDeleteType(null)}
+      />
+
+      <ConfirmationModal
+        isOpen={isAddTypeConfirmOpen}
+        message={
+          <>
+            Are you sure you want to add this checklist template type?
+            <span className="mt-2 block font-bold">{newTypeName.trim()}</span>
+          </>
+        }
+        confirmLabel="Add Type"
+        onConfirm={handleConfirmAddType}
+        onCancel={() => setIsAddTypeConfirmOpen(false)}
       />
 
       {blockedDeleteType && (

@@ -14,27 +14,23 @@ export default function PageHeader({
   action,
 }: PageHeaderProps) {
   return (
-    <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[var(--color-divider)] pb-6">
-      <div className="flex items-center gap-4">
-        <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)]">
-          <Icon size={24} strokeWidth={1.8} />
+    <header className="mb-6 flex flex-col gap-4 border-b border-[var(--color-border)] pb-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-center gap-4">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]">
+          <Icon size={22} strokeWidth={1.8} />
         </div>
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-[var(--color-text-primary)] truncate">
+          <h1 className="truncate text-xl font-semibold tracking-tight text-[var(--color-text-primary)]">
             {title}
           </h1>
           {subtitle && (
-            <p className="mt-1 text-sm text-[var(--color-text-secondary)] truncate">
+            <p className="mt-0.5 truncate text-sm text-[var(--color-text-secondary)]">
               {subtitle}
             </p>
           )}
         </div>
       </div>
-      {action && (
-        <div className="flex-shrink-0">
-          {action}
-        </div>
-      )}
+      {action && <div className="flex-shrink-0">{action}</div>}
     </header>
   );
 }

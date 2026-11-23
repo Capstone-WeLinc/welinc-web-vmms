@@ -30,9 +30,9 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
 
     const elevationStyles = {
       none: '',
-      sm: 'shadow-card',
-      md: 'shadow-md',
-      lg: 'shadow-lg',
+      sm: '',
+      md: '',
+      lg: '',
     };
 
     const paddingStyles = {

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   BrainCircuit,
   Search,
+  X,
   TrendingUp,
   AlertTriangle,
   ShieldCheck,
@@ -264,7 +265,7 @@ function StatusBars({ items }: { items: Array<{ status: string; percentage?: num
       </div>
 
       {/* Multi-Segment Stacked Proportion Distribution Bar */}
-      <div className="flex h-3.5 w-full overflow-hidden rounded-full border border-[var(--color-border)] bg-[var(--color-input-bg)] p-0.5 shadow-inner">
+      <div className="flex h-3.5 w-full overflow-hidden rounded-full border border-[var(--color-border)] bg-[var(--color-input-bg)] p-0.5">
         {totalCount > 0 ? (
           itemsWithPct.map((item) => {
             if (item.displayPercentage === 0) return null;
@@ -347,7 +348,7 @@ function TrendBars({ items }: { items: Array<{ monthKey: string; scheduledCount?
                   {scheduled}
                 </span>
                 <div
-                  className="w-full rounded-t-md bg-[var(--color-brand-primary)] shadow-sm transition-all duration-300 hover:brightness-110"
+                  className="w-full rounded-t-md bg-[var(--color-brand-primary)] transition-all duration-300 hover:brightness-110"
                   style={{ height: `${scheduledHeight}%` }}
                   title={`Scheduled: ${scheduled}`}
                 />
@@ -358,7 +359,7 @@ function TrendBars({ items }: { items: Array<{ monthKey: string; scheduledCount?
                   {completed}
                 </span>
                 <div
-                  className="w-full rounded-t-md bg-emerald-500 shadow-sm transition-all duration-300 hover:brightness-110"
+                  className="w-full rounded-t-md bg-emerald-500 transition-all duration-300 hover:brightness-110"
                   style={{ height: `${completedHeight}%` }}
                   title={`Completed: ${completed}`}
                 />
@@ -683,7 +684,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
         <PageHeader
           icon={BrainCircuit}
           title="AI / ANALYTICS"
-          subtitle="Real-time operational analytics, predictive maintenance forecasts, risk assessment, and DuckDB search"
+          subtitle="Real-time operational analytics, predictive maintenance forecasts, and risk assessment"
         />
 
         {/* Manual Analytics Generation / Re-Generation Button */}
@@ -699,7 +700,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
 
       {error && !loading ? (
         <Card className="p-10 text-center flex flex-col items-center justify-center space-y-4 my-8 border border-rose-500/30 bg-rose-500/5">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-500 border border-rose-500/20 shadow-sm">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-500 border border-rose-500/20">
             <AlertTriangle size={36} />
           </div>
           <div className="max-w-xl space-y-2">
@@ -716,7 +717,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
             size="md"
             onClick={handleManualGenerate}
             disabled={loading}
-            className="mt-4 flex items-center gap-2 px-6 py-2.5 text-sm font-semibold shadow-md"
+            className="mt-4 flex items-center gap-2 px-6 py-2.5 text-sm font-semibold"
           >
             <RefreshCw className="h-4 w-4" />
             <span>Re-Generate Analytics</span>
@@ -724,7 +725,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
         </Card>
       ) : !hasGenerated && !loading ? (
         <Card className="p-10 text-center flex flex-col items-center justify-center space-y-4 my-8">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20 shadow-sm">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20">
             <BrainCircuit size={36} />
           </div>
           <div className="max-w-xl space-y-2">
@@ -738,7 +739,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
             size="md"
             onClick={handleManualGenerate}
             disabled={loading}
-            className="mt-4 flex items-center gap-2 px-6 py-2.5 text-sm font-semibold shadow-md"
+            className="mt-4 flex items-center gap-2 px-6 py-2.5 text-sm font-semibold"
           >
             <Sparkles className="h-4 w-4" />
             <span>Generate AI Analytics</span>
@@ -746,7 +747,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
         </Card>
       ) : !hasGenerated && loading ? (
         <Card className="p-16 text-center flex flex-col items-center justify-center space-y-4 my-8">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20 shadow-sm">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20">
             <Sparkles className="h-8 w-8 animate-spin" />
           </div>
           <div className="max-w-xl space-y-2">
@@ -764,7 +765,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
               onClick={() => setActiveTab("overview")}
               className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
                 activeTab === "overview"
-                  ? "bg-[var(--color-brand-primary)] text-white shadow-sm"
+                  ? "bg-[var(--color-brand-primary)] text-white"
                   : "bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
               }`}
             >
@@ -775,7 +776,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
               onClick={() => setActiveTab("vehicles")}
               className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
                 activeTab === "vehicles"
-                  ? "bg-[var(--color-brand-primary)] text-white shadow-sm"
+                  ? "bg-[var(--color-brand-primary)] text-white"
                   : "bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
               }`}
             >
@@ -786,7 +787,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
               onClick={() => setActiveTab("alerts")}
               className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
                 activeTab === "alerts"
-                  ? "bg-[var(--color-brand-primary)] text-white shadow-sm"
+                  ? "bg-[var(--color-brand-primary)] text-white"
                   : "bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
               }`}
             >
@@ -797,7 +798,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
               onClick={() => setActiveTab("report")}
               className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
                 activeTab === "report"
-                  ? "bg-[var(--color-brand-primary)] text-white shadow-sm"
+                  ? "bg-[var(--color-brand-primary)] text-white"
                   : "bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
               }`}
             >
@@ -819,7 +820,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
       {!loading && activeTab === "overview" && (
         <div className="space-y-6">
           {/* AI Operational Report — full-width premium card */}
-          <Card className="overflow-hidden border border-[var(--color-border)] p-0 shadow-sm">
+          <Card className="overflow-hidden border border-[var(--color-border)] p-0">
             {/* Card header bar */}
             <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-gradient-to-r from-[var(--color-card-bg)] to-[var(--color-input-bg)] px-6 py-4">
               <div className="flex items-center gap-3">
@@ -857,7 +858,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
           </Card>
 
           {/* DuckDB Schedule Search — standalone card */}
-          <Card className="border border-[var(--color-border)] p-6 shadow-sm">
+          <Card className="border border-[var(--color-border)] p-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <h3 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)]">
@@ -1050,8 +1051,19 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
                     value={vehicleSearch}
                     onChange={(e) => setVehicleSearch(e.target.value)}
                     placeholder="Search plate or model..."
-                    className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2 pl-9 pr-3 text-xs text-[var(--color-text-primary)] focus:outline-none"
+                    className={`w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] py-2 pl-9 ${vehicleSearch ? "pr-8" : "pr-3"} text-xs text-[var(--color-text-primary)] focus:outline-none`}
                   />
+                  {vehicleSearch ? (
+                    <button
+                      type="button"
+                      aria-label="Clear search"
+                      title="Clear search"
+                      onClick={() => setVehicleSearch("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[var(--color-text-secondary)] transition hover:text-[var(--color-text-primary)]"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-1 text-xs font-medium">
                   <button
@@ -1097,7 +1109,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
                 }
 
                 return (
-                  <div key={String(v.vehicleId ?? v.plateNumber)} className={`rounded-xl border p-4 shadow-sm transition-all ${borderClass}`}>
+                  <div key={String(v.vehicleId ?? v.plateNumber)} className={`rounded-xl border p-4 transition-all ${borderClass}`}>
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <p className="text-base font-bold text-[var(--color-text-primary)]">{v.plateNumber}</p>
@@ -1190,7 +1202,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
                 if (severity === "MEDIUM") badgeVariant = "warning";
 
                 return (
-                  <div key={String(alert.alertId)} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-sm">
+                  <div key={String(alert.alertId)} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                       <div>
                         <div className="flex items-center gap-2">

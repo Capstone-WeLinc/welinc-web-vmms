@@ -1,14 +1,31 @@
 import { useState } from 'react';
 import type { VehicleEfficiency } from '../types';
-import { Search, Filter } from 'lucide-react';
+import { Search, Filter, X } from 'lucide-react';
 
 interface InputFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
   id: string;
   className?: string;
+  onClear?: () => void;
 }
 
-function InputField({ label, id, className, ...props }: InputFieldProps) {
+function InputField({ label, id, className, onClear, value, onChange, ...props }: InputFieldProps) {
+  const hasValue = value !== undefined && String(value).length > 0;
+  const clearable = hasValue && Boolean(onClear || onChange);
+
+  const handleClear = () => {
+    if (onClear) {
+      onClear();
+      return;
+    }
+    if (onChange) {
+      (onChange as (event: { target: { value: string }; currentTarget: { value: string } }) => void)({
+        target: { value: '' },
+        currentTarget: { value: '' },
+      });
+    }
+  };
+
   return (
     <div className="flex flex-col gap-1 w-full">
       {label && (
@@ -16,11 +33,26 @@ function InputField({ label, id, className, ...props }: InputFieldProps) {
           {label}
         </label>
       )}
-      <input
-        id={id}
-        className={`${className ?? ''} w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)]`}
-        {...props}
-      />
+      <div className="relative w-full">
+        <input
+          id={id}
+          value={value}
+          onChange={onChange}
+          className={`${className ?? ''} w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 ${clearable ? 'pr-9' : 'pr-3'} py-2 text-sm text-[var(--color-text-primary)]`}
+          {...props}
+        />
+        {clearable ? (
+          <button
+            type="button"
+            aria-label="Clear field"
+            title="Clear"
+            onClick={handleClear}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[var(--color-text-secondary)] transition hover:bg-[var(--color-page-bg)] hover:text-[var(--color-text-primary)]"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -162,7 +194,7 @@ export default function EfficiencyTrendsWithFilters({
         />
       )}
 
-      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card">
+      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
         <p className="text-xs text-[var(--color-text-secondary)] max-w-2xl leading-relaxed">
           The chart shows vehicle fuel efficiency compared to fleet average. Bars extending beyond the vertical amber line indicate above-average performance.
         </p>
@@ -203,7 +235,7 @@ export default function EfficiencyTrendsWithFilters({
             );
           })
         ) : (
-          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-8 text-center shadow-card">
+          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-8 text-center">
             <Search size={32} className="mx-auto mb-3 text-[var(--color-text-secondary)]" strokeWidth={1.8} />
             <p className="text-[var(--color-text-secondary)]">No vehicles match your search criteria</p>
           </div>
@@ -211,7 +243,7 @@ export default function EfficiencyTrendsWithFilters({
       </div>
 
       {/* Pagination control overlay & standard footer */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
 
         {/* Results Count Summary */}
         <div className="text-sm text-[var(--color-text-secondary)]">

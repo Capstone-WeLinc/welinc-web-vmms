@@ -701,7 +701,7 @@ export default function ImportFuelStatement({
         aria-modal="true"
         aria-labelledby="fuel-import-title"
         tabIndex={-1}
-        className="flex max-h-[calc(100dvh-1rem)] w-full max-w-7xl flex-col overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-2xl sm:max-h-[calc(100dvh-2rem)]"
+        className="flex max-h-[calc(100dvh-1rem)] w-full max-w-7xl flex-col overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] sm:max-h-[calc(100dvh-2rem)]"
       >
         <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--color-border)] px-4 py-4 sm:px-6">
           <div className="flex min-w-0 items-start gap-3">
@@ -1006,8 +1006,19 @@ export default function ImportFuelStatement({
                       value={search}
                       onChange={(event) => updateSearch(event.target.value)}
                       placeholder="Search plate, product, invoice, or worksheet"
-                      className="min-h-11 w-full rounded-xl border border-[var(--color-input-border)] bg-[var(--color-input-bg)] py-2 pl-9 pr-3 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)] focus:ring-2 focus:ring-[var(--color-brand-primary)]/20"
+                      className={`min-h-11 w-full rounded-xl border border-[var(--color-input-border)] bg-[var(--color-input-bg)] py-2 pl-9 ${search ? 'pr-10' : 'pr-3'} text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand-primary)] focus:ring-2 focus:ring-[var(--color-brand-primary)]/20`}
                     />
+                    {search ? (
+                      <button
+                        type="button"
+                        aria-label="Clear search"
+                        title="Clear search"
+                        onClick={() => updateSearch('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[var(--color-text-secondary)] transition hover:text-[var(--color-text-primary)]"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    ) : null}
                   </label>
                   <label className="text-sm">
                     <span className="sr-only">Filter imported rows</span>

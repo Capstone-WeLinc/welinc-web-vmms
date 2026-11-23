@@ -185,6 +185,7 @@ function normalizeMaintenanceTask(
     task.date ||
     (typeof rawTask.createdAt === "string" ? rawTask.createdAt.slice(0, 10) : "") ||
     formatLocalDateText();
+  const computedStatusRaw = (task as MaintenanceTask & { computedStatus?: string | null }).computedStatus;
   const normalizedTask = {
     ...task,
     workOrderNumber:
@@ -192,8 +193,11 @@ function normalizeMaintenanceTask(
       (task as MaintenanceTask & { work_order_number?: string }).work_order_number,
     logNumber: task.logNumber ?? rawTask.log_number ?? null,
     targetDueDate: task.targetDueDate ?? rawTask.target_due_date ?? null,
+    dueDate: task.dueDate ?? task.targetDueDate ?? rawTask.target_due_date ?? null,
+    dueOdometer: task.dueOdometer ?? (task as MaintenanceTask & { due_odometer?: number | null }).due_odometer ?? null,
     date,
     status: normalizeMaintenanceStatusValue(task.status),
+    computedStatus: computedStatusRaw ? normalizeMaintenanceStatusValue(computedStatusRaw) : undefined,
     priority: Object.values(MaintenancePriority).includes(task.priority as MaintenancePriority)
       ? task.priority
       : MaintenancePriority.MEDIUM,
@@ -209,11 +213,12 @@ function normalizeMaintenanceTask(
     chiefMechanic: task.chiefMechanic,
   };
 
+  const backendPreferredStatus = normalizedTask.computedStatus ?? normalizedTask.status;
   return {
     ...normalizedTask,
     status: recalculateStatus
-      ? getCalculatedMaintenanceStatus(normalizedTask)
-      : normalizedTask.status,
+      ? getCalculatedMaintenanceStatus({ ...normalizedTask, status: backendPreferredStatus })
+      : backendPreferredStatus,
   };
 }
 
@@ -1241,6 +1246,19 @@ export type OdometerImportResult = {
   rows: OdometerImportRow[];
 };
 
+export type BulkVehicleOdometerUpdateResult = {
+  updated: number;
+  unchanged: number;
+  failed: number;
+  results: Array<{
+    vehicleId: string;
+    odometer: number;
+    currentOdometer: number | null;
+    status: "UPDATED" | "UNCHANGED" | "ERROR";
+    message?: string;
+  }>;
+};
+
 export async function previewOdometerImport(file: File): Promise<OdometerImportResult> {
   if (!useBackend) throw new Error("Odometer import requires the VMMS backend.");
   const body = new FormData();
@@ -1298,6 +1316,49 @@ export async function updateVehicleOdometerRecord(
   return fetchJSON<VehicleRecord>(`/vehicles/${encodeURIComponent(id)}/odometer`, {
     method: "PATCH",
     body: JSON.stringify({ odometer }),
+  });
+}
+
+export async function bulkUpdateVehicleOdometerRecords(
+  items: Array<{ vehicleId: string; odometer: number }>,
+): Promise<BulkVehicleOdometerUpdateResult> {
+  if (!useBackend) {
+    const results: BulkVehicleOdometerUpdateResult["results"] = [];
+    let updated = 0;
+    let unchanged = 0;
+    let failed = 0;
+
+    for (const item of items) {
+      try {
+        const vehicle = await updateVehicleOdometerRecord(item.vehicleId, item.odometer);
+        const changed = vehicle.odometer === item.odometer;
+        results.push({
+          vehicleId: item.vehicleId,
+          odometer: item.odometer,
+          currentOdometer: vehicle.odometer,
+          status: changed ? "UPDATED" : "UNCHANGED",
+        });
+        if (changed) updated += 1;
+        else unchanged += 1;
+      } catch (error) {
+        const idx = mockVehicleRecords.findIndex((vehicle) => vehicle.id === item.vehicleId);
+        results.push({
+          vehicleId: item.vehicleId,
+          odometer: item.odometer,
+          currentOdometer: idx >= 0 ? mockVehicleRecords[idx].odometer : null,
+          status: "ERROR",
+          message: error instanceof Error ? error.message : "Failed to update odometer.",
+        });
+        failed += 1;
+      }
+    }
+
+    return { updated, unchanged, failed, results };
+  }
+
+  return fetchJSON<BulkVehicleOdometerUpdateResult>("/vehicles/odometer/bulk", {
+    method: "POST",
+    body: JSON.stringify({ items }),
   });
 }
 

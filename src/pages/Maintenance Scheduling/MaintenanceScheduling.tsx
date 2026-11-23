@@ -253,7 +253,7 @@ const formatDateStr = (year: number, month: number, day: number) => {
 };
 
 const getTaskStyle = (status: MaintenanceStatus) => {
-  return `border ${getMaintenanceStatusClasses(status)} shadow-sm`;
+  return `border ${getMaintenanceStatusClasses(status)}`;
 };
 
 const getPendingCancellationRequest = (task: MaintenanceTask) =>
@@ -268,7 +268,6 @@ const MaintenanceSchedulingCombined = () => {
   const canEditPriority = canEditWorkOrderPriority(currentUser);
   const location = useLocation();
   const navigate = useNavigate();
-  const focusScheduleId = new URLSearchParams(location.search).get("scheduleId");
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -648,13 +647,13 @@ const MaintenanceSchedulingCombined = () => {
       const dateMatches = (dateRangeFilter === 'All' && !dateFromFilter && !dateToFilter) ||
         candidateDates.some((date) => date && dateFilter(new Date(`${date}T00:00:00`)) &&
           (!dateFromFilter || date >= dateFromFilter) && (!dateToFilter || date <= dateToFilter));
+      const query = searchQuery.toLowerCase();
       const searchMatches =
-        task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        task.vehicleId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        getVehiclePlateNumber(task.vehicleId)
-          .toLowerCase()
-          .includes(searchQuery.toLowerCase()) ||
-        task.assignedDriver.toLowerCase().includes(searchQuery.toLowerCase());
+        (task.workOrderNumber ?? "").toLowerCase().includes(query) ||
+        task.title.toLowerCase().includes(query) ||
+        task.vehicleId.toLowerCase().includes(query) ||
+        getVehiclePlateNumber(task.vehicleId).toLowerCase().includes(query) ||
+        task.assignedDriver.toLowerCase().includes(query);
       return (
         isVisibleSchedule &&
         statusMatches &&
@@ -790,15 +789,19 @@ const MaintenanceSchedulingCombined = () => {
   };
 
   useEffect(() => {
-    if (!focusScheduleId) return;
-    const schedule = tasks.find((task) => task.id === focusScheduleId);
-    if (!schedule) return;
-    // The focus query selects the requested schedule once its asynchronous list is loaded.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSelectedSchedules([schedule]);
-    setSelectedSchedulePage(0);
-    navigate(location.pathname, { replace: true });
-  }, [focusScheduleId, location.pathname, navigate, tasks]);
+    const params = new URLSearchParams(location.search);
+    const search = params.get("search") || params.get("q");
+    if (!search) return;
+    setSearchQuery(search);
+    setCurrentPage(1);
+    params.delete("search");
+    params.delete("q");
+    const nextSearch = params.toString();
+    navigate(
+      { pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : "" },
+      { replace: true },
+    );
+  }, [location.pathname, location.search, navigate]);
 
   const closeScheduleDetails = () => {
     extensionHistoryRequest.current += 1;
@@ -1044,7 +1047,7 @@ const MaintenanceSchedulingCombined = () => {
                           type="button"
                           onClick={() =>
                             navigate(
-                              `${location.pathname}?scheduleId=${encodeURIComponent(prediction.scheduleId)}`,
+                              `${location.pathname}?search=${encodeURIComponent(prediction.workOrderNumber ?? prediction.title ?? "")}`,
                             )
                           }
                           aria-label={`Open ${prediction.vehicleId} ${prediction.title} schedule`}
@@ -1278,14 +1281,14 @@ const MaintenanceSchedulingCombined = () => {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <div className="inline-flex rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-1 shadow-inner">
+              <div className="inline-flex rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-1">
                 <button
                   type="button"
                   onClick={() => setViewMode("list")}
                   aria-pressed={viewMode === "list"}
                   className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-warning)] ${
                     viewMode === "list"
-                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white shadow-md"
+                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white"
                       : "border-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"
                   }`}
                 >
@@ -1298,7 +1301,7 @@ const MaintenanceSchedulingCombined = () => {
                   aria-pressed={viewMode === "calendar"}
                   className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-warning)] ${
                     viewMode === "calendar"
-                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white shadow-md"
+                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white"
                       : "border-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"
                   }`}
                 >
@@ -1715,7 +1718,7 @@ const MaintenanceSchedulingCombined = () => {
                       key={cell.dateStr ?? `blank-${idx}`}
                       className={`min-h-16 rounded-lg border p-1 sm:min-h-20 sm:p-1.5 lg:min-h-32 lg:p-2 ${
                         cell.day
-                          ? `bg-white ${isSelected ? "border-[var(--color-brand-primary)] ring-1 ring-[var(--color-brand-primary)]/30" : isToday ? "border-[#070b45] shadow-sm" : "border-[#dde4ef]"}`
+                          ? `bg-white ${isSelected ? "border-[var(--color-brand-primary)] ring-1 ring-[var(--color-brand-primary)]/30" : isToday ? "border-[#070b45]" : "border-[#dde4ef]"}`
                           : "bg-transparent border-transparent"
                       }`}
                     >
@@ -1893,7 +1896,7 @@ const MaintenanceSchedulingCombined = () => {
       >
         {selectedSchedule && (
             <section
-              className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card"
+              className="overflow-hidden"
             >
               <div className="flex items-center justify-between gap-4 border-b border-[var(--color-divider)] px-4 py-3">
                 <div>

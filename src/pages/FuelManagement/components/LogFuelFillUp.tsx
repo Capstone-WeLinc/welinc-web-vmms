@@ -260,7 +260,7 @@ export default function LogFuelFillUp({ onClose, onAdd, vehicles, stations }: Pr
         aria-modal="true"
         aria-labelledby="log-fuel-fill-up-title"
         tabIndex={-1}
-        className="flex max-h-[calc(100dvh-1rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-2xl sm:max-h-[calc(100dvh-2rem)]"
+        className="flex max-h-[calc(100dvh-1rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] sm:max-h-[calc(100dvh-2rem)]"
       >
         <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--color-border)] px-4 py-4 sm:px-6">
           <div className="flex min-w-0 items-start gap-3">
@@ -410,21 +410,37 @@ export default function LogFuelFillUp({ onClose, onAdd, vehicles, stations }: Pr
 
                 <label htmlFor="fuel-station-search" className="text-sm font-medium text-[var(--color-text-primary)]">
                   Fuel station <span className="text-[var(--color-brand-danger)]">*</span>
-                  <input
-                    id="fuel-station-search"
-                    required
-                    list="fuel-station-options"
-                    autoComplete="off"
-                    className={fieldClass}
-                    value={selectedStation?.name ?? stationSearch}
-                    onChange={(event) => {
-                      const stationName = event.target.value;
-                      const station = stations.find((item) => item.name === stationName);
-                      setStationSearch(stationName);
-                      set('stationId', station?.id ?? '');
-                    }}
-                    placeholder="Search registered stations"
-                  />
+                  <div className="relative mt-1">
+                    <input
+                      id="fuel-station-search"
+                      required
+                      list="fuel-station-options"
+                      autoComplete="off"
+                      className={`${fieldClass} ${(selectedStation?.name ?? stationSearch) ? 'pr-9' : ''}`}
+                      value={selectedStation?.name ?? stationSearch}
+                      onChange={(event) => {
+                        const stationName = event.target.value;
+                        const station = stations.find((item) => item.name === stationName);
+                        setStationSearch(stationName);
+                        set('stationId', station?.id ?? '');
+                      }}
+                      placeholder="Search registered stations"
+                    />
+                    {(selectedStation?.name ?? stationSearch) ? (
+                      <button
+                        type="button"
+                        aria-label="Clear station search"
+                        title="Clear"
+                        onClick={() => {
+                          setStationSearch('');
+                          set('stationId', '');
+                        }}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[var(--color-text-secondary)] transition hover:text-[var(--color-text-primary)]"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                  </div>
                   <datalist id="fuel-station-options">
                     {stations.map((station) => <option key={station.id} value={station.name} />)}
                   </datalist>

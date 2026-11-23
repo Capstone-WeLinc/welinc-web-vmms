@@ -27,7 +27,7 @@ type KPIStatCardProps = {
 
 function KPIStatCard({ icon, value, label, subtitle, iconBgColor, iconColor }: KPIStatCardProps) {
   return (
-    <div className="flex h-full min-h-40 min-w-0 flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card transition-theme">
+    <div className="flex h-full min-h-40 min-w-0 flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 transition-theme">
       <div className="mb-4 flex items-center">
         <div
           style={{
@@ -138,8 +138,6 @@ export default function FuelManagement() {
   // Layout className constants (interaction/layout only)
   const containerClasses = 'space-y-6 relative';
   const kpiGridClasses = 'grid gap-4 sm:grid-cols-2 2xl:grid-cols-4';
-  const tabsLayoutClasses = 'border-b border-[var(--color-border)]';
-  const tabButtonBaseClasses = 'flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 font-medium transition-colors cursor-pointer text-sm';
   const reportsHeaderClasses = 'flex flex-col sm:flex-row sm:items-center justify-between gap-4';
   const reportSwitcherClasses = 'flex flex-wrap gap-1 rounded-xl p-1 border';
   const reportPanelClasses = 'min-h-[15.625rem] pt-4';
@@ -356,19 +354,28 @@ export default function FuelManagement() {
       {!loading && !pageError && kpiFilteredFillUps.length === 0 && <div role="status" className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 text-sm text-[var(--color-text-secondary)]">No fuel records for {appliedFrom} to {appliedTo}. Choose another period or have Operations log a fill-up.</div>}
 
       {/* Tabs Layout */}
-      <div className={tabsLayoutClasses}>
-        <div className="flex gap-1 overflow-x-auto" role="group" aria-label="Fuel management views">
-          {tabs.map(tab => {
+      <div className="flex flex-wrap items-center">
+        <div
+          className="inline-flex max-w-full overflow-x-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-1"
+          role="group"
+          aria-label="Fuel management views"
+        >
+          {tabs.map((tab) => {
             const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
                 type="button"
-                aria-pressed={activeTab === tab.id}
+                aria-pressed={isActive}
                 onClick={() => setActiveTab(tab.id)}
-                className={`${tabButtonBaseClasses} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)] ${activeTab === tab.id ? 'border-[var(--color-brand-primary)] text-[var(--color-brand-primary)]' : 'border-transparent text-[var(--color-text-secondary)]'}`}
+                className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-lg border px-3 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-warning)] ${
+                  isActive
+                    ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)] text-white"
+                    : "border-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"
+                }`}
               >
-                <Icon size={16} strokeWidth={1.8} />
+                <Icon className="mr-2 h-4 w-4" strokeWidth={1.8} />
                 {tab.label}
               </button>
             );
@@ -466,7 +473,7 @@ export default function FuelManagement() {
               type="button"
               aria-pressed={activeReport === 'fleet-wide'}
               onClick={() => setActiveReport('fleet-wide')}
-              className={`${activeReport === 'fleet-wide' ? 'bg-[var(--color-brand-primary)] text-white shadow-[0_8px_24px_rgba(26,31,110,0.12)]' : 'text-[var(--color-text-secondary)]'} whitespace-nowrap rounded-md px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)]`}
+              className={`${activeReport === 'fleet-wide' ? 'bg-[var(--color-brand-primary)] text-white' : 'text-[var(--color-text-secondary)]'} whitespace-nowrap rounded-md px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)]`}
             >
               Fleet-Wide Cost
             </button>
@@ -474,7 +481,7 @@ export default function FuelManagement() {
               type="button"
               aria-pressed={activeReport === 'per-vehicle'}
               onClick={() => setActiveReport('per-vehicle')}
-              className={`${activeReport === 'per-vehicle' ? 'bg-[var(--color-brand-primary)] text-white shadow-[0_8px_24px_rgba(26,31,110,0.12)]' : 'text-[var(--color-text-secondary)]'} whitespace-nowrap rounded-md px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)]`}
+              className={`${activeReport === 'per-vehicle' ? 'bg-[var(--color-brand-primary)] text-white' : 'text-[var(--color-text-secondary)]'} whitespace-nowrap rounded-md px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)]`}
             >
               Per-Vehicle Summary
             </button>
@@ -482,7 +489,7 @@ export default function FuelManagement() {
               type="button"
               aria-pressed={activeReport === 'anomaly-log'}
               onClick={() => setActiveReport('anomaly-log')}
-              className={`${activeReport === 'anomaly-log' ? 'bg-[var(--color-brand-primary)] text-white shadow-[0_8px_24px_rgba(26,31,110,0.12)]' : 'text-[var(--color-text-secondary)]'} whitespace-nowrap rounded-md px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)]`}
+              className={`${activeReport === 'anomaly-log' ? 'bg-[var(--color-brand-primary)] text-white' : 'text-[var(--color-text-secondary)]'} whitespace-nowrap rounded-md px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)]`}
             >
               Anomaly Logs
             </button>

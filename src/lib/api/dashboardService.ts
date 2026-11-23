@@ -14,7 +14,10 @@ export type VmmsDashboardData = {
   garages: GarageOption[];
 };
 
-/** Loads each dashboard resource once and in parallel. */
+/**
+ * Loads the core dashboard datasets in parallel.
+ * Keep this function API-compatible for existing callers and future server aggregation.
+ */
 export async function getVmmsDashboardData(): Promise<VmmsDashboardData> {
   const [schedules, vehicles, garages] = await Promise.all([
     getMaintenanceSchedules(),

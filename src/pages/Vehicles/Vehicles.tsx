@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback, useRef, type ChangeEvent, type MouseEvent } from "react";
-import { Eye, FileSpreadsheet, Gauge, Plus, Settings2, Truck } from "lucide-react";
+﻿import { useState, useEffect, useCallback, useRef, type ChangeEvent, type MouseEvent } from "react";
+import { Eye, FileSpreadsheet, Filter, Gauge, Plus, Settings2, Truck } from "lucide-react";
 import {
   getVehicleRecords,
   createVehicleRecord,
   updateVehicleRecord,
   updateVehicleOdometerRecord,
+  bulkUpdateVehicleOdometerRecords,
   deleteVehicleRecord,
   previewVehicleImport,
   saveVehicleImport,
@@ -31,9 +32,10 @@ import {
 } from "../../components/ui";
 import type { DataTableColumn } from "../../components/ui";
 import { Modal, FormInput } from "../../components/ui";
+import PageHeader from "../../components/PageHeader/PageHeader";
 import { useAuthStore } from "../../store/authStore";
 import { canManageVehicles, canSeeVmmsWebNavigation } from "../../lib/utils/permissions";
-import { filterAndSortVehiclesByBranch } from "../../lib/utils/vehicleBranches";
+import { filterAndSortVehiclesByBranch, type VehicleSortMode } from "../../lib/utils/vehicleBranches";
 
 type VehicleForm = {
   plateNumber: string;
@@ -75,8 +77,12 @@ export default function Vehicles() {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [garageFilter, setGarageFilter] = useState("all");
-  const [garageSort, setGarageSort] = useState<"asc" | "desc" | "none">("none");
+  const [vehicleSort, setVehicleSort] = useState<VehicleSortMode>("DATE_DESC");
+  const [showFilters, setShowFilters] = useState(false);
+  const filterPanelRef = useRef<HTMLDivElement>(null);
   const [showModal, setShowModal] = useState(false);
+  const [vehicleSaveConfirmMode, setVehicleSaveConfirmMode] = useState<"create" | "edit" | null>(null);
+  const [initialEditForm, setInitialEditForm] = useState<ReturnType<typeof emptyForm> | null>(null);
   const [vehicleDetails, setVehicleDetails] = useState<VehicleRecord | null>(null);
   const [auditEntries, setAuditEntries] = useState<VehicleAuditEntry[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -100,6 +106,7 @@ export default function Vehicles() {
   const [maintenanceDefaultsSaving, setMaintenanceDefaultsSaving] =
     useState(false);
   const [maintenanceDefaultsError, setMaintenanceDefaultsError] = useState("");
+  const [maintenanceDefaultsSaveConfirmOpen, setMaintenanceDefaultsSaveConfirmOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm());
   const [formError, setFormError] = useState("");
@@ -109,6 +116,29 @@ export default function Vehicles() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const [odometerImportRows, setOdometerImportRows] = useState<OdometerImportRow[] | null>(null);
   const odometerImportInputRef = useRef<HTMLInputElement>(null);
+  const [isManualBulkOdometerOpen, setIsManualBulkOdometerOpen] = useState(false);
+  const [manualBulkOdometerRows, setManualBulkOdometerRows] = useState<Array<{
+    vehicleId: string;
+    plateNumber: string;
+    makeModel: string;
+    isActive: boolean;
+    currentOdometer: number;
+    newReading: string;
+    status: "idle" | "ready" | "unchanged" | "invalid" | "updated" | "error";
+    message?: string;
+  }>>([]);
+  const [manualBulkOdometerSaving, setManualBulkOdometerSaving] = useState(false);
+  const [manualBulkSaveConfirmOpen, setManualBulkSaveConfirmOpen] = useState(false);
+  const [manualBulkPreparedRows, setManualBulkPreparedRows] = useState<Array<{
+    vehicleId: string;
+    plateNumber: string;
+    makeModel: string;
+    isActive: boolean;
+    currentOdometer: number;
+    newReading: string;
+    status: "idle" | "ready" | "unchanged" | "invalid" | "updated" | "error";
+    message?: string;
+  }>>([]);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deletePlate, setDeletePlate] = useState("");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -169,18 +199,31 @@ export default function Vehicles() {
     return () => document.removeEventListener("click", close);
   }, [openMenuId]);
 
+  // Close filter panel on outside click
+  useEffect(() => {
+    if (!showFilters) return;
+    const handlePointerDown = (event: globalThis.MouseEvent) => {
+      if (!filterPanelRef.current?.contains(event.target as Node)) {
+        setShowFilters(false);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [showFilters]);
+
   const openCreate = () => {
     if (!canManage) return;
     setForm(emptyForm());
     setFormError("");
     setModalMode("create");
     setSelectedId(null);
+    setInitialEditForm(null);
     setShowModal(true);
   };
 
   const openEdit = (v: VehicleRecord) => {
     if (!canManage) return;
-    setForm({
+    const nextForm = {
       plateNumber: v.plateNumber,
       make: v.make ?? "",
       model: v.model,
@@ -190,11 +233,47 @@ export default function Vehicles() {
       odometer: String(v.odometer),
       garageId: v.garageId ?? "",
       isActive: v.isActive,
-    });
+    };
+    setForm(nextForm);
+    setInitialEditForm(nextForm);
     setFormError("");
     setModalMode("edit");
     setSelectedId(v.id);
     setShowModal(true);
+  };
+
+  const hasVehicleEditChanges = () => {
+    if (modalMode !== "edit" || !initialEditForm) return true;
+    const keys: Array<keyof ReturnType<typeof emptyForm>> = [
+      "plateNumber",
+      "make",
+      "model",
+      "year",
+      "engineType",
+      "truckSizeCategory",
+      "garageId",
+      "isActive",
+    ];
+    return keys.some((key) => form[key] !== initialEditForm[key]);
+  };
+
+  const handleRequestVehicleSave = () => {
+    if (modalMode === "create") {
+      setVehicleSaveConfirmMode("create");
+      return;
+    }
+
+    if (!hasVehicleEditChanges()) {
+      setShowModal(false);
+      return;
+    }
+
+    setVehicleSaveConfirmMode("edit");
+  };
+
+  const handleConfirmVehicleSave = async () => {
+    setVehicleSaveConfirmMode(null);
+    await handleSave();
   };
 
   const handleSave = async () => {
@@ -245,6 +324,176 @@ export default function Vehicles() {
     setOdometerError("");
   };
 
+  const openManualBulkOdometer = () => {
+    if (!canManage) return;
+    setManualBulkSaveConfirmOpen(false);
+    setManualBulkPreparedRows([]);
+    setManualBulkOdometerRows(
+      vehicles.map((vehicle) => ({
+        vehicleId: String(vehicle.id),
+        plateNumber: vehicle.plateNumber,
+        makeModel: [vehicle.make, vehicle.model].filter(Boolean).join(" ").trim() || vehicle.model || "Vehicle",
+        isActive: vehicle.isActive,
+        currentOdometer: Number(vehicle.odometer) || 0,
+        newReading: String(Number(vehicle.odometer) || 0),
+        status: "idle" as const,
+        message: vehicle.isActive ? undefined : "Inactive vehicles cannot be updated.",
+      })),
+    );
+    setIsManualBulkOdometerOpen(true);
+  };
+
+  const updateManualBulkOdometerRow = (vehicleId: string, value: string) => {
+    setManualBulkOdometerRows((current) =>
+      current.map((row) =>
+        row.vehicleId === vehicleId
+          ? {
+              ...row,
+              newReading: value,
+              status: "idle",
+              message: row.isActive ? undefined : "Inactive vehicles cannot be updated.",
+            }
+          : row,
+      ),
+    );
+  };
+
+  const handleRequestSaveManualBulkOdometer = () => {
+    if (!canManage || manualBulkOdometerSaving || manualBulkOdometerRows.length === 0) return;
+
+    const preparedRows = manualBulkOdometerRows.map((row) => {
+      const trimmed = row.newReading.trim();
+      const parsed = Number(trimmed);
+
+      if (!row.isActive) {
+        return {
+          ...row,
+          status: "invalid" as const,
+          message: "Odometer updates are only allowed for active vehicles.",
+        };
+      }
+
+      if (!trimmed || !Number.isSafeInteger(parsed) || parsed < 1 || parsed > 2147483647) {
+        return {
+          ...row,
+          status: "invalid" as const,
+          message: "Enter a positive whole-number odometer reading (max 2,147,483,647).",
+        };
+      }
+
+      if (parsed === row.currentOdometer) {
+        return {
+          ...row,
+          status: "unchanged" as const,
+          message: "No change.",
+        };
+      }
+
+      if (parsed < row.currentOdometer) {
+        return {
+          ...row,
+          status: "invalid" as const,
+          message: `Cannot be lower than current reading (${row.currentOdometer.toLocaleString()} km).`,
+        };
+      }
+
+      return { ...row, status: "ready" as const, message: undefined };
+    });
+
+    const rowsToUpdate = preparedRows.filter((row) => row.status === "ready");
+    setManualBulkOdometerRows(preparedRows);
+    if (rowsToUpdate.length === 0) {
+      showToast("No odometer changes to save.", "error");
+      return;
+    }
+
+    setManualBulkPreparedRows(preparedRows);
+    setManualBulkSaveConfirmOpen(true);
+  };
+
+  const handleSaveManualBulkOdometer = async (preparedRows: typeof manualBulkOdometerRows) => {
+    if (!canManage || manualBulkOdometerSaving) return;
+
+    const rowsToUpdate = preparedRows.filter((row) => row.status === "ready");
+    if (rowsToUpdate.length === 0) {
+      setManualBulkOdometerRows(preparedRows);
+      showToast("No odometer changes to save.", "error");
+      return;
+    }
+
+    setManualBulkOdometerSaving(true);
+    setManualBulkOdometerRows(preparedRows);
+
+    try {
+      const result = await bulkUpdateVehicleOdometerRecords(
+        rowsToUpdate.map((row) => ({
+          vehicleId: row.vehicleId,
+          odometer: Number(row.newReading.trim()),
+        })),
+      );
+
+      const resultById = new Map(result.results.map((item) => [item.vehicleId, item]));
+      const finalRows = preparedRows.map((row) => {
+        if (row.status !== "ready") return row;
+        const item = resultById.get(row.vehicleId);
+        if (!item) {
+          return { ...row, status: "error" as const, message: "No result returned for this vehicle." };
+        }
+        if (item.status === "ERROR") {
+          return {
+            ...row,
+            status: "error" as const,
+            message: item.message ?? "Failed to update odometer.",
+            currentOdometer: item.currentOdometer ?? row.currentOdometer,
+          };
+        }
+        if (item.status === "UNCHANGED") {
+          return {
+            ...row,
+            status: "unchanged" as const,
+            message: item.message ?? "No change.",
+            currentOdometer: item.currentOdometer ?? row.currentOdometer,
+          };
+        }
+        return {
+          ...row,
+          status: "updated" as const,
+          message: "Odometer updated.",
+          currentOdometer: item.currentOdometer ?? Number(row.newReading.trim()),
+        };
+      });
+
+      setManualBulkOdometerRows(finalRows);
+
+      if (result.updated > 0) {
+        await load();
+        showToast(
+          `Updated ${result.updated} vehicle odometer${result.updated === 1 ? "" : "s"}.`,
+          result.failed > 0 ? "error" : "success",
+        );
+      } else if (result.failed > 0) {
+        showToast("Could not update odometer readings.", "error");
+      } else {
+        showToast("No odometer changes to save.", "error");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update odometer readings.";
+      setManualBulkOdometerRows(
+        preparedRows.map((row) =>
+          row.status === "ready" ? { ...row, status: "error" as const, message } : row,
+        ),
+      );
+      showToast(message, "error");
+    } finally {
+      setManualBulkOdometerSaving(false);
+    }
+  };
+
+  const handleConfirmSaveManualBulkOdometer = async () => {
+    setManualBulkSaveConfirmOpen(false);
+    await handleSaveManualBulkOdometer(manualBulkPreparedRows);
+  };
+
   const openMaintenanceDefaults = async (vehicle: VehicleRecord) => {
     setOpenMenuId(null);
     setMaintenanceDefaultsVehicle(vehicle);
@@ -286,6 +535,15 @@ export default function Vehicles() {
     } finally {
       setMaintenanceDefaultsLoading(false);
     }
+  };
+
+  const handleRequestSaveMaintenanceDefaults = () => {
+    setMaintenanceDefaultsSaveConfirmOpen(true);
+  };
+
+  const handleConfirmSaveMaintenanceDefaults = async () => {
+    setMaintenanceDefaultsSaveConfirmOpen(false);
+    await handleSaveMaintenanceDefaults();
   };
 
   const handleSaveMaintenanceDefaults = async () => {
@@ -532,7 +790,7 @@ export default function Vehicles() {
         (v.garageName ?? "").toLowerCase().includes(search.toLowerCase()),
     ),
     garageFilter,
-    garageSort,
+    vehicleSort,
   );
 
   const columns: DataTableColumn<VehicleRecord>[] = [
@@ -548,7 +806,7 @@ export default function Vehicles() {
       key: "make",
       header: "Make",
       width: "10%",
-      render: (v) => <span className="text-[#344158]">{v.make ?? "—"}</span>,
+      render: (v) => <span className="text-[#344158]">{v.make ?? "â€”"}</span>,
     },
     {
       key: "model",
@@ -628,41 +886,69 @@ export default function Vehicles() {
         <ToastNotification message={toast.message} type={toast.type} />
       )}
 
-      {/* Page Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#070b45] text-white">
-            <Truck className="h-5 w-5" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-extrabold text-[#141827]">Fleet Vehicles</h1>
-            <p className="text-sm text-[#64748b]">Manage company trucks and logistics vehicles.</p>
-          </div>
-        </div>
-        {canManage && <div className="flex flex-wrap gap-2">
-          <input ref={importInputRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={handleImportFile} />
-          <input ref={odometerImportInputRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={handleOdometerImportFile} />
-          <button type="button" onClick={() => importInputRef.current?.click()} disabled={importing} className="flex items-center gap-2 rounded-xl border border-[#c8ced8] bg-white px-4 py-2.5 text-sm font-semibold text-[#141827] transition hover:bg-slate-50 disabled:opacity-60">
-            <FileSpreadsheet className="h-4 w-4" />
-            {importing ? "Working…" : "Import vehicles"}
-          </button>
-          <button type="button" onClick={() => odometerImportInputRef.current?.click()} disabled={importing} className="flex items-center gap-2 rounded-xl border border-[#c8ced8] bg-white px-4 py-2.5 text-sm font-semibold text-[#141827] transition hover:bg-slate-50 disabled:opacity-60">
-            <Gauge className="h-4 w-4" />
-            {importing ? "Working…" : "Bulk odometer update"}
-          </button>
-          <button
-            id="create-vehicle-btn"
-            onClick={openCreate}
-            className="flex items-center gap-2 rounded-xl bg-[#070b45] px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-[#11175f]"
-          >
-            <Plus className="h-4 w-4" />
-            Create Vehicle
-          </button>
-        </div>}
-      </div>
+      <PageHeader
+        icon={Truck}
+        title="FLEET VEHICLES"
+        subtitle="Manage company trucks and logistics vehicles."
+        action={
+          canManage ? (
+            <div className="flex flex-wrap gap-2">
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="hidden"
+                onChange={handleImportFile}
+              />
+              <input
+                ref={odometerImportInputRef}
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="hidden"
+                onChange={handleOdometerImportFile}
+              />
+              <button
+                type="button"
+                onClick={() => importInputRef.current?.click()}
+                disabled={importing}
+                className="flex items-center gap-2 rounded-xl border border-[#c8ced8] bg-white px-4 py-2.5 text-sm font-semibold text-[#141827] transition hover:bg-slate-50 disabled:opacity-60"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                {importing ? "Workingâ€¦" : "Import vehicles"}
+              </button>
+              <button
+                type="button"
+                onClick={() => odometerImportInputRef.current?.click()}
+                disabled={importing}
+                className="flex items-center gap-2 rounded-xl border border-[#c8ced8] bg-white px-4 py-2.5 text-sm font-semibold text-[#141827] transition hover:bg-slate-50 disabled:opacity-60"
+              >
+                <Gauge className="h-4 w-4" />
+                {importing ? "Workingâ€¦" : "Bulk odometer update"}
+              </button>
+              <button
+                type="button"
+                onClick={openManualBulkOdometer}
+                disabled={importing || manualBulkOdometerSaving || vehicles.length === 0}
+                className="flex items-center gap-2 rounded-xl border border-[#c8ced8] bg-white px-4 py-2.5 text-sm font-semibold text-[#141827] transition hover:bg-slate-50 disabled:opacity-60"
+              >
+                <Gauge className="h-4 w-4" />
+                Manual odometer update
+              </button>
+              <button
+                id="create-vehicle-btn"
+                onClick={openCreate}
+                className="flex items-center gap-2 rounded-xl bg-[#070b45] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#11175f]"
+              >
+                <Plus className="h-4 w-4" />
+                Create Vehicle
+              </button>
+            </div>
+          ) : undefined
+        }
+      />
 
       {/* Table Card */}
-      <div className="overflow-hidden rounded-2xl border border-[#dde4ef] bg-white shadow-sm">
+      <div className="overflow-hidden rounded-2xl border border-[#dde4ef] bg-white">
         {odometerImportRows && (
           <section className="border-b border-[#dde4ef] bg-slate-50 p-5" aria-label="Odometer import preview">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -680,7 +966,7 @@ export default function Vehicles() {
                   disabled={importing || !odometerImportRows.some((row) => row.status === "READY" || row.status === "ERROR")}
                   className="rounded-lg bg-[#070b45] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                 >
-                  {importing ? "Saving…" : "Save valid rows"}
+                  {importing ? "Savingâ€¦" : "Save valid rows"}
                 </button>
               </div>
             </div>
@@ -701,7 +987,7 @@ export default function Vehicles() {
                         onChange={(event) => updateOdometerImportRow(index, "plateNumber", event.target.value)}
                       />
                     </td>
-                    <td className="p-2">{row.currentOdometer === null ? "—" : `${row.currentOdometer.toLocaleString()} km`}</td>
+                    <td className="p-2">{row.currentOdometer === null ? "â€”" : `${row.currentOdometer.toLocaleString()} km`}</td>
                     <td className="p-2">
                       <input
                         aria-label={`Row ${row.row} odometer reading`}
@@ -731,7 +1017,7 @@ export default function Vehicles() {
               </div>
               <div className="flex gap-2">
                 <button type="button" onClick={() => setImportRows(null)} disabled={importing} className="rounded-lg border border-[#c8ced8] bg-white px-3 py-2 text-sm font-semibold text-[#344158] disabled:opacity-60">Cancel</button>
-                <button type="button" onClick={handleSaveImport} disabled={importing || importRows.length === 0} className="rounded-lg bg-[#070b45] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{importing ? "Saving…" : "Save vehicles"}</button>
+                <button type="button" onClick={handleSaveImport} disabled={importing || importRows.length === 0} className="rounded-lg bg-[#070b45] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{importing ? "Savingâ€¦" : "Save vehicles"}</button>
               </div>
             </div>
             <div className="overflow-x-auto rounded-lg border border-[#dde4ef] bg-white">
@@ -764,45 +1050,107 @@ export default function Vehicles() {
           </section>
         )}
         <div className="border-b border-[#dde4ef] p-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <SearchInput
-              placeholder="Search by plate, make, model, or branch..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-sm"
-            />
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <label className="grid gap-1 text-xs font-semibold text-[#344158]">
-                Filter by branch
-                <select
-                  aria-label="Filter vehicles by garage branch"
-                  value={garageFilter}
-                  onChange={(event) => setGarageFilter(event.target.value)}
-                  className="h-10 min-w-44 rounded-lg border border-[#c8ced8] bg-white px-3 text-sm"
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div className="flex-1">
+              <SearchInput
+                placeholder="Search by plate, make, model, or branch..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="max-w-sm"
+              />
+            </div>
+            <div className="flex gap-3">
+              <div ref={filterPanelRef} className="relative">
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setShowFilters((current) => !current);
+                  }}
+                  aria-expanded={showFilters}
+                  aria-label="Filter and sort vehicles"
+                  className="inline-flex items-center gap-2"
                 >
-                  <option value="all">All branches</option>
-                  {garages.map((garage) => <option key={garage.id} value={garage.id}>{garage.name}</option>)}
-                </select>
-              </label>
-              <label className="grid gap-1 text-xs font-semibold text-[#344158]">
-                Sort by branch
-                <select
-                  aria-label="Sort vehicles by garage branch"
-                  value={garageSort}
-                  onChange={(event) => setGarageSort(event.target.value as "asc" | "desc" | "none")}
-                  className="h-10 min-w-40 rounded-lg border border-[#c8ced8] bg-white px-3 text-sm"
-                >
-                  <option value="none">Default order</option>
-                  <option value="asc">Branch A to Z</option>
-                  <option value="desc">Branch Z to A</option>
-                </select>
-              </label>
+                  <span
+                    className={`flex h-11 w-11 items-center justify-center rounded-xl border transition ${
+                      showFilters
+                        ? "border-[#070b45] bg-[#f6f8fc]"
+                        : "border-[#d8dee8] bg-[#f6f8fc] hover:border-[#070b45]"
+                    }`}
+                  >
+                    <Filter className="h-5 w-5 text-[#63728a]" strokeWidth={2.4} />
+                  </span>
+                </button>
+
+                {showFilters && (
+                  <div
+                    className="absolute right-0 top-14 z-40 w-[min(92vw,430px)] rounded-xl border border-[#e0e5ee] bg-white p-5 animate-in fade-in zoom-in-95 duration-150"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <h3 className="text-lg font-extrabold uppercase tracking-wide text-[#141827]">
+                      Filter By
+                    </h3>
+                    <div className="my-4 h-px bg-[#dde3eb]" />
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="grid gap-1 text-xs font-semibold text-[#344158]">
+                        Filter by branch
+                        <select
+                          aria-label="Filter vehicles by garage branch"
+                          value={garageFilter}
+                          onChange={(event) => setGarageFilter(event.target.value)}
+                          className="h-10 min-w-0 w-full rounded-lg border border-[#c8ced8] bg-white px-3 text-sm"
+                        >
+                          <option value="all">All branches</option>
+                          {garages.map((garage) => <option key={garage.id} value={garage.id}>{garage.name}</option>)}
+                        </select>
+                      </label>
+                      <label className="grid gap-1 text-xs font-semibold text-[#344158]">
+                        Sort by
+                        <select
+                          aria-label="Sort vehicles"
+                          value={vehicleSort}
+                          onChange={(event) => setVehicleSort(event.target.value as VehicleSortMode)}
+                          className="h-10 min-w-0 w-full rounded-lg border border-[#c8ced8] bg-white px-3 text-sm"
+                        >
+                          <option value="DATE_DESC">Last Maintenance: Newest first</option>
+                          <option value="DATE_ASC">Last Maintenance: Oldest first</option>
+                          <option value="BRANCH_ASC">Branch A to Z</option>
+                          <option value="BRANCH_DESC">Branch Z to A</option>
+                          <option value="NONE">Default order</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowFilters(false)}
+                        className="h-10 rounded-lg bg-[#070b45] text-sm font-bold text-white transition hover:bg-[#11175f]"
+                      >
+                        Apply
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGarageFilter("all");
+                          setVehicleSort("DATE_DESC");
+                          setShowFilters(false);
+                        }}
+                        className="h-10 rounded-lg border-2 border-[#070b45] bg-white text-sm font-bold text-[#070b45] transition hover:bg-[#f6f8fc]"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-sm text-[#64748b]">Loading vehicles…</div>
+          <div className="flex items-center justify-center py-16 text-sm text-[#64748b]">Loading vehiclesâ€¦</div>
         ) : (
           <div className="overflow-x-auto">
           <DataTable<VehicleRecord>
@@ -820,8 +1168,8 @@ export default function Vehicles() {
         isOpen={canManage && showModal}
         title={modalMode === "create" ? "Create New Vehicle" : "Edit Vehicle"}
         onClose={() => setShowModal(false)}
-        onConfirm={handleSave}
-        confirmLabel={saving ? "Saving…" : "Save Vehicle"}
+        onConfirm={handleRequestVehicleSave}
+        confirmLabel={saving ? "Savingâ€¦" : "Save Vehicle"}
         size="lg"
         className="!p-0 flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden"
       >
@@ -929,18 +1277,18 @@ export default function Vehicles() {
         isOpen={canManage && maintenanceDefaultsVehicle !== null}
         title={
           maintenanceDefaultsVehicle
-            ? `Maintenance Defaults — ${maintenanceDefaultsVehicle.plateNumber}`
+            ? `Maintenance Defaults â€” ${maintenanceDefaultsVehicle.plateNumber}`
             : "Maintenance Defaults"
         }
         onClose={() => setMaintenanceDefaultsVehicle(null)}
-        onConfirm={handleSaveMaintenanceDefaults}
-        confirmLabel={maintenanceDefaultsSaving ? "Saving…" : "Save Defaults"}
+        onConfirm={handleRequestSaveMaintenanceDefaults}
+        confirmLabel={maintenanceDefaultsSaving ? "Savingâ€¦" : "Save Defaults"}
         size="lg"
-        className="!p-0 flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden"
+        className="!max-w-4xl !p-0 flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden"
       >
         {maintenanceDefaultsLoading ? (
           <p className="py-8 text-center text-sm text-[#64748b]">
-            Loading vehicle maintenance defaults…
+            Loading vehicle maintenance defaultsâ€¦
           </p>
         ) : maintenanceDefaultsError && !maintenanceDefaults ? (
           <div
@@ -1093,10 +1441,10 @@ export default function Vehicles() {
 
       <Modal
         isOpen={canManage && odometerVehicle !== null}
-        title={odometerVehicle ? `Update Odometer — ${odometerVehicle.plateNumber}` : "Update Odometer"}
+        title={odometerVehicle ? `Update Odometer â€” ${odometerVehicle.plateNumber}` : "Update Odometer"}
         onClose={() => setOdometerVehicle(null)}
         onConfirm={handleOdometerUpdate}
-        confirmLabel={odometerSaving ? "Updating…" : "Update Odometer"}
+        confirmLabel={odometerSaving ? "Updatingâ€¦" : "Update Odometer"}
         size="sm"
       >
         {odometerVehicle && (
@@ -1129,7 +1477,7 @@ export default function Vehicles() {
       {/* Vehicle Details */}
       <Modal
         isOpen={vehicleDetails !== null}
-        title={vehicleDetails ? `Vehicle Details — ${vehicleDetails.plateNumber}` : "Vehicle Details"}
+        title={vehicleDetails ? `Vehicle Details â€” ${vehicleDetails.plateNumber}` : "Vehicle Details"}
         onClose={() => setVehicleDetails(null)}
         footer={(
           <div className="flex justify-end">
@@ -1149,18 +1497,18 @@ export default function Vehicles() {
           <>
             <dl className="divide-y divide-[#dde4ef]">
               {[
-                ["Plate Number", vehicleDetails.plateNumber],
-                ["Make", vehicleDetails.make || "Not recorded"],
-                ["Model", vehicleDetails.model],
-                ["Year", vehicleDetails.year ?? "Not recorded"],
-                ["Engine Type", vehicleDetails.engineType || "Not recorded"],
-                ["Truck Size/Category", vehicleDetails.truckSizeCategory || "Not recorded"],
-                ["Garage Branch", vehicleDetails.garageName || "Unassigned"],
-                ["Odometer Reading", `${Number(vehicleDetails.odometer).toLocaleString()} km`],
-                ["Last Maintenance Date", formatMaintenanceDate(vehicleDetails.lastMaintenanceDate)],
-                ["Vehicle Status", vehicleDetails.status.replace(/_/g, " ")],
-                ["Fleet Status", vehicleDetails.isActive ? "Active" : "Inactive"],
-              ].map(([label, value]) => (
+                { label: "Plate Number", value: vehicleDetails.plateNumber },
+                { label: "Make", value: vehicleDetails.make || "Not recorded" },
+                { label: "Model", value: vehicleDetails.model },
+                { label: "Year", value: vehicleDetails.year ?? "Not recorded" },
+                { label: "Engine Type", value: vehicleDetails.engineType || "Not recorded" },
+                { label: "Truck Size/Category", value: vehicleDetails.truckSizeCategory || "Not recorded" },
+                { label: "Garage Branch", value: vehicleDetails.garageName || "Unassigned" },
+                { label: "Odometer Reading", value: `${Number(vehicleDetails.odometer).toLocaleString()} km` },
+                { label: "Last Maintenance Date", value: formatMaintenanceDate(vehicleDetails.lastMaintenanceDate) },
+                { label: "Vehicle Status", value: <StatusBadge status={vehicleDetails.status.replace(/_/g, " ")} /> },
+                { label: "Fleet Status", value: <StatusBadge status={vehicleDetails.isActive ? "Active" : "Inactive"} /> },
+              ].map(({ label, value }) => (
                 <div key={label} className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-[minmax(10rem,0.8fr)_2fr] sm:gap-4">
                   <dt className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">{label}</dt>
                   <dd className="break-words text-sm font-semibold text-[#141827]">{value}</dd>
@@ -1172,7 +1520,7 @@ export default function Vehicles() {
               <section className="mt-6 border-t border-[#dde4ef] pt-5" aria-labelledby="vehicle-audit-title">
                 <h3 id="vehicle-audit-title" className="text-sm font-bold uppercase tracking-wide text-[#141827]">Audit History</h3>
                 {auditLoading ? (
-                  <p className="py-4 text-sm text-[#64748b]">Loading audit history…</p>
+                  <p className="py-4 text-sm text-[#64748b]">Loading audit historyâ€¦</p>
                 ) : auditError ? (
                   <p className="py-4 text-sm text-red-700" role="alert">Could not load audit history.</p>
                 ) : auditEntries.length === 0 ? (
@@ -1186,7 +1534,7 @@ export default function Vehicles() {
                           <time className="text-xs text-[#64748b]" dateTime={entry.createdAt}>{new Date(entry.createdAt).toLocaleString()}</time>
                         </div>
                         <p className="mt-1 break-words text-sm text-[#344158]">
-                          {entry.previousValue ?? "Empty"} <span aria-label="changed to">→</span> {entry.newValue ?? "Empty"}
+                          {entry.previousValue ?? "Empty"} <span aria-label="changed to">â†’</span> {entry.newValue ?? "Empty"}
                         </p>
                         <p className="mt-1 text-xs text-[#64748b]">Edited by {entry.email}</p>
                       </li>
@@ -1198,6 +1546,140 @@ export default function Vehicles() {
           </>
         )}
       </Modal>
+
+      {/* Manual Bulk Odometer Update */}
+      <Modal
+        isOpen={canManage && isManualBulkOdometerOpen}
+        title="Manual odometer update"
+        onClose={() => !manualBulkOdometerSaving && setIsManualBulkOdometerOpen(false)}
+        footer={null}
+        size="lg"
+        className="!max-w-6xl !p-0 flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden"
+      >
+        <div className="flex min-h-0 flex-col gap-4 px-6 py-5">
+          <p className="text-sm text-[#64748b]">
+            Update odometer readings for all vehicles in one place. Enter new readings only for vehicles that changed; unchanged and invalid rows are skipped or flagged.
+          </p>
+          <div className="min-h-0 overflow-auto rounded-xl border border-[#dde4ef]">
+            <table className="w-full min-w-[48rem] border-collapse text-sm">
+              <thead className="sticky top-0 z-10 bg-slate-50 text-left">
+                <tr className="border-b border-[#dde4ef] text-xs font-semibold uppercase tracking-wide text-[#64748b]">
+                  <th className="px-4 py-3">Vehicle</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Current (km)</th>
+                  <th className="px-4 py-3">New reading (km)</th>
+                  <th className="px-4 py-3">Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                {manualBulkOdometerRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-sm text-[#64748b]">
+                      No vehicles available to update.
+                    </td>
+                  </tr>
+                ) : manualBulkOdometerRows.map((row) => {
+                  const statusTone =
+                    row.status === "updated" ? "text-emerald-700 bg-emerald-50 border-emerald-200" :
+                    row.status === "invalid" || row.status === "error" ? "text-red-700 bg-red-50 border-red-200" :
+                    row.status === "unchanged" ? "text-slate-700 bg-slate-100 border-slate-200" :
+                    row.status === "ready" ? "text-[#070b45] bg-[#e8ecff] border-[#c7d2fe]" :
+                    "text-[#344158] bg-white border-[#dde4ef]";
+                  const statusLabel =
+                    row.status === "updated" ? "Updated" :
+                    row.status === "invalid" ? "Invalid" :
+                    row.status === "error" ? "Error" :
+                    row.status === "unchanged" ? "Unchanged" :
+                    row.status === "ready" ? "Ready" : "Idle";
+                  return (
+                    <tr key={row.vehicleId} className="border-b border-[#edf2f7] align-top last:border-b-0">
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-[#141827]">{row.plateNumber}</p>
+                        <p className="text-xs text-[#64748b]">{row.makeModel}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${row.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                          {row.isActive ? "Active" : "Inactive"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-medium text-[#141827]">{row.currentOdometer.toLocaleString()} km</td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="number"
+                          min={1}
+                          max={2147483647}
+                          step={1}
+                          value={row.newReading}
+                          onChange={(event) => updateManualBulkOdometerRow(row.vehicleId, event.target.value)}
+                          disabled={manualBulkOdometerSaving || !row.isActive}
+                          className="w-full max-w-[12rem] rounded-lg border border-[#c8ced8] px-3 py-2 text-sm text-[#141827] outline-none transition focus:border-[#070b45] focus:ring-2 focus:ring-[#070b45]/10 disabled:cursor-not-allowed disabled:bg-slate-100"
+                          aria-label={`New odometer reading for ${row.plateNumber}`}
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-semibold ${statusTone}`}>{statusLabel}</span>
+                        {row.message && <p className="mt-1 max-w-xs text-xs text-[#64748b]">{row.message}</p>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex items-center justify-end gap-3 border-t border-[#dde4ef] pt-4">
+            <button
+              type="button"
+              onClick={() => setIsManualBulkOdometerOpen(false)}
+              disabled={manualBulkOdometerSaving}
+              className="rounded-xl border border-[#c8ced8] px-4 py-2.5 text-sm font-semibold text-[#344158] transition hover:bg-slate-50 disabled:opacity-60"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={handleRequestSaveManualBulkOdometer}
+              disabled={manualBulkOdometerSaving || manualBulkOdometerRows.length === 0}
+              className="rounded-xl bg-[#070b45] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#11175f] disabled:opacity-60"
+            >
+              {manualBulkOdometerSaving ? "Saving..." : "Save odometer updates"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Manual Bulk Odometer Save Confirmation */}
+      <ConfirmationModal
+        isOpen={canManage && manualBulkSaveConfirmOpen}
+        title="Save bulk odometer updates"
+        message={`Save ${manualBulkPreparedRows.filter((row) => row.status === "ready").length} odometer update${manualBulkPreparedRows.filter((row) => row.status === "ready").length === 1 ? "" : "s"}?`}
+        confirmLabel="Save updates"
+        onConfirm={() => void handleConfirmSaveManualBulkOdometer()}
+        onCancel={() => setManualBulkSaveConfirmOpen(false)}
+      />
+
+      {/* Maintenance Defaults Save Confirmation */}
+      <ConfirmationModal
+        isOpen={canManage && maintenanceDefaultsSaveConfirmOpen}
+        title="Save maintenance defaults"
+        message={`Save maintenance defaults for ${maintenanceDefaultsVehicle?.plateNumber ?? "this vehicle"}?`}
+        confirmLabel="Save defaults"
+        onConfirm={() => void handleConfirmSaveMaintenanceDefaults()}
+        onCancel={() => setMaintenanceDefaultsSaveConfirmOpen(false)}
+      />
+
+      {/* Vehicle Save Confirmation */}
+      <ConfirmationModal
+        isOpen={canManage && vehicleSaveConfirmMode !== null}
+        title={vehicleSaveConfirmMode === "edit" ? "Save vehicle changes" : "Create vehicle"}
+        message={
+          vehicleSaveConfirmMode === "edit"
+            ? `Save changes to vehicle ${form.plateNumber.trim() || "(no plate number entered)"}?`
+            : `Create vehicle ${form.plateNumber.trim() || "(no plate number entered)"}?`
+        }
+        confirmLabel={vehicleSaveConfirmMode === "edit" ? "Save changes" : "Create vehicle"}
+        onConfirm={() => void handleConfirmVehicleSave()}
+        onCancel={() => setVehicleSaveConfirmMode(null)}
+      />
 
       {/* Delete Confirmation */}
       <ConfirmationModal

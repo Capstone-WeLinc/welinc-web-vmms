@@ -113,7 +113,7 @@
 
   /* Tables */
   :where(div, section):has(> table) {
-    @apply border border-[var(--color-border)] shadow-card;
+    @apply border border-[var(--color-border)];
   }
 
   thead {
@@ -233,7 +233,7 @@
 
   /* Card Component */
   .card-base {
-    @apply rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-card transition-theme;
+    @apply rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 transition-theme;
   }
 
   /* Modal Component */
@@ -242,7 +242,7 @@
   }
 
   .modal-content {
-    @apply rounded-xl bg-[var(--color-card-bg)] border border-[var(--color-border)] p-6 max-w-md w-full shadow-xl;
+    @apply rounded-xl bg-[var(--color-card-bg)] border border-[var(--color-border)] p-6 max-w-md w-full;
   }
 
   /* Focus Ring Utility */

@@ -1,15 +1,32 @@
 import type { AnomalyLog } from '../types';
 import FuelStatusBadge from './FuelStatusBadge';
-import { Filter, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Filter, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
 interface InputFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
   id: string;
   className?: string;
+  onClear?: () => void;
 }
 
-function InputField({ label, id, className, ...props }: InputFieldProps) {
+function InputField({ label, id, className, onClear, value, onChange, ...props }: InputFieldProps) {
+  const hasValue = value !== undefined && String(value).length > 0;
+  const clearable = hasValue && Boolean(onClear || onChange);
+
+  const handleClear = () => {
+    if (onClear) {
+      onClear();
+      return;
+    }
+    if (onChange) {
+      (onChange as (event: { target: { value: string }; currentTarget: { value: string } }) => void)({
+        target: { value: '' },
+        currentTarget: { value: '' },
+      });
+    }
+  };
+
   return (
     <div className="flex flex-col gap-1 w-full">
       {label && (
@@ -20,11 +37,26 @@ function InputField({ label, id, className, ...props }: InputFieldProps) {
           {label}
         </label>
       )}
-      <input
-        id={id}
-        className={`w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 ${className || ''}`}
-        {...props}
-      />
+      <div className="relative w-full">
+        <input
+          id={id}
+          value={value}
+          onChange={onChange}
+          className={`w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 ${clearable ? 'pr-9' : 'pr-3'} py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-primary)]/30 ${className || ''}`}
+          {...props}
+        />
+        {clearable ? (
+          <button
+            type="button"
+            aria-label="Clear field"
+            title="Clear"
+            onClick={handleClear}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[var(--color-text-secondary)] transition hover:bg-[var(--color-page-bg)] hover:text-[var(--color-text-primary)]"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -138,7 +170,7 @@ export default function AnomalyDetectionLog({ logs = [] }: AnomalyDetectionLogPr
   const headerRightClasses = 'flex gap-3 items-center';
   const filterButtonClasses = (active: boolean) => `flex items-center gap-2 px-3 py-2 rounded-lg border transition ${active ? 'active-filter' : 'border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)]'} cursor-pointer`;
   const filtersPanelClasses = 'grid gap-3 grid-cols-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4';
-  const tableWrapClasses = 'overflow-auto overscroll-contain rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card lg:max-h-[min(40rem,calc(100vh-12rem))]';
+  const tableWrapClasses = 'overflow-auto overscroll-contain rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] lg:max-h-[min(40rem,calc(100vh-12rem))]';
   const tableClasses = 'w-full text-left text-sm';
   const tableHeaderRowClasses = 'border-b border-[var(--color-divider)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)]';
   const tableHeaderCellClasses = 'px-4 py-3.5 font-medium text-xs uppercase tracking-wider';
@@ -162,6 +194,7 @@ export default function AnomalyDetectionLog({ logs = [] }: AnomalyDetectionLogPr
               placeholder="Search by vehicle name, plate, or model..."
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
+              onClear={() => handleSearchChange('')}
             />
           </div>
           <div className={headerRightClasses}>

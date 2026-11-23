@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useId } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Wrench,
   FileDown,
@@ -209,15 +210,17 @@ const syncExecutionWithTemplate = (
 // Layout & interaction classes
 const containerClasses = 'space-y-6';
 const headerSectionClasses = 'flex flex-col gap-4 border-b border-[var(--color-divider)] px-6 py-5 sm:flex-row sm:items-center sm:justify-between';
-const detailViewClasses = 'rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-xl backdrop-blur-sm transition-all';
+const detailViewClasses = 'rounded-[14px] border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 backdrop-blur-sm transition-all';
 const backButtonClasses = 'mb-6 flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-brand-primary)]';
 const executionTableClasses = 'mb-6 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)]';
 const tableHeaderClasses = 'grid grid-cols-[minmax(12rem,1fr)_64px_64px_88px_minmax(10rem,1.1fr)_88px] items-center gap-2 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]';
 const checklistHeaderClasses = 'grid grid-cols-[minmax(12rem,1fr)_64px_64px_minmax(10rem,1fr)_88px] items-center gap-2 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)] px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]';
-const warningBannerClasses = 'mt-6 flex items-start gap-3 rounded-lg border border-[var(--color-status-error)]/20 bg-[var(--color-status-error)]/10 px-5 py-4 shadow-[0_0_15px_rgba(239,68,68,0.06)]';
+const warningBannerClasses = 'mt-6 flex items-start gap-3 rounded-lg border border-[var(--color-status-error)]/20 bg-[var(--color-status-error)]/10 px-5 py-4';
 
 export default function WorkOrders() {
   const partsSuggestionsId = `work-order-parts-${useId().replace(/:/g, "")}`;
+  const location = useLocation();
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
   const [selectedTask, setSelectedTask] = useState<MaintenanceTask | null>(
     null,
@@ -442,6 +445,9 @@ export default function WorkOrders() {
     const query = searchQuery.toLowerCase();
     activeTasks = activeTasks.filter(
       (t) =>
+        t.id.toLowerCase().includes(query) ||
+        (t.workOrderNumber ?? "").toLowerCase().includes(query) ||
+        (t.logNumber ?? "").toLowerCase().includes(query) ||
         t.title.toLowerCase().includes(query) ||
         t.vehicleId.toLowerCase().includes(query) ||
         getVehiclePlateNumber(t.vehicleId).toLowerCase().includes(query) ||
@@ -511,6 +517,21 @@ export default function WorkOrders() {
       return next;
     });
   };
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const search = params.get("search") || params.get("q");
+    if (!search) return;
+    setSearchQuery(search);
+    setCurrentPage(1);
+    params.delete("search");
+    params.delete("q");
+    const nextSearch = params.toString();
+    navigate(
+      { pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : "" },
+      { replace: true },
+    );
+  }, [location.pathname, location.search, navigate]);
 
   const handlePriorityChange = async (task: MaintenanceTask, priority: MaintenancePriority) => {
     if (!canEditPriority || priority === (task.priority ?? MaintenancePriority.MEDIUM)) return;
@@ -738,7 +759,7 @@ export default function WorkOrders() {
     const rightDetails = details.slice(half);
 
     return (
-      <div className="mb-6 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-[0_25px_50px_rgba(0,0,0,0.08)]">
+      <div className="mb-6 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-card-bg)]">
         <div className="px-6 py-4 border-b border-[var(--color-divider)] bg-[var(--color-card-bg)]">
           <h3 className="text-sm font-bold text-[var(--color-text-primary)]">
             Maintenance Schedule Details
@@ -839,8 +860,8 @@ export default function WorkOrders() {
 
     if (aiError && !loadingAiRec) {
       return (
-        <div className="mb-6 overflow-hidden rounded-3xl border border-rose-500/30 bg-rose-500/5 shadow-sm p-8 text-center flex flex-col items-center justify-center space-y-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-500 border border-rose-500/20 shadow-sm">
+        <div className="mb-6 overflow-hidden rounded-3xl border border-rose-500/30 bg-rose-500/5 p-8 text-center flex flex-col items-center justify-center space-y-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-500 border border-rose-500/20">
             <AlertTriangle size={32} />
           </div>
           <div className="max-w-xl space-y-1.5">
@@ -854,7 +875,7 @@ export default function WorkOrders() {
             type="button"
             onClick={() => handleGenerateWorkOrderAi(selectedTask)}
             disabled={loadingAiRec}
-            className="mt-2 flex items-center gap-2 rounded-xl bg-[var(--color-brand-primary)] px-6 py-2.5 text-xs font-semibold text-white shadow-md hover:brightness-110 transition disabled:opacity-50"
+            className="mt-2 flex items-center gap-2 rounded-xl bg-[var(--color-brand-primary)] px-6 py-2.5 text-xs font-semibold text-white hover:brightness-110 transition disabled:opacity-50"
           >
             <Sparkles size={15} />
             <span>Re-Generate Recommendations</span>
@@ -865,8 +886,8 @@ export default function WorkOrders() {
 
     if (!aiRec && !loadingAiRec) {
       return (
-        <div className="mb-6 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-[0_25px_50px_rgba(0,0,0,0.08)] p-8 text-center flex flex-col items-center justify-center space-y-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20 shadow-sm">
+        <div className="mb-6 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-8 text-center flex flex-col items-center justify-center space-y-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20">
             <BrainCircuit size={32} />
           </div>
           <div className="max-w-xl space-y-1.5">
@@ -879,7 +900,7 @@ export default function WorkOrders() {
             type="button"
             onClick={() => handleGenerateWorkOrderAi(selectedTask)}
             disabled={loadingAiRec}
-            className="mt-2 flex items-center gap-2 rounded-xl bg-[var(--color-brand-primary)] px-6 py-2.5 text-xs font-semibold text-white shadow-md hover:brightness-110 transition disabled:opacity-50"
+            className="mt-2 flex items-center gap-2 rounded-xl bg-[var(--color-brand-primary)] px-6 py-2.5 text-xs font-semibold text-white hover:brightness-110 transition disabled:opacity-50"
           >
             <Sparkles size={15} />
             <span>Generate AI Recommendations</span>
@@ -890,8 +911,8 @@ export default function WorkOrders() {
 
     if (!aiRec && loadingAiRec) {
       return (
-        <div className="mb-6 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-12 text-center flex flex-col items-center justify-center space-y-4 shadow-sm">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20 shadow-sm">
+        <div className="mb-6 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-12 text-center flex flex-col items-center justify-center space-y-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20">
             <Sparkles size={28} className="animate-spin" />
           </div>
           <div className="max-w-xl space-y-1.5">
@@ -907,7 +928,7 @@ export default function WorkOrders() {
     if (!aiRec) return null;
 
     return (
-      <div className="mb-6 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-[0_25px_50px_rgba(0,0,0,0.08)]">
+      <div className="mb-6 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-card-bg)]">
         {/* Advisory Header Bar */}
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--color-divider)] bg-gradient-to-r from-blue-950/20 via-[var(--color-card-bg)] to-indigo-950/20 px-6 py-4">
           <div className="flex items-center gap-3">
@@ -933,7 +954,7 @@ export default function WorkOrders() {
             type="button"
             onClick={() => handleGenerateWorkOrderAi(selectedTask)}
             disabled={loadingAiRec}
-            className="flex items-center gap-2 rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:brightness-110 transition disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl bg-[var(--color-brand-primary)] px-4 py-2 text-xs font-semibold text-white hover:brightness-110 transition disabled:opacity-50"
           >
             <Sparkles size={14} className={loadingAiRec ? "animate-spin" : ""} />
             <span>{loadingAiRec ? "Generating..." : "Re-Generate Recommendations"}</span>
@@ -1968,7 +1989,7 @@ export default function WorkOrders() {
                   onClick={() => setWorkOrderStep(item.step)}
                   className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
                     workOrderStep === item.step
-                      ? "bg-[var(--color-brand-primary)] text-white shadow-card"
+                      ? "bg-[var(--color-brand-primary)] text-white"
                       : "text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)]"
                   }`}
                 >
@@ -1986,7 +2007,7 @@ export default function WorkOrders() {
           )}
 
           {!canMechanicStartTask && (
-            <div className="mb-6 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-4 shadow-card">
+            <div className="mb-6 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-4">
               <AlertTriangle
                 className="mt-0.5 text-amber-500"
                 size={20}
@@ -2008,10 +2029,10 @@ export default function WorkOrders() {
               <div
                 className={`mb-4 overflow-hidden rounded-xl px-6 py-4 ${
                   !canMechanicStartTask
-                    ? "border border-amber-500/30 bg-amber-500/10 shadow-card"
+                    ? "border border-amber-500/30 bg-amber-500/10"
                     : !currentExecution.done
-                    ? "border border-[var(--color-brand-primary)]/20 bg-[var(--color-brand-primary)]/10 shadow-card"
-                    : "border border-[var(--color-status-success)]/30 bg-[var(--color-status-success)]/10 shadow-card"
+                    ? "border border-[var(--color-brand-primary)]/20 bg-[var(--color-brand-primary)]/10"
+                    : "border border-[var(--color-status-success)]/30 bg-[var(--color-status-success)]/10"
                 }`}
               >
                 <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
@@ -2090,14 +2111,14 @@ export default function WorkOrders() {
                                   "checked",
                                 )
                               }
-                              className={`flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-200 ${
+                              className={`flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white transition-all duration-200 ${
                                 item.status === "checked"
                                   ? "border-emerald-400 bg-emerald-400/20"
                                   : "border-[var(--color-border)] hover:border-emerald-500/60"
                               } ${!canModifySelectedTask || currentExecution.done || !canMechanicStartTask ? "cursor-not-allowed opacity-60" : ""}`}
                             >
                               {item.status === "checked" && (
-                                <span className="h-3.5 w-3.5 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.16)]" />
+                                <span className="h-3.5 w-3.5 rounded-full bg-emerald-400" />
                               )}
                             </button>
                           </div>
@@ -2112,14 +2133,14 @@ export default function WorkOrders() {
                                   "changed",
                                 )
                               }
-                              className={`flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-200 ${
+                              className={`flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white transition-all duration-200 ${
                                 item.status === "changed"
                                   ? "border-sky-400 bg-sky-400/20"
                                   : "border-[var(--color-border)] hover:border-sky-500/60"
                               } ${!canModifySelectedTask || currentExecution.done || !canMechanicStartTask ? "cursor-not-allowed opacity-60" : ""}`}
                             >
                               {item.status === "changed" && (
-                                <span className="h-3.5 w-3.5 rounded-full bg-sky-400 shadow-[0_0_0_4px_rgba(56,189,248,0.16)]" />
+                                <span className="h-3.5 w-3.5 rounded-full bg-sky-400" />
                               )}
                             </button>
                           </div>
@@ -2134,14 +2155,14 @@ export default function WorkOrders() {
                                   "notChecked",
                                 )
                               }
-                              className={`flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-200 ${
+                              className={`flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white transition-all duration-200 ${
                                 item.status === "notChecked"
                                   ? "border-amber-400 bg-amber-400/20"
                                   : "border-[var(--color-border)] hover:border-amber-500/60"
                               } ${!canModifySelectedTask || currentExecution.done || !canMechanicStartTask ? "cursor-not-allowed opacity-60" : ""}`}
                             >
                               {item.status === "notChecked" && (
-                                <span className="h-3.5 w-3.5 rounded-full bg-amber-400 shadow-[0_0_0_4px_rgba(251,191,36,0.18)]" />
+                                <span className="h-3.5 w-3.5 rounded-full bg-amber-400" />
                               )}
                             </button>
                           </div>
@@ -2201,7 +2222,7 @@ export default function WorkOrders() {
                     </div>
 
                     {isMechanic && canMechanicStartTask && !canCompleteExecution && !currentExecution.done && (
-                      <div className="mt-6 flex items-start gap-3 rounded-lg border border-rose-500/20 bg-rose-500/10 px-5 py-4 shadow-[0_0_15px_rgba(244,63,94,0.1)]">
+                      <div className="mt-6 flex items-start gap-3 rounded-lg border border-rose-500/20 bg-rose-500/10 px-5 py-4">
                         <AlertTriangle
                           className="mt-0.5 text-rose-400"
                           size={20}
@@ -2244,7 +2265,7 @@ export default function WorkOrders() {
           )}
 
           {selectedTask && currentExecution.items.some((item) => item.status === "changed") && (!isMechanic || workOrderStep === 2) && (
-            <div className="mb-6 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card">
+            <div className="mb-6 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)]">
               <div className="border-b border-[var(--color-divider)] px-6 py-4">
                 <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
                   Parts Used, Cost, and Photos
@@ -2399,8 +2420,8 @@ export default function WorkOrders() {
           <div
             className={`mb-4 rounded-xl px-6 py-4 ${
               currentExecution.done
-                ? "border border-emerald-500/30 bg-emerald-500/10 shadow-card"
-                : "border border-amber-500/30 bg-amber-500/10 shadow-card"
+                ? "border border-emerald-500/30 bg-emerald-500/10"
+                : "border border-amber-500/30 bg-amber-500/10"
             }`}
           >
             <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
@@ -2466,14 +2487,14 @@ export default function WorkOrders() {
                     <button
                       onClick={() => handleStatusChange(item.id, "pass")}
                       disabled={!canModifySelectedTask}
-                      className={`flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-200 ${
+                      className={`flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white transition-all duration-200 ${
                         item.status === "pass"
                           ? "border-emerald-400 bg-emerald-400/20"
                           : "border-[var(--color-border)] hover:border-emerald-500/60"
                       } ${!canModifySelectedTask ? "cursor-not-allowed opacity-50" : ""}`}
                     >
                       {item.status === "pass" && (
-                        <span className="h-3.5 w-3.5 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.16)]" />
+                        <span className="h-3.5 w-3.5 rounded-full bg-emerald-400" />
                       )}
                     </button>
                   </div>
@@ -2482,14 +2503,14 @@ export default function WorkOrders() {
                     <button
                       onClick={() => handleStatusChange(item.id, "fail")}
                       disabled={!canModifySelectedTask}
-                      className={`flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-200 ${
+                      className={`flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white transition-all duration-200 ${
                         item.status === "fail"
                           ? "border-rose-400 bg-rose-400/20"
                           : "border-[var(--color-border)] hover:border-rose-500/60"
                       } ${!canModifySelectedTask ? "cursor-not-allowed opacity-50" : ""}`}
                     >
                       {item.status === "fail" && (
-                        <span className="h-3.5 w-3.5 rounded-full bg-rose-400 shadow-[0_0_0_4px_rgba(251,113,133,0.18)]" />
+                        <span className="h-3.5 w-3.5 rounded-full bg-rose-400" />
                       )}
                     </button>
                   </div>
@@ -2604,7 +2625,7 @@ export default function WorkOrders() {
           )}
 
           {isMechanic && workOrderStep === 3 && failedCount > 0 && canComplete && (
-            <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-700 shadow-card">
+            <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-700">
               {`${failedCount} item(s) failed. You can still mark the inspection complete.`}
             </div>
           )}
@@ -2636,7 +2657,7 @@ export default function WorkOrders() {
                 </ActionButton>
               ) : selectedTask?.status === MaintenanceStatus.COMPLETED ? (
                 <button
-                  className="no-print flex items-center gap-2 rounded-lg bg-emerald-500 px-6 py-2.5 text-sm font-bold text-white shadow-[0_0_10px_rgba(52,211,153,0.12)]"
+                  className="no-print flex items-center gap-2 rounded-lg bg-emerald-500 px-6 py-2.5 text-sm font-bold text-white"
                   disabled
                 >
                   Completed

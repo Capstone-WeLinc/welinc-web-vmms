@@ -186,14 +186,15 @@ export const getCalculatedMaintenanceStatus = (
   }
 
   if (task.triggerType === MaintenanceTriggerType.TIME) {
-    const activationDate = getTimeBasedActivationDate(task);
-    if (!activationDate) return fallbackStatus;
+    const dueDate = parseLocalDate(task.targetDueDate) ?? parseLocalDate(task.dueDate) ?? getTimeBasedActivationDate(task);
+    if (!dueDate) return fallbackStatus;
 
     const today = new Date(currentDate);
     today.setHours(0, 0, 0, 0);
+    dueDate.setHours(0, 0, 0, 0);
 
-    if (today.getTime() < activationDate.getTime()) return MaintenanceStatus.PENDING;
-    if (today.getTime() === activationDate.getTime()) return MaintenanceStatus.DUE;
+    if (today.getTime() < dueDate.getTime()) return MaintenanceStatus.PENDING;
+    if (today.getTime() === dueDate.getTime()) return MaintenanceStatus.DUE;
     return MaintenanceStatus.OVERDUE;
   }
 

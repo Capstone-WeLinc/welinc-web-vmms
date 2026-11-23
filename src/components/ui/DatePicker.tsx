@@ -105,7 +105,7 @@ export default function DatePicker({
       ) : null}
 
       {open ? (
-        <div className="absolute left-0 top-[3.25rem] z-50 w-[min(92vw,390px)] rounded-xl border border-[#e0e5ee] bg-white p-6 shadow-[0_18px_45px_rgba(15,23,42,0.18)] animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute left-0 top-[3.25rem] z-50 w-[min(92vw,390px)] rounded-xl border border-[#e0e5ee] bg-white p-6 animate-in fade-in zoom-in-95 duration-150">
           <div className="mb-7 flex items-center justify-between">
             <button
               type="button"

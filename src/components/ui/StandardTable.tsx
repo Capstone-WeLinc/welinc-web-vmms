@@ -17,6 +17,7 @@ import {
   MoreVertical,
   Search,
   Trash2,
+  X,
 } from "lucide-react";
 
 
@@ -119,7 +120,7 @@ export const ConfirmationModal = ({
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
-      <section className="w-full max-w-md rounded-xl bg-white p-6 shadow-[0_24px_70px_rgba(15,23,42,0.28)]">
+      <section className="w-full max-w-md rounded-xl bg-white p-6">
         <h2 className="text-lg font-extrabold uppercase tracking-wide text-[#141827]">
           {title}
         </h2>
@@ -136,16 +137,16 @@ export const ConfirmationModal = ({
             className="mt-5 h-12 w-full rounded-xl border-2 border-[#9a8f8f] bg-white px-4 text-sm text-[#141827] outline-none transition focus:border-[#070b45]"
           />
         ) : null}
-        <div className="mt-6 flex flex-wrap gap-3">
+        <div className="mt-6 flex flex-wrap justify-end gap-3">
+          <ActionButton variant="secondary" onClick={onCancel} disabled={busy}>
+            {cancelLabel}
+          </ActionButton>
           <ActionButton
             variant={variant === "danger" ? "danger" : "primary"}
             onClick={onConfirm}
             disabled={confirmDisabled || busy}
           >
             {confirmLabel}
-          </ActionButton>
-          <ActionButton variant="secondary" onClick={onCancel} disabled={busy}>
-            {cancelLabel}
           </ActionButton>
         </div>
       </section>
@@ -156,17 +157,49 @@ export const ConfirmationModal = ({
 interface SearchInputProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, "className"> {
   className?: string;
+  onClear?: () => void;
 }
 
-export const SearchInput = ({ className = "", ...props }: SearchInputProps) => (
-  <div className={`relative ${className}`}>
-    <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9aa3b2]" />
-    <input
-      className="h-11 w-full rounded-xl border border-[#c8ced8] bg-white pl-10 pr-4 text-sm text-[#141827] placeholder:text-[#9aa3b2] outline-none transition focus:border-[#070b45] focus:ring-2 focus:ring-[#070b45]/10"
-      {...props}
-    />
-  </div>
-);
+export const SearchInput = ({ className = "", onClear, value, onChange, ...props }: SearchInputProps) => {
+  const hasValue = value !== undefined && String(value).length > 0;
+  const clearable = hasValue && Boolean(onClear || onChange);
+
+  const handleClear = () => {
+    if (onClear) {
+      onClear();
+      return;
+    }
+    if (onChange) {
+      (onChange as (event: { target: { value: string }; currentTarget: { value: string } }) => void)({
+        target: { value: "" },
+        currentTarget: { value: "" },
+      });
+    }
+  };
+
+  return (
+    <div className={`relative ${className}`}>
+      <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9aa3b2]" />
+      <input
+        value={value}
+        onChange={onChange}
+        className={`h-11 w-full rounded-xl border border-[#c8ced8] bg-white pl-10 ${clearable ? "pr-10" : "pr-4"} text-sm text-[#141827] placeholder:text-[#9aa3b2] outline-none transition focus:border-[#070b45] focus:ring-2 focus:ring-[#070b45]/10`}
+        {...props}
+      />
+      {clearable ? (
+        <button
+          type="button"
+          aria-label="Clear search"
+          title="Clear search"
+          onClick={handleClear}
+          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[#9aa3b2] transition hover:bg-[#eef2f7] hover:text-[#141827]"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      ) : null}
+    </div>
+  );
+};
 
 export interface DropdownSelectOption {
   value: string;
@@ -314,7 +347,7 @@ export const FilterDropdown = ({
         <span
           className={`flex h-11 w-11 items-center justify-center rounded-xl border transition ${
             open
-              ? "border-[#070b45] bg-[#f6f8fc] shadow-sm"
+              ? "border-[#070b45] bg-[#f6f8fc]"
               : "border-[#d8dee8] bg-[#f6f8fc] hover:border-[#070b45]"
           }`}
         >
@@ -325,7 +358,7 @@ export const FilterDropdown = ({
 
       {open && (
         <div
-          className="absolute right-0 top-14 z-40 w-[min(92vw,430px)] rounded-xl border border-[#e0e5ee] bg-white p-5 shadow-[0_18px_45px_rgba(15,23,42,0.18)] animate-in fade-in zoom-in-95 duration-150"
+          className="absolute right-0 top-14 z-40 w-[min(92vw,430px)] rounded-xl border border-[#e0e5ee] bg-white p-5 animate-in fade-in zoom-in-95 duration-150"
           onClick={(event) => event.stopPropagation()}
         >
           <h3 className="text-lg font-extrabold uppercase tracking-wide text-[#141827]">
@@ -531,20 +564,24 @@ export const StatusBadge = ({ status }: { status: StandardStatus }) => {
     .toLowerCase()
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
   const style =
-    normalized.includes("complete") || normalized === "active"
-      ? "border-[#30c967] bg-[#dcfce7] text-[#22ad4f]"
-      : normalized.includes("progress")
-        ? "border-[#168cff] bg-[#dff0ff] text-[#168cff]"
+    normalized === "available" || normalized === "active" || normalized.includes("complete")
+      ? "border-[#30c967] bg-[#dcfce7] text-[#15803d]"
+      : normalized === "in transit" || normalized === "in use" || normalized.includes("progress")
+        ? "border-[#168cff] bg-[#dff0ff] text-[#0369a1]"
+      : normalized === "under maintenance"
+        ? "border-[#f59e0b] bg-[#fef3c7] text-[#b45309]"
+      : normalized === "under repair"
+        ? "border-[#f97316] bg-[#ffedd5] text-[#c2410c]"
       : normalized === "due"
         ? "border-[#7c3aed] bg-[#ede9fe] text-[#6d28d9]"
-      : normalized === "overdue"
+      : normalized === "overdue" || normalized === "out of service" || normalized === "unavailable"
         ? "border-[#ef4444] bg-[#fee2e2] text-[#b91c1c]"
       : normalized.includes("flag")
         ? "border-[#ef4444] bg-[#fee2e2] text-[#ef4444]"
-        : normalized.includes("pending") || normalized.includes("hold")
-          ? "border-[#ff7a00] bg-[#fff3e4] text-[#ff7a00]"
-          : normalized.includes("failed") || normalized.includes("cancel") || normalized.includes("lock")
-            ? "border-[#ef4444] bg-[#fee2e2] text-[#ef4444]"
+        : normalized.includes("pending") || normalized.includes("hold") || normalized === "reserved"
+          ? "border-[#ff7a00] bg-[#fff3e4] text-[#c2410c]"
+          : normalized.includes("failed") || normalized.includes("cancel") || normalized.includes("lock") || normalized.includes("retired") || normalized.includes("decommission")
+            ? "border-[#ef4444] bg-[#fee2e2] text-[#b91c1c]"
             : normalized.includes("inactive")
               ? "border-[#94a3b8] bg-[#f1f5f9] text-[#64748b]"
               : "border-[#94a3b8] bg-[#f8fafc] text-[#475569]";
@@ -620,7 +657,7 @@ export const ActionMenu = ({
 
   const menu = open && hasActions && position ? (
     <div
-      className="fixed z-[100] w-40 overflow-hidden rounded-xl border border-[#dce3ed] bg-white py-1.5 text-left shadow-[0_10px_24px_rgba(15,23,42,0.22)]"
+      className="fixed z-[100] w-40 overflow-hidden rounded-xl border border-[#dce3ed] bg-white py-1.5 text-left"
       style={position}
       onClick={(event) => event.stopPropagation()}
     >
@@ -702,7 +739,7 @@ export const ExportButton = ({ open, onToggle, onPdf, onExcel, onCsv }: ExportBu
     </button>
     {open && (
       <div
-        className="absolute right-0 top-12 z-30 w-40 overflow-hidden rounded-xl border border-[#dce3ed] bg-white py-1.5 shadow-[0_10px_24px_rgba(15,23,42,0.22)]"
+        className="absolute right-0 top-12 z-30 w-40 overflow-hidden rounded-xl border border-[#dce3ed] bg-white py-1.5"
         onClick={(event) => event.stopPropagation()}
       >
         <button type="button" className="block w-full px-4 py-2.5 text-left text-sm text-[#344158] hover:bg-[#f8fafc]" onClick={onPdf}>

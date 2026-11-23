@@ -90,7 +90,7 @@ function Metric({
   color: string;
 }) {
   return (
-    <div className="flex h-full min-h-32 min-w-0 items-start justify-between gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 shadow-card">
+    <div className="flex h-full min-h-32 min-w-0 items-start justify-between gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
       <div className="min-w-0 flex-1">
         <p className="text-xs font-semibold uppercase leading-5 tracking-wide text-[var(--color-text-secondary)]">{label}</p>
         <p className="mt-2 break-words text-2xl font-bold leading-tight tabular-nums text-[var(--color-text-primary)]">{value}</p>
