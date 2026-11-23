@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Check, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { Check, Pencil, Plus, RefreshCw, Trash2, Warehouse, X } from "lucide-react";
 import { ConfirmationModal } from "../../components/ui";
+import PageHeader from "../../components/PageHeader/PageHeader";
 import { useAuthStore } from "../../store/authStore";
 import { canManageSchedules } from "../../lib/utils/permissions";
 import {
@@ -134,25 +135,21 @@ export default function OutsourcedProviders() {
 
   return (
     <main className="mx-auto w-full max-w-5xl p-6">
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">
-            Outsourced Providers
-          </h1>
-          <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-            Providers used by maintenance schedules can only be activated or
-            deactivated.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          className="inline-flex items-center gap-2 rounded-md border border-[var(--color-border)] px-3 py-2 text-sm"
-        >
-          <RefreshCw size={16} />
-          Refresh
-        </button>
-      </div>
+      <PageHeader
+        icon={Warehouse}
+        title="OUTSOURCED PROVIDERS"
+        subtitle="Providers used by maintenance schedules can only be activated or deactivated."
+        action={
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            className="inline-flex items-center gap-2 rounded-md border border-[var(--color-border)] px-3 py-2 text-sm"
+          >
+            <RefreshCw size={16} />
+            Refresh
+          </button>
+        }
+      />
 
       {error && (
         <p role="alert" className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">

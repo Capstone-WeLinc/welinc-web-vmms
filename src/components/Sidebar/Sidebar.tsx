@@ -1,17 +1,15 @@
-import type { UserRecord } from "../../lib/mocks/vmmsMocks";
+﻿import type { UserRecord } from "../../lib/mocks/vmmsMocks";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   canSeeVmmsNavigationPath,
 } from "../../lib/utils/permissions";
 import { Button, ConfirmationModal, Modal } from "../ui";
-import { fetchJSON } from "../../lib/api/httpClient";
-import { signOut } from "../../lib/session/session";
-import { canSwitchSystem, switchSystemUrl } from "../../lib/session/switchSystem";
+import { PORTAL_URL, signOut } from "../../lib/session/session";
 import logo from "../../assets/logo.png";
 import {
   LayoutDashboard,
-  LayoutGrid,
   LogOut,
   Users,
   CalendarClock,
@@ -25,14 +23,14 @@ import {
   Truck,
   Warehouse,
   ChevronDown,
+  ChevronUp,
   Compass,
   Building2,
   FolderKanban,
+  House,
   Layers,
   ShieldCheck,
   ScrollText,
-  Bell,
-  AlertTriangle,
   type LucideIcon,
 } from "lucide-react";
 
@@ -53,16 +51,6 @@ interface NavGroup {
   items: NavItem[];
 }
 
-interface NotificationRecord {
-  id: string;
-  title: string;
-  message: string;
-  type: "info" | "success" | "warning" | "error";
-  isRead: boolean;
-  createdAt: string;
-  maintenanceScheduleId?: string | null;
-}
-
 const navGroups: NavGroup[] = [
   {
     category: "Overview",
@@ -73,7 +61,7 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    category: "Fleet & Facilities",
+    category: "Assets",
     icon: Building2,
     items: [
       { label: "Fleet Vehicles", icon: Truck, path: "/vehicles" },
@@ -82,7 +70,7 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    category: "Maintenance",
+    category: "Operations",
     icon: FolderKanban,
     items: [
       { label: "Scheduling", icon: CalendarClock, path: "/maintenance-scheduling" },
@@ -93,7 +81,7 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    category: "Operations",
+    category: "Finance",
     icon: Layers,
     items: [
       { label: "Fuel Management", icon: Fuel, path: "/fuel-management" },
@@ -123,26 +111,26 @@ const roleLabelMap: Record<string, string> = {
 };
 
 const asideBaseClasses =
-  "group/sidebar fixed left-0 top-0 z-50 flex h-screen w-20 flex-col overflow-hidden border-r border-[#111a62] bg-[#020849] shadow-[10px_0_32px_rgba(2,8,73,0.28)] transition-[width,box-shadow] duration-300 ease-out hover:w-[280px] hover:shadow-[18px_0_42px_rgba(2,8,73,0.34)]";
+  "group/sidebar fixed left-0 top-0 z-50 flex h-screen w-20 flex-col overflow-hidden border-r border-white/[0.08] bg-[#0f1445] text-white transition-[width,box-shadow] duration-300 ease-out hover:w-[280px]";
 const headerClasses =
-  "flex h-20 items-center gap-0 border-b border-white/10 px-5 transition-all duration-300 group-hover/sidebar:gap-3 shrink-0";
+  "flex h-20 items-center gap-0 border-b border-white/[0.08] px-5 transition-all duration-300 group-hover/sidebar:gap-3 shrink-0";
 const logoFrameClasses =
-  "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[#f4c400]/80 bg-[#061056] shadow-[0_0_0_1px_rgba(244,196,0,0.15)]";
+  "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/[0.12] bg-white/[0.08]";
 const labelRevealClasses =
   "max-w-0 min-w-0 translate-x-2 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 ease-out group-hover/sidebar:max-w-[190px] group-hover/sidebar:translate-x-0 group-hover/sidebar:opacity-100";
 const navClasses =
-  "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden py-3 px-2 space-y-2.5 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.12)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-white/10 hover:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-thumb]:rounded-full";
-const footerClasses = "border-t border-white/10 px-3 py-3 shrink-0 bg-[#020849]/90 backdrop-blur-sm";
+  "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden py-3 px-2 space-y-2.5 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.18)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-white/10 hover:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-thumb]:rounded-full";
+const footerClasses = "border-t border-white/[0.08] px-3 py-3 shrink-0 bg-[#0f1445]";
 const baseButtonClasses =
-  "mx-auto flex h-9 w-9 items-center justify-center gap-0 rounded-lg text-sm font-semibold transition-all duration-200 group-hover/sidebar:mx-0 group-hover/sidebar:w-full group-hover/sidebar:justify-start group-hover/sidebar:gap-3 group-hover/sidebar:px-3.5";
+  "mx-auto flex h-9 w-9 items-center justify-center gap-0 rounded-lg text-sm font-medium transition-all duration-200 group-hover/sidebar:mx-0 group-hover/sidebar:w-full group-hover/sidebar:justify-start group-hover/sidebar:gap-3 group-hover/sidebar:px-3.5";
 
 const getNavLinkClass = (isActive: boolean) => {
   const base =
-    "mx-auto flex h-9 w-9 items-center justify-center gap-0 rounded-lg text-sm font-medium tracking-tight transition-all duration-200 group-hover/sidebar:mx-0 group-hover/sidebar:w-[calc(100%-0.5rem)] group-hover/sidebar:ml-1.5 group-hover/sidebar:justify-start group-hover/sidebar:gap-3 group-hover/sidebar:px-3";
+    "mx-auto flex h-9 w-9 items-center justify-center gap-0 rounded-md text-sm font-medium tracking-tight transition-colors duration-200 group-hover/sidebar:mx-0 group-hover/sidebar:w-[calc(100%-0.5rem)] group-hover/sidebar:ml-1.5 group-hover/sidebar:justify-start group-hover/sidebar:gap-3 group-hover/sidebar:px-3 outline-none focus-visible:ring-2 focus-visible:ring-white/70";
   if (isActive) {
-    return `${base} bg-[#f4c400] text-[#030737] font-bold shadow-[0_4px_16px_rgba(244,196,0,0.25)]`;
+    return `${base} bg-white/[0.13] text-[#e8b800] font-semibold`;
   }
-  return `${base} text-[#9ba4db] hover:bg-white/10 hover:text-white`;
+  return `${base} text-white/70 hover:bg-white/[0.08] hover:text-white`;
 };
 
 const isItemActive = (itemPath: string, currentPath: string) => {
@@ -158,58 +146,10 @@ export default function Sidebar({ currentUser }: SidebarProps) {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isSignOutErrorOpen, setIsSignOutErrorOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
-  const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
-  const loadNotifications = useCallback(async () => {
-    if (!currentUser) {
-      setNotifications([]);
-      return;
-    }
-
-    try {
-      setIsLoadingNotifications(true);
-      const nextNotifications = await fetchJSON<NotificationRecord[]>("/notifications");
-      setNotifications(Array.isArray(nextNotifications) ? nextNotifications : []);
-    } catch {
-      setNotifications([]);
-    } finally {
-      setIsLoadingNotifications(false);
-    }
-  }, [currentUser]);
-
-  useEffect(() => {
-    if (!currentUser) {
-      // Do not retain one user's notifications after sign-out or account switching.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setNotifications([]);
-      return;
-    }
-    // Defer the initial request so its loading state is applied after this effect completes.
-    const initialLoad = window.setTimeout(() => void loadNotifications(), 0);
-    const interval = window.setInterval(() => { void loadNotifications(); }, 30_000);
-    return () => {
-      window.clearTimeout(initialLoad);
-      window.clearInterval(interval);
-    };
-  }, [currentUser, loadNotifications]);
-
-  const markNotificationAsRead = async (notificationId: string) => {
-    try {
-      const updatedNotification = await fetchJSON<NotificationRecord>(`/notifications/${notificationId}/read`, {
-        method: "PATCH",
-      });
-      setNotifications((current) =>
-        current.map((notification) =>
-          notification.id === notificationId ? { ...notification, isRead: updatedNotification.isRead } : notification,
-        ),
-      );
-    } catch {
-      // Ignore update failures and keep the UI responsive.
-    }
-  };
-
-  const unreadNotificationCount = notifications.filter((notification) => !notification.isRead).length;
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [accountMenuPosition, setAccountMenuPosition] = useState<{ left: number; bottom: number } | null>(null);
+  const accountMenuRef = useRef<HTMLDivElement | null>(null);
+  const accountMenuPanelRef = useRef<HTMLDivElement | null>(null);
 
   const visibleGroups = useMemo(() => {
     return navGroups
@@ -258,9 +198,55 @@ export default function Sidebar({ currentUser }: SidebarProps) {
     setExpandedCategory((prev) => (prev === category ? null : category));
   };
 
-  const canSwitch = canSwitchSystem(currentUser
-    ? { systems: currentUser.systems ?? [], role: currentUser.role }
-    : null);
+  useEffect(() => {
+    if (!isAccountMenuOpen) return;
+
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (accountMenuRef.current?.contains(target) || accountMenuPanelRef.current?.contains(target)) {
+        return;
+      }
+      setIsAccountMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsAccountMenuOpen(false);
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isAccountMenuOpen]);
+
+  useEffect(() => {
+    setIsAccountMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!isAccountMenuOpen) {
+      setAccountMenuPosition(null);
+      return;
+    }
+
+    const updatePosition = () => {
+      const rect = accountMenuRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setAccountMenuPosition({
+        left: rect.left,
+        bottom: Math.max(8, window.innerHeight - rect.top + 8),
+      });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [isAccountMenuOpen]);
 
   const handleSignOut = async () => {
     if (isSigningOut) return;
@@ -276,8 +262,9 @@ export default function Sidebar({ currentUser }: SidebarProps) {
     void handleSignOut();
   };
 
-  const handleSwitchSystem = () => {
-    window.location.assign(switchSystemUrl());
+  const handleBackToHome = () => {
+    setIsAccountMenuOpen(false);
+    window.location.assign(PORTAL_URL ? `${PORTAL_URL}/` : "/");
   };
 
   const currentRole = currentUser ? roleLabelMap[currentUser.role] ?? currentUser.role : "Administrator";
@@ -289,6 +276,7 @@ export default function Sidebar({ currentUser }: SidebarProps) {
         .slice(0, 2)
         .toUpperCase()
     : "AD";
+  const showBackToHome = currentUser?.role !== "OPERATIONS";
 
   return (
     <>
@@ -299,7 +287,7 @@ export default function Sidebar({ currentUser }: SidebarProps) {
           </div>
           <div className={labelRevealClasses}>
             <p className="text-base font-extrabold leading-5 text-white">WeLinc Logistics</p>
-            <p className="mt-0.5 text-[10px] font-medium leading-3 text-[#9ba4db]">
+            <p className="mt-0.5 text-[10px] font-medium leading-3 text-white/55">
               Vehicle Maintenance (VMMS)
             </p>
           </div>
@@ -316,17 +304,17 @@ export default function Sidebar({ currentUser }: SidebarProps) {
               <div key={group.category} className="space-y-1">
                 {/* Subtle separator between groups */}
                 {groupIdx > 0 && (
-                  <div className="mx-2 my-1 border-t border-white/5" />
+                  <div className="mx-2 my-1 border-t border-white/[0.08]" />
                 )}
 
                 {/* Collapsible Group Header Button */}
                 <button
                   type="button"
                   onClick={() => toggleGroup(group.category)}
-                  className={`group/header relative mx-auto flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-left transition-all duration-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#f4c400]/50 group-hover/sidebar:mx-0 group-hover/sidebar:h-auto group-hover/sidebar:w-full group-hover/sidebar:justify-between group-hover/sidebar:px-2.5 group-hover/sidebar:py-1.5 ${
+                  className={`group/header relative mx-auto flex h-9 w-9 cursor-pointer items-center justify-center rounded-md text-left transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70 group-hover/sidebar:mx-0 group-hover/sidebar:h-auto group-hover/sidebar:w-full group-hover/sidebar:justify-between group-hover/sidebar:px-2.5 group-hover/sidebar:py-1.5 ${
                     isExpanded || hasActiveChild
-                      ? "bg-white/[0.08] text-[#f4c400]"
-                      : "text-[#9ba4db] hover:bg-white/5 hover:text-white"
+                      ? "bg-white/[0.08] text-white"
+                      : "text-white/70 hover:bg-white/[0.08] hover:text-white"
                   }`}
                   aria-expanded={isExpanded}
                   aria-controls={groupId}
@@ -336,27 +324,27 @@ export default function Sidebar({ currentUser }: SidebarProps) {
                     <GroupIcon
                       className={`h-4.5 w-4.5 shrink-0 transition-colors ${
                         isExpanded || hasActiveChild
-                          ? "text-[#f4c400]"
-                          : "text-[#9ba4db] group-hover/header:text-white"
+                          ? "text-white"
+                          : "text-white/70 group-hover/header:text-white"
                       }`}
                       strokeWidth={2}
                     />
-                    <span className="hidden select-none text-[10.5px] font-extrabold uppercase tracking-wider text-[#f4c400] transition-all duration-200 group-hover/sidebar:inline truncate">
+                    <span className="hidden select-none text-[10.5px] font-semibold uppercase tracking-wider text-white/55 transition-all duration-200 group-hover/sidebar:inline truncate">
                       {group.category}
                     </span>
                   </div>
 
                   {/* Active dot indicator in collapsed rail mode */}
                   {hasActiveChild && !isExpanded && (
-                    <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-[#f4c400] shadow-[0_0_8px_#f4c400] group-hover/sidebar:hidden" />
+                    <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-white/80 group-hover/sidebar:hidden" />
                   )}
 
                   {/* Chevron Icon in expanded sidebar mode */}
                   <ChevronDown
                     className={`hidden h-3.5 w-3.5 shrink-0 transition-transform duration-200 group-hover/sidebar:inline ${
                       isExpanded
-                        ? "rotate-0 text-[#f4c400]"
-                        : "-rotate-90 text-[#9ba4db]/70 group-hover/header:text-white"
+                        ? "rotate-0 text-white/70"
+                        : "-rotate-90 text-white/55 group-hover/header:text-white"
                     }`}
                     strokeWidth={2.2}
                   />
@@ -401,60 +389,87 @@ export default function Sidebar({ currentUser }: SidebarProps) {
         </nav>
 
         <div className={footerClasses}>
-          <button
-            className={`${baseButtonClasses} relative mb-2 text-[#9ba4db] hover:bg-white/10 hover:text-white`}
-            onClick={() => setIsNotificationsOpen(true)}
-            title="Notifications"
-            type="button"
-          >
-            <div className="relative">
-              <Bell size={18} strokeWidth={1.8} />
-              {unreadNotificationCount > 0 && (
-                <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#f4c400] px-1 text-[9px] font-bold text-[#020849]">
-                  {unreadNotificationCount}
-                </span>
-              )}
-            </div>
-            <span className={labelRevealClasses}>Notifications</span>
-          </button>
-
-          <NavLink
-            to="/profile"
-            title="Profile"
-            className="mb-2.5 flex items-center justify-center gap-0 rounded-lg p-1.5 transition-all duration-200 hover:bg-white/10 group-hover/sidebar:justify-start group-hover/sidebar:gap-3"
-          >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f4c400] text-xs font-extrabold text-[#030737] shadow-sm">
-              {currentInitials}
-            </div>
-            <div className={labelRevealClasses}>
-              <p className="text-xs font-bold leading-4 text-white truncate max-w-[140px]">
-                {currentUser ? currentUser.name : "Admin User"}
-              </p>
-              <p className="text-[10px] font-medium leading-3 text-[#9ba4db]">{currentRole}</p>
-            </div>
-          </NavLink>
-
-          {canSwitch && (
+          {showBackToHome && (
             <button
-              className={`${baseButtonClasses} mb-1 text-[#9ba4db] hover:bg-white/10 hover:text-white`}
-              onClick={handleSwitchSystem}
-              title="Switch system"
+              className={`${baseButtonClasses} mb-1 text-white/70 hover:bg-white/[0.08] hover:text-white`}
+              onClick={handleBackToHome}
+              title="Back to home"
               type="button"
             >
-              <LayoutGrid size={18} strokeWidth={1.8} />
-              <span className={labelRevealClasses}>Switch system</span>
+              <House size={18} strokeWidth={1.8} />
+              <span className={labelRevealClasses}>Back to home</span>
             </button>
           )}
 
-          <button
-            className={`${baseButtonClasses} text-[#ef4444] hover:bg-red-500/15`}
-            onClick={() => setIsLogoutModalOpen(true)}
-            title="Sign Out"
-            type="button"
-          >
-            <LogOut size={18} strokeWidth={1.8} />
-            <span className={labelRevealClasses}>Sign Out</span>
-          </button>
+          <div ref={accountMenuRef} className="relative mt-1">
+            {isAccountMenuOpen && accountMenuPosition && createPortal(
+              <div
+                ref={accountMenuPanelRef}
+                role="menu"
+                aria-label="Account menu"
+                className="fixed z-[70] w-56 rounded-lg border border-white/[0.12] bg-[#1a2158] p-1.5 shadow-lg"
+                style={{ left: accountMenuPosition.left, bottom: accountMenuPosition.bottom }}
+              >
+                <div className="border-b border-white/[0.08] px-2.5 py-2">
+                  <p className="truncate text-sm font-semibold text-white">
+                    {currentUser ? currentUser.name : "Admin User"}
+                  </p>
+                  <p className="truncate text-xs text-white/60">
+                    {currentUser?.email ?? currentRole}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="mt-1 flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-white/80 transition-colors hover:bg-white/[0.08] hover:text-white"
+                  onClick={() => {
+                    setIsAccountMenuOpen(false);
+                    navigate("/profile");
+                  }}
+                >
+                  <Users size={16} strokeWidth={1.8} aria-hidden="true" />
+                  <span>Profile</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-red-300 transition-colors hover:bg-red-500/15 hover:text-red-200"
+                  onClick={() => {
+                    setIsAccountMenuOpen(false);
+                    setIsLogoutModalOpen(true);
+                  }}
+                >
+                  <LogOut size={16} strokeWidth={1.8} aria-hidden="true" />
+                  <span>Sign out</span>
+                </button>
+              </div>,
+              document.body,
+            )}
+
+            <button
+              type="button"
+              onClick={() => setIsAccountMenuOpen((open) => !open)}
+              aria-label={`Account menu for ${currentUser ? currentUser.name : "Admin User"}`}
+              aria-expanded={isAccountMenuOpen}
+              className="flex w-full items-center justify-center gap-0 rounded-md p-1.5 transition-colors duration-200 hover:bg-white/[0.08] group-hover/sidebar:justify-start group-hover/sidebar:gap-3"
+              title={currentUser ? currentUser.name : "Account"}
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.12] text-xs font-bold text-white">
+                {currentInitials}
+              </div>
+              <div className={labelRevealClasses}>
+                <p className="max-w-[140px] truncate text-xs font-semibold leading-4 text-white">
+                  {currentUser ? currentUser.name : "Admin User"}
+                </p>
+                <p className="text-[10px] font-medium leading-3 text-white/55">{currentRole}</p>
+              </div>
+              <ChevronUp
+                size={14}
+                className={`ml-auto hidden text-white/55 transition-transform group-hover/sidebar:block ${isAccountMenuOpen ? "" : "rotate-180"}`}
+                aria-hidden="true"
+              />
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -484,78 +499,8 @@ export default function Sidebar({ currentUser }: SidebarProps) {
         }
       />
 
-      <Modal
-        isOpen={isNotificationsOpen}
-        title="Notifications"
-        onClose={() => setIsNotificationsOpen(false)}
-        size="sm"
-        footer={
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => setIsNotificationsOpen(false)}
-              className="rounded-lg bg-[#070b45] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#111a62]"
-            >
-              Close
-            </button>
-          </div>
-        }
-      >
-        <div className="space-y-3">
-          {isLoadingNotifications ? (
-            <p className="text-xs text-[#8a98ad]">Loading notifications...</p>
-          ) : notifications.length === 0 ? (
-            <p className="text-xs text-[#8a98ad]">
-              You have no new notifications.
-            </p>
-          ) : (
-            notifications.map((notification) => (
-              <button
-                key={notification.id}
-                type="button"
-                onClick={() => {
-                  void markNotificationAsRead(notification.id);
-                  if (notification.maintenanceScheduleId) {
-                    setIsNotificationsOpen(false);
-                    navigate(`/maintenance-scheduling?scheduleId=${encodeURIComponent(notification.maintenanceScheduleId)}`);
-                  }
-                }}
-                aria-label={`${notification.title}. ${notification.message}${notification.maintenanceScheduleId ? ". Open work order." : ". Mark as read."}`}
-                className={`w-full rounded-lg border p-3 text-left transition ${
-                  notification.title === "Critical maintenance escalation"
-                    ? notification.isRead ? "border-red-300 bg-red-50" : "border-red-500 bg-red-50 ring-1 ring-red-200"
-                    : notification.isRead ? "border-[#dce3ed] bg-[#f7f9fc]" : "border-[#f4c400]/60 bg-[#fffaf0]"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {notification.title === "Critical maintenance escalation" ? <AlertTriangle size={15} className="text-red-700" aria-hidden="true" /> : null}
-                      <p className={`text-sm font-bold ${notification.title === "Critical maintenance escalation" ? "text-red-900" : "text-[#141827]"}`}>{notification.title}</p>
-                      {notification.title === "Critical maintenance escalation" ? <span className="rounded-full bg-red-700 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-white">CRITICAL</span> : null}
-                      {/fleet .*report/i.test(notification.title) ? <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold tracking-wide text-blue-800">SCHEDULED REPORT</span> : null}
-                    </div>
-                    <p className="mt-1 text-sm text-[#667085]">{notification.message}</p>
-                  </div>
-                  {!notification.isRead && (
-                    <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-[#f4c400]" />
-                  )}
-                </div>
-                <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-[#8a98ad]">
-                  {new Date(notification.createdAt).toLocaleString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </p>
-                {notification.maintenanceScheduleId ? <p className="mt-2 text-xs font-semibold text-[#1a1f6e]">Open overdue work order →</p> : null}
-              </button>
-            ))
-          )}
-        </div>
-      </Modal>
     </>
   );
 }
+
+

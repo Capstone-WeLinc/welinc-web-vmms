@@ -17,6 +17,7 @@ import {
 } from "../../components/ui";
 import type { DataTableColumn } from "../../components/ui";
 import { Modal, FormInput } from "../../components/ui";
+import PageHeader from "../../components/PageHeader/PageHeader";
 
 const emptyForm = (): Omit<GarageFullRecord, "id"> => ({ name: "", isActive: true });
 
@@ -30,6 +31,7 @@ export default function Garages() {
   const [form, setForm] = useState(emptyForm());
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteName, setDeleteName] = useState("");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -81,9 +83,22 @@ export default function Garages() {
     setShowModal(true);
   };
 
-  const handleSave = async () => {
+  const handleRequestSave = () => {
     setFormError("");
-    if (!form.name.trim()) { setFormError("Garage name is required."); return; }
+    if (!form.name.trim()) {
+      setFormError("Garage name is required.");
+      return;
+    }
+    setIsSaveConfirmOpen(true);
+  };
+
+  const handleConfirmSave = async () => {
+    setFormError("");
+    if (!form.name.trim()) {
+      setIsSaveConfirmOpen(false);
+      setFormError("Garage name is required.");
+      return;
+    }
     setSaving(true);
     try {
       if (modalMode === "create") {
@@ -93,9 +108,11 @@ export default function Garages() {
         await updateGarageRecord(selectedId, { ...form, name: form.name.trim() });
         showToast("Garage updated successfully.");
       }
+      setIsSaveConfirmOpen(false);
       setShowModal(false);
       load();
     } catch (err: unknown) {
+      setIsSaveConfirmOpen(false);
       setFormError(err instanceof Error ? err.message : "Failed to save garage.");
     } finally {
       setSaving(false);
@@ -166,29 +183,24 @@ export default function Garages() {
         <ToastNotification message={toast.message} type={toast.type} />
       )}
 
-      {/* Page Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#070b45] text-white">
-            <Warehouse className="h-5 w-5" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-extrabold text-[#141827]">Service Garages</h1>
-            <p className="text-sm text-[#64748b]">Manage maintenance garages and service shop hubs.</p>
-          </div>
-        </div>
-        <button
-          id="create-garage-btn"
-          onClick={openCreate}
-          className="flex items-center gap-2 rounded-xl bg-[#070b45] px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-[#11175f]"
-        >
-          <Plus className="h-4 w-4" />
-          Create Garage
-        </button>
-      </div>
+      <PageHeader
+        icon={Warehouse}
+        title="SERVICE GARAGES"
+        subtitle="Manage maintenance garages and service shop hubs."
+        action={
+          <button
+            id="create-garage-btn"
+            onClick={openCreate}
+            className="flex items-center gap-2 rounded-xl bg-[#070b45] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#11175f]"
+          >
+            <Plus className="h-4 w-4" />
+            Create Garage
+          </button>
+        }
+      />
 
       {/* Table Card */}
-      <div className="overflow-hidden rounded-2xl border border-[#dde4ef] bg-white shadow-sm">
+      <div className="overflow-hidden rounded-2xl border border-[#dde4ef] bg-white">
         <div className="border-b border-[#dde4ef] p-5">
           <SearchInput
             placeholder="Search garages by name…"
@@ -214,8 +226,12 @@ export default function Garages() {
       <Modal
         isOpen={showModal}
         title={modalMode === "create" ? "Create New Garage" : "Edit Garage"}
-        onClose={() => setShowModal(false)}
-        onConfirm={handleSave}
+        onClose={() => {
+          if (saving) return;
+          setIsSaveConfirmOpen(false);
+          setShowModal(false);
+        }}
+        onConfirm={handleRequestSave}
         confirmLabel={saving ? "Saving…" : "Save Garage"}
         size="md"
       >
@@ -248,6 +264,23 @@ export default function Garages() {
           )}
         </div>
       </Modal>
+
+      <ConfirmationModal
+        isOpen={isSaveConfirmOpen}
+        title={modalMode === "create" ? "Confirm Create Garage" : "Confirm Save Changes"}
+        message={
+          modalMode === "create"
+            ? `Are you sure you want to create garage "${form.name.trim() || "this garage"}"?`
+            : `Are you sure you want to save changes to garage "${form.name.trim() || "this garage"}"?`
+        }
+        confirmLabel={saving ? "Saving…" : modalMode === "create" ? "Create Garage" : "Save Changes"}
+        onConfirm={handleConfirmSave}
+        onCancel={() => {
+          if (!saving) setIsSaveConfirmOpen(false);
+        }}
+        confirmDisabled={saving}
+        busy={saving}
+      />
 
       {/* Delete Confirmation */}
       <ConfirmationModal

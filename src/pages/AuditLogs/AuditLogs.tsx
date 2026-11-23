@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw, ScrollText } from "lucide-react";
+import { RefreshCw, ScrollText, X } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import { getAuditLogs, type AuditLogRecord } from "../../lib/api/vmmsApi";
 
@@ -43,13 +43,26 @@ export default function AuditLogs() {
     <div className="mx-auto max-w-7xl">
       <PageHeader title="Audit Logs" subtitle="Review VMMS business activity." icon={ScrollText} />
 
-      <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-sm">
+      <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)]">
         <div className="flex flex-col gap-3 border-b border-[var(--color-border)] p-4 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-col gap-3 sm:flex-row">
             <label className="sr-only" htmlFor="audit-search">Search audit logs</label>
-            <input id="audit-search" value={search} onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search actor, action, or record…"
-              className="min-w-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] sm:w-80" />
+            <div className="relative min-w-0 sm:w-80">
+              <input id="audit-search" value={search} onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search actor, action, or record..."
+                className={`w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 ${search ? "pr-9" : "pr-3"} py-2 text-sm text-[var(--color-text-primary)]`} />
+              {search ? (
+                <button
+                  type="button"
+                  aria-label="Clear search"
+                  title="Clear search"
+                  onClick={() => setSearch("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-[var(--color-text-secondary)] transition hover:bg-[var(--color-page-bg)] hover:text-[var(--color-text-primary)]"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
           </div>
           <button type="button" onClick={() => void load()} disabled={loading}
             className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-page-bg)] disabled:opacity-50">

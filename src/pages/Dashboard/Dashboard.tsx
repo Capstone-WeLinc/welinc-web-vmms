@@ -1,118 +1,220 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   CalendarClock,
   CheckCircle2,
-  CircleDollarSign,
   ClipboardList,
   LayoutDashboard,
+  RefreshCw,
+  Timer,
   Truck,
   Wrench,
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
+import MaintenanceStatusBadge from "../../components/ui/MaintenanceStatusBadge";
 import { getVmmsDashboardData, type VmmsDashboardData } from "../../lib/api/dashboardService";
 import { getFuelAnomalies, type FuelAnomalyRecord } from "../../lib/api/fuelService";
 import { useAuthStore } from "../../store/authStore";
 import {
   MaintenanceStatus,
   maintenanceStatusLabels,
-  type MaintenanceTask,
 } from "../../types/maintenance";
-import { getTaskTotalCost } from "../../lib/utils/maintenanceCosts";
-import { maintenanceStatusColors } from "../../lib/utils/maintenanceStatusPresentation";
-import { isMechanicRole } from "../../lib/utils/permissions";
+import { canEditWorkOrderPriority, isMechanicRole } from "../../lib/utils/permissions";
+import {
+  buildModel,
+  formatPhp,
+  normalizeFilters,
+  scopeSchedulesForUser,
+  type AttentionItem,
+  type DashboardFilters,
+  type DashboardRange,
+} from "./dashboardModel";
 
-type DashboardFilter = "all" | "month";
+const EMPTY_DATA: VmmsDashboardData = { schedules: [], vehicles: [], garages: [] };
+const REFRESH_MS = 30_000;
 
-const dateOf = (task: MaintenanceTask) =>
-  new Date(task.startReferenceDate || task.date || 0);
-
-const isCurrentMonth = (task: MaintenanceTask) => {
-  const value = dateOf(task);
-  const now = new Date();
-  return (
-    !Number.isNaN(value.getTime()) &&
-    value.getFullYear() === now.getFullYear() &&
-    value.getMonth() === now.getMonth()
-  );
+const breakdownColors: Record<MaintenanceStatus, string> = {
+  [MaintenanceStatus.PENDING]: "#64748b",
+  [MaintenanceStatus.DUE]: "#7c3aed",
+  [MaintenanceStatus.IN_PROGRESS]: "#0284c7",
+  [MaintenanceStatus.DONE]: "#d97706",
+  [MaintenanceStatus.COMPLETED]: "#059669",
+  [MaintenanceStatus.OVERDUE]: "#dc2626",
+  [MaintenanceStatus.CANCELLED]: "#94a3b8",
 };
 
-const getMaterialCost = (task: MaintenanceTask) => {
-  return getTaskTotalCost(task);
-};
-
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    maximumFractionDigits: 2,
-  }).format(value);
-
-const statusBadgeClasses: Record<MaintenanceStatus, string> = {
-  [MaintenanceStatus.PENDING]: "border-slate-300 bg-slate-100 text-slate-700",
-  [MaintenanceStatus.DUE]: "border-violet-200 bg-violet-50 text-violet-700",
-  [MaintenanceStatus.IN_PROGRESS]: "border-sky-200 bg-sky-50 text-sky-700",
-  [MaintenanceStatus.DONE]: "border-amber-200 bg-amber-50 text-amber-700",
-  [MaintenanceStatus.COMPLETED]: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  [MaintenanceStatus.OVERDUE]: "border-red-200 bg-red-50 text-red-700",
-  [MaintenanceStatus.CANCELLED]: "border-slate-200 bg-slate-50 text-slate-500",
-};
-
-function StatusPill({ status }: { status: MaintenanceStatus }) {
+function Panel({
+  title,
+  subtitle,
+  children,
+  action,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+}) {
   return (
-    <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${statusBadgeClasses[status]}`}>
-      {maintenanceStatusLabels[status]}
-    </span>
-  );
-}
-
-function Panel({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
-  return (
-    <section className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card">
-      <div className="border-b border-[var(--color-divider)] px-5 py-4">
-        <h2 className="text-base font-bold text-[var(--color-text-primary)]">{title}</h2>
-        <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{subtitle}</p>
+    <section className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)]">
+      <div className="flex items-start justify-between gap-4 border-b border-[var(--color-divider)] px-5 py-4">
+        <div>
+          <h2 className="text-base font-bold text-[var(--color-text-primary)]">{title}</h2>
+          {subtitle ? <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{subtitle}</p> : null}
+        </div>
+        {action}
       </div>
       {children}
     </section>
   );
 }
 
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  color,
+  onClick,
+  hint,
+}: {
+  label: string;
+  value: string | number;
+  icon: ComponentType<{ size?: number }>;
+  color: string;
+  onClick: () => void;
+  hint?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex h-full w-full flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 text-left transition hover:-translate-y-0.5 hover:border-[var(--color-brand-primary)]"
+    >
+      <div className="flex min-h-10 items-center gap-3">
+        <div
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+          style={{ color, backgroundColor: `${color}16` }}
+        >
+          <Icon size={20} />
+        </div>
+        <div className="text-2xl font-bold leading-none text-[var(--color-text-primary)]">{value}</div>
+      </div>
+      <div className="mt-3 text-xs font-bold uppercase tracking-wide text-[var(--color-text-secondary)]">{label}</div>
+      {hint ? <div className="mt-2 text-xs text-[var(--color-text-secondary)]">{hint}</div> : <div className="mt-2 min-h-[1rem]" aria-hidden="true" />}
+    </button>
+  );
+}
+
+function QueueList({
+  items,
+  emptyText,
+  onNavigate,
+}: {
+  items: AttentionItem[];
+  emptyText: string;
+  onNavigate: (path: string) => void;
+}) {
+  if (items.length === 0) {
+    return <div className="px-5 py-8 text-sm text-[var(--color-text-secondary)]">{emptyText}</div>;
+  }
+  return (
+    <ul className="divide-y divide-[var(--color-divider)]">
+      {items.map((item) => (
+        <li key={item.id} className="flex items-center justify-between gap-4 px-5 py-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="truncate font-semibold text-[var(--color-text-primary)]">{item.primary}</p>
+              {item.status && (Object.values(MaintenanceStatus) as string[]).includes(item.status) ? (
+                <MaintenanceStatusBadge status={item.status as MaintenanceStatus} />
+              ) : item.status ? (
+                <span className="inline-flex rounded-full border border-[var(--color-border)] bg-[var(--color-input-bg)] px-2 py-0.5 text-xs font-semibold text-[var(--color-text-secondary)]">
+                  {item.status}
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{item.secondary}</p>
+            {item.meta ? <p className="mt-1 text-xs font-medium text-[var(--color-text-secondary)]">{item.meta}</p> : null}
+          </div>
+          <button
+            type="button"
+            className="shrink-0 rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm font-semibold text-[var(--color-text-primary)] hover:border-[var(--color-brand-primary)]"
+            onClick={() => onNavigate(item.href)}
+          >
+            {item.ctaLabel}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const currentUser = useAuthStore((state) => state.currentUser);
   const isMechanic = isMechanicRole(currentUser);
-  const [data, setData] = useState<VmmsDashboardData>({ schedules: [], vehicles: [], garages: [] });
+  const canSeeOpsPanels = canEditWorkOrderPriority(currentUser);
+
+  const [data, setData] = useState<VmmsDashboardData>(EMPTY_DATA);
   const [fuelAnomalies, setFuelAnomalies] = useState<FuelAnomalyRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<DashboardFilter>("all");
+  const [, setLastUpdated] = useState<Date | null>(null);
+  const hasLoadedOnce = useRef(false);
 
-  const loadDashboard = useCallback(async (showLoading = true) => {
-    if (showLoading) setLoading(true);
-    setError(null);
-    try {
-      const [dashboardData, anomalyRows] = await Promise.all([
-        getVmmsDashboardData(),
-        currentUser?.role === "ADMIN" || currentUser?.role === "OPERATIONS" ? getFuelAnomalies() : Promise.resolve([]),
-      ]);
-      setData(dashboardData);
-      setFuelAnomalies(anomalyRows);
-    } catch (loadError) {
-      console.error("Unable to load dashboard", loadError);
-      setError("Unable to load maintenance dashboard data.");
-    } finally {
-      if (showLoading) setLoading(false);
-    }
-  }, [currentUser]);
+  const filters = useMemo(
+    () => normalizeFilters(searchParams.get("range"), searchParams.get("from"), searchParams.get("to")),
+    [searchParams],
+  );
+
+  const updateFilters = useCallback(
+    (next: DashboardFilters) => {
+      const params = new URLSearchParams();
+      params.set("range", next.range);
+      if (next.range === "custom") {
+        if (next.from) params.set("from", next.from);
+        if (next.to) params.set("to", next.to);
+      }
+      setSearchParams(params, { replace: true });
+    },
+    [setSearchParams],
+  );
+
+  const loadDashboard = useCallback(
+    async (showLoading = true) => {
+      if (showLoading && !hasLoadedOnce.current) setLoading(true);
+      else setRefreshing(true);
+      setError(null);
+      try {
+        const [dashboardData, anomalyRows] = await Promise.all([
+          getVmmsDashboardData(),
+          canSeeOpsPanels ? getFuelAnomalies() : Promise.resolve([]),
+        ]);
+        setData(dashboardData);
+        setFuelAnomalies(anomalyRows);
+        hasLoadedOnce.current = true;
+        setLastUpdated(new Date());
+      } catch (loadError) {
+        console.error("Unable to load dashboard", loadError);
+        setError(
+          hasLoadedOnce.current
+            ? "Unable to refresh dashboard data. Showing the last loaded data."
+            : "Unable to load maintenance dashboard data.",
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [canSeeOpsPanels],
+  );
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => void loadDashboard(), 0);
     const refreshDashboard = () => void loadDashboard(false);
-    const refreshInterval = window.setInterval(refreshDashboard, 30_000);
+    const refreshInterval = window.setInterval(refreshDashboard, REFRESH_MS);
     window.addEventListener("focus", refreshDashboard);
-
     return () => {
       window.clearTimeout(initialLoad);
       window.clearInterval(refreshInterval);
@@ -120,50 +222,37 @@ export default function Dashboard() {
     };
   }, [loadDashboard]);
 
-  const schedules = useMemo(() => {
-    if (!isMechanic || !currentUser) return data.schedules;
-    const name = currentUser.name.trim().toLowerCase();
-    const email = currentUser.email.trim().toLowerCase();
-    return data.schedules.filter(
-      (task) =>
-        task.assignedMechanicId === currentUser.id ||
-        task.assignedMechanicEmail?.trim().toLowerCase() === email ||
-        task.assignedDriver.trim().toLowerCase() === name,
-    );
-  }, [currentUser, data.schedules, isMechanic]);
-
-  const filteredSchedules = filter === "month" ? schedules.filter(isCurrentMonth) : schedules;
-  const garageNames = new Map(data.garages.map((garage) => [garage.id, garage.name]));
-  const vehicleById = new Map(
-    data.vehicles.flatMap((vehicle) => [
-      ...(vehicle.id ? [[vehicle.id, vehicle] as const] : []),
-      [vehicle.value, vehicle] as const,
-    ]),
+  const schedules = useMemo(
+    () => scopeSchedulesForUser(data.schedules, currentUser, isMechanic),
+    [currentUser, data.schedules, isMechanic],
   );
-  const vehicleLabel = (task: MaintenanceTask) =>
-    vehicleById.get(task.vehicleId)?.label ?? task.vehicleId;
-  const plateNumber = (task: MaintenanceTask) =>
-    vehicleById.get(task.vehicleId)?.plateNumber ??
-    vehicleById.get(task.vehicleId)?.value ??
-    task.vehicleId;
 
-  const activeStatuses = new Set<MaintenanceStatus>([
-    MaintenanceStatus.DUE,
-    MaintenanceStatus.IN_PROGRESS,
-    MaintenanceStatus.OVERDUE,
-  ]);
-  const activeWorkOrders = schedules.filter((task) => activeStatuses.has(task.status));
-  const underMaintenance = new Set(activeWorkOrders.map((task) => task.vehicleId)).size;
-  const completedThisMonth = schedules.filter(
-    (task) => task.status === MaintenanceStatus.COMPLETED && isCurrentMonth(task),
+  const model = useMemo(
+    () =>
+      buildModel({
+        data,
+        schedules,
+        fuelAnomalies: canSeeOpsPanels ? fuelAnomalies : [],
+        filters,
+      }),
+    [canSeeOpsPanels, data, filters, fuelAnomalies, schedules],
   );
-  const completedForSelectedPeriod =
-    filter === "month"
-      ? completedThisMonth
-      : schedules.filter((task) => task.status === MaintenanceStatus.COMPLETED);
-  const maintenanceCost = filteredSchedules.reduce(
-    (total, task) => total + getMaterialCost(task),
-    0,
+
+  const dueQueue = useMemo(
+    () =>
+      schedules
+        .filter((task) => task.status === MaintenanceStatus.DUE)
+        .slice(0, 5)
+        .map((task) => ({
+          id: task.id,
+          primary: task.workOrderNumber ?? task.vehicleId,
+          secondary: task.assignedDriver || "Unassigned mechanic",
+          status: task.status,
+          href: `/maintenance-scheduling?search=${encodeURIComponent(task.workOrderNumber ?? task.title ?? "")}`,
+          ctaLabel: "Open schedule",
+          meta: "Due now",
+        })),
+    [schedules],
   );
 
   const summaryCards: Array<{
@@ -172,43 +261,35 @@ export default function Dashboard() {
     icon: ComponentType<{ size?: number }>;
     color: string;
     path: string;
+    hint?: string;
   }> = [
-    { label: "Total Vehicles", value: data.vehicles.length, icon: Truck, color: "#2563eb", path: "/maintenance-scheduling" },
-    { label: "Under Maintenance", value: underMaintenance, icon: Wrench, color: "#d97706", path: "/work-orders" },
-    { label: "Active Work Orders", value: activeWorkOrders.length, icon: ClipboardList, color: "#0284c7", path: "/work-orders" },
-    { label: "Due Maintenance", value: schedules.filter((task) => task.status === MaintenanceStatus.DUE).length, icon: CalendarClock, color: "#7c3aed", path: "/maintenance-scheduling" },
-    { label: "Overdue Maintenance", value: schedules.filter((task) => task.status === MaintenanceStatus.OVERDUE).length, icon: AlertTriangle, color: "#dc2626", path: "/maintenance-scheduling" },
-    { label: "Open Fuel Anomalies", value: new Set(fuelAnomalies.filter((anomaly) => anomaly.status === "OPEN").map((anomaly) => anomaly.vehicle.plateNumber)).size, icon: AlertTriangle, color: "#b91c1c", path: "/fuel-management" },
+    { label: "Total Vehicles", value: model.current.totalVehicles, icon: Truck, color: "#2563eb", path: "/vehicles", hint: "Current fleet scope" },
+    { label: "Vehicles Under Maintenance", value: model.current.vehiclesUnderMaintenance, icon: Wrench, color: "#d97706", path: "/work-orders", hint: "Current operational state" },
+    { label: "Active Work Orders", value: model.current.activeWorkOrders, icon: ClipboardList, color: "#0284c7", path: "/work-orders", hint: "Due, in progress, or overdue" },
+    { label: "Due Maintenance", value: model.current.due, icon: CalendarClock, color: "#7c3aed", path: "/maintenance-scheduling", hint: "Current operational state" },
+    { label: "Overdue Maintenance", value: model.current.overdue, icon: AlertTriangle, color: "#dc2626", path: "/maintenance-scheduling", hint: "Needs immediate attention" },
+    ...(canSeeOpsPanels
+      ? [{
+          label: "Open Fuel Anomalies",
+          value: model.current.openFuelAnomalies,
+          icon: AlertTriangle,
+          color: "#b91c1c",
+          path: "/fuel-management",
+          hint: `${model.current.openFuelAnomalyVehicles} vehicle(s) affected`,
+        }]
+      : []),
+    { label: "Awaiting Review", value: model.current.awaitingReview, icon: Timer, color: "#b45309", path: "/work-orders", hint: "Done, pending review" },
     {
-      label: filter === "month" ? "Completed This Month" : "Completed Maintenance",
-      value: completedForSelectedPeriod.length,
+      label: model.period.isBounded ? "Completed in Period" : "Completed (All Records)",
+      value: model.period.isBounded ? model.periodActivity.completedInPeriodByDate : model.current.completedAll,
       icon: CheckCircle2,
       color: "#059669",
       path: "/maintenance-logs",
-    },
-    {
-      label: filter === "month" ? "Cost This Month" : "Maintenance Cost",
-      value: formatCurrency(maintenanceCost),
-      icon: CircleDollarSign,
-      color: "#0f766e",
-      path: "/maintenance-logs",
+      hint: model.period.isBounded ? "By recorded work order date" : "Current visible scope",
     },
   ];
 
-  const statusBreakdown = Object.values(MaintenanceStatus)
-    .filter((status) => status !== MaintenanceStatus.CANCELLED)
-    .map((status) => ({
-      status,
-      count: filteredSchedules.filter((task) => task.status === status).length,
-    }));
-
-  const overdue = schedules
-    .filter((task) => task.status === MaintenanceStatus.OVERDUE)
-    .sort((a, b) => dateOf(a).getTime() - dateOf(b).getTime())
-    .slice(0, 5);
-  const recent = [...schedules]
-    .sort((a, b) => dateOf(b).getTime() - dateOf(a).getTime())
-    .slice(0, 6);
+  const loadingCards = canSeeOpsPanels ? 8 : 7;
 
   return (
     <div className="space-y-6">
@@ -217,143 +298,252 @@ export default function Dashboard() {
         title="DASHBOARD"
         subtitle={isMechanic ? "Your assigned maintenance workload" : "Vehicle maintenance operations overview"}
         action={
-          <select
-            aria-label="Dashboard period"
-            value={filter}
-            onChange={(event) => setFilter(event.target.value as DashboardFilter)}
-            className="h-11 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 text-sm text-[var(--color-text-primary)]"
-          >
-            <option value="all">All records</option>
-            <option value="month">This month</option>
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              aria-label="Dashboard period"
+              value={filters.range}
+              onChange={(event) =>
+                updateFilters({
+                  ...filters,
+                  range: event.target.value as DashboardRange,
+                  ...(event.target.value !== "custom" ? { from: "", to: "" } : {}),
+                })
+              }
+              className="h-11 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 text-sm text-[var(--color-text-primary)]"
+            >
+              <option value="all">All records</option>
+              <option value="today">Today</option>
+              <option value="month">This month</option>
+              <option value="custom">Custom range</option>
+            </select>
+            {filters.range === "custom" ? (
+              <>
+                <input
+                  type="date"
+                  aria-label="From date"
+                  value={filters.from}
+                  onChange={(event) => updateFilters({ ...filters, from: event.target.value })}
+                  className="h-11 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 text-sm text-[var(--color-text-primary)]"
+                />
+                <input
+                  type="date"
+                  aria-label="To date"
+                  value={filters.to}
+                  onChange={(event) => updateFilters({ ...filters, to: event.target.value })}
+                  className="h-11 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 text-sm text-[var(--color-text-primary)]"
+                />
+              </>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void loadDashboard(false)}
+              className="inline-flex h-11 items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-4 text-sm font-semibold text-[var(--color-text-primary)] hover:border-[var(--color-brand-primary)]"
+            >
+              <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
+              Refresh
+            </button>
+          </div>
         }
       />
 
       {error ? (
-        <div className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           <span>{error}</span>
-          <button className="font-bold" onClick={() => void loadDashboard()}>Retry</button>
+          <button type="button" className="font-bold underline-offset-2 hover:underline" onClick={() => void loadDashboard()}>
+            Retry
+          </button>
         </div>
       ) : null}
 
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[var(--color-text-secondary)]">
+        <p>
+          <span className="font-semibold text-[var(--color-text-primary)]">Current view:</span> {model.period.label}
+          {!model.period.isValid && filters.range === "custom" ? " (invalid custom range)" : ""}
+        </p>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-8">
         {loading
-          ? Array.from({ length: 7 }).map((_, index) => (
-            <div key={index} className="h-32 animate-pulse rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5">
-              <div className="h-9 w-9 rounded-lg bg-[var(--color-input-bg)]" />
-              <div className="mt-4 h-6 w-20 rounded bg-[var(--color-input-bg)]" />
-            </div>
-          ))
-          : summaryCards.map((card) => (
-            <button key={card.label} onClick={() => navigate(card.path)} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 text-left shadow-card transition hover:-translate-y-0.5 hover:border-[var(--color-brand-primary)]">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ color: card.color, backgroundColor: `${card.color}16` }}>
-                <card.icon size={20} />
+          ? Array.from({ length: loadingCards }).map((_, index) => (
+              <div key={index} className="h-36 animate-pulse rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5">
+                <div className="h-9 w-9 rounded-lg bg-[var(--color-input-bg)]" />
+                <div className="mt-4 h-6 w-20 rounded bg-[var(--color-input-bg)]" />
+                <div className="mt-2 h-3 w-28 rounded bg-[var(--color-input-bg)]" />
               </div>
-              <div className="mt-4 text-2xl font-bold text-[var(--color-text-primary)]">{card.value}</div>
-              <div className="mt-1 text-xs font-bold uppercase tracking-wide text-[var(--color-text-secondary)]">{card.label}</div>
-            </button>
-          ))}
+            ))
+          : summaryCards.map((card) => (
+              <StatCard
+                key={card.label}
+                label={card.label}
+                value={card.value}
+                icon={card.icon}
+                color={card.color}
+                hint={card.hint}
+                onClick={() => navigate(card.path)}
+              />
+            ))}
       </div>
 
-      <div>
-        <Panel title="Maintenance Status Breakdown" subtitle="Current work order distribution by status">
-          <div className="space-y-4 p-5">
-            {/* Total Summary */}
-            <div className="flex items-center justify-between text-xs font-semibold text-[var(--color-text-secondary)]">
-              <span>Work Order Composition</span>
-              <span className="font-bold text-[var(--color-text-primary)]">
-                {statusBreakdown.reduce((acc, s) => acc + s.count, 0)} Total Work Orders
-              </span>
+      <Panel
+        title="Period activity"
+        subtitle={model.period.attributionNote}
+        action={
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] px-4 py-3 text-right">
+            <div className="text-xs font-bold uppercase tracking-wide text-[var(--color-text-secondary)]">
+              Maintenance cost {model.period.isBounded ? "in period" : "(all records)"}
             </div>
+            <div className="mt-1 text-lg font-bold text-[var(--color-text-primary)]">
+              {formatPhp(model.periodActivity.maintenanceCostInPeriod)}
+            </div>
+            <div className="text-xs text-[var(--color-text-secondary)]">By recorded work order date</div>
+          </div>
+        }
+      >
+        <div className="grid gap-4 p-5 sm:grid-cols-3">
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
+            <div className="text-xs font-bold uppercase tracking-wide text-[var(--color-text-secondary)]">Work orders in period</div>
+            <div className="mt-2 text-2xl font-bold text-[var(--color-text-primary)]">{model.periodActivity.workOrdersInPeriod}</div>
+          </div>
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
+            <div className="text-xs font-bold uppercase tracking-wide text-[var(--color-text-secondary)]">Completed in period</div>
+            <div className="mt-2 text-2xl font-bold text-[var(--color-text-primary)]">{model.periodActivity.completedInPeriodByDate}</div>
+            <div className="mt-1 text-xs text-[var(--color-text-secondary)]">Completed status, by recorded date</div>
+          </div>
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
+            <div className="text-xs font-bold uppercase tracking-wide text-[var(--color-text-secondary)]">Visible schedules</div>
+            <div className="mt-2 text-2xl font-bold text-[var(--color-text-primary)]">{model.visibleSchedules.length}</div>
+            <div className="mt-1 text-xs text-[var(--color-text-secondary)]">Current scope (role/entity)</div>
+          </div>
+        </div>
+      </Panel>
 
-            {/* Stacked Proportional Distribution Bar */}
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Panel title="Overdue maintenance" subtitle="Tasks currently overdue and needing action">
+          <QueueList items={model.queues.overdue} emptyText="No overdue maintenance." onNavigate={navigate} />
+        </Panel>
+        <Panel title="Due now" subtitle="Work orders currently marked due">
+          <QueueList items={dueQueue} emptyText="No work orders are currently due." onNavigate={navigate} />
+        </Panel>
+        <Panel title="Due soon (next 7 days)" subtitle="Upcoming items with computable due/reference dates">
+          <QueueList items={model.queues.dueSoon} emptyText="No upcoming work orders detected in the next 7 days." onNavigate={navigate} />
+        </Panel>
+        <Panel title="Awaiting review" subtitle="Completed by mechanic and waiting for review (DONE)">
+          <QueueList items={model.queues.awaitingReview} emptyText="No work orders are awaiting review." onNavigate={navigate} />
+        </Panel>
+      </div>
+
+      {canSeeOpsPanels ? (
+        <Panel title="Open fuel anomalies" subtitle="Vehicles/entries flagged for fuel review">
+          <QueueList items={model.queues.openAnomalies} emptyText="No open fuel anomalies." onNavigate={navigate} />
+        </Panel>
+      ) : null}
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Panel title="Maintenance status breakdown" subtitle="Current visible work orders by status">
+          <div className="space-y-4 p-5">
             {(() => {
-              const total = statusBreakdown.reduce((acc, s) => acc + s.count, 0);
+              const total = model.statusBreakdown.reduce((acc, item) => acc + item.count, 0);
+              const maxCount = Math.max(1, ...model.statusBreakdown.map((item) => item.count));
               return (
-                <div className="flex h-3.5 w-full overflow-hidden rounded-full border border-[var(--color-border)] bg-[var(--color-input-bg)] p-0.5 shadow-inner">
-                  {total > 0 ? (
-                    statusBreakdown.map(({ status, count }) => {
-                      const pct = Math.round((count / total) * 100);
-                      if (pct === 0) return null;
-                      return (
-                        <div
-                          key={status}
-                          className="h-full transition-all duration-300 first:rounded-l-full last:rounded-r-full"
-                          style={{ width: `${pct}%`, backgroundColor: maintenanceStatusColors[status] }}
-                          title={`${maintenanceStatusLabels[status]}: ${count} (${pct}%)`}
-                        />
-                      );
-                    })
+                <>
+                  <div className="flex items-center justify-between text-xs font-semibold text-[var(--color-text-secondary)]">
+                    <span>Work orders by status</span>
+                    <span className="font-bold text-[var(--color-text-primary)]">{total} total</span>
+                  </div>
+                  {total === 0 ? (
+                    <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-input-bg)] px-4 py-8 text-center text-sm text-[var(--color-text-secondary)]">
+                      No work orders in the current view.
+                    </div>
                   ) : (
-                    <div className="h-full w-full rounded-full bg-[var(--color-border)] opacity-30" />
+                    <div className="space-y-3">
+                      {model.statusBreakdown.map(({ status, count }) => {
+                        const pctOfTotal = Math.round((count / total) * 100);
+                        const barPct = (count / maxCount) * 100;
+                        const color = breakdownColors[status];
+                        return (
+                          <div key={status} className="space-y-1.5">
+                            <div className="flex items-center justify-between gap-3 text-sm">
+                              <div className="flex min-w-0 items-center gap-2.5">
+                                <span className="h-3 w-3 shrink-0 rounded-sm" style={{ backgroundColor: color }} />
+                                <span className="truncate font-semibold text-[var(--color-text-primary)]">
+                                  {maintenanceStatusLabels[status]}
+                                </span>
+                              </div>
+                              <div className="shrink-0 text-right">
+                                <span className="font-bold text-[var(--color-text-primary)]">{count}</span>
+                                <span className="ml-1.5 text-xs text-[var(--color-text-secondary)]">({pctOfTotal}%)</span>
+                              </div>
+                            </div>
+                            <div className="h-3 w-full overflow-hidden rounded-full bg-[var(--color-input-bg)]">
+                              <div
+                                className="h-full rounded-full transition-all duration-300"
+                                style={{ width: `${barPct}%`, backgroundColor: color }}
+                                title={`${maintenanceStatusLabels[status]}: ${count} (${pctOfTotal}%)`}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
-                </div>
+                </>
               );
             })()}
+          </div>
+        </Panel>
 
-            {/* Categorical Breakdown Pills / List */}
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {(() => {
-                const total = statusBreakdown.reduce((acc, s) => acc + s.count, 0);
-                return statusBreakdown.map(({ status, count }) => {
-                  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-                  return (
-                    <div
-                      key={status}
-                      className="flex items-center justify-between rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-3 text-sm shadow-xs"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <span
-                          className="h-3 w-3 rounded-full shadow-xs"
-                          style={{ backgroundColor: maintenanceStatusColors[status] }}
-                        />
-                        <span className="font-semibold text-[var(--color-text-primary)]">
-                          {maintenanceStatusLabels[status]}
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-bold text-[var(--color-text-primary)]">{count}</span>
-                        <span className="ml-1.5 text-xs text-[var(--color-text-secondary)]">({pct}%)</span>
-                      </div>
-                    </div>
-                  );
-                });
-              })()}
+        <Panel title="Garage workload" subtitle="Active work orders (due, in progress, overdue) by garage">
+          {model.garageWorkload.length === 0 ? (
+            <div className="px-5 py-8 text-sm text-[var(--color-text-secondary)]">No active garage workload.</div>
+          ) : (
+            <div className="divide-y divide-[var(--color-divider)]">
+              {model.garageWorkload.map((item) => (
+                <div key={item.id} className="flex items-center justify-between px-5 py-4">
+                  <span className="font-medium text-[var(--color-text-primary)]">{item.name}</span>
+                  <span className="inline-flex min-w-10 items-center justify-center rounded-full bg-[var(--color-input-bg)] px-2.5 py-1 text-sm font-bold text-[var(--color-text-primary)]">
+                    {item.active}
+                  </span>
+                </div>
+              ))}
             </div>
-          </div>
+          )}
         </Panel>
       </div>
 
-      <div>
-        <Panel title="Overdue Maintenance" subtitle="Work orders beyond their maintenance threshold">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-[#070b45] text-xs uppercase text-white"><tr>{["Vehicle", "Days Overdue", "Mechanic", "Garage"].map((heading) => <th key={heading} className="px-3 py-2.5">{heading}</th>)}</tr></thead>
-              <tbody className="divide-y divide-[var(--color-divider)]">
-                {overdue.map((task) => {
-                  const due = dateOf(task);
-                  const days = Number.isNaN(due.getTime()) ? "—" : Math.max(0, Math.floor((Date.now() - due.getTime()) / 86400000)); // eslint-disable-line react-hooks/purity -- Overdue age is intentionally refreshed whenever the dashboard renders.
-                  return <tr key={task.id}><td className="px-3 py-3">{vehicleLabel(task)}</td><td className="px-3 py-3 font-bold text-red-600">{days}</td><td className="px-3 py-3">{task.assignedDriver || "Unassigned"}</td><td className="px-3 py-3">{garageNames.get(task.garageId ?? "") ?? "Unassigned"}</td></tr>;
-                })}
-                {!loading && overdue.length === 0 ? <tr><td colSpan={4} className="px-4 py-10 text-center text-[var(--color-text-secondary)]">No overdue maintenance.</td></tr> : null}
-              </tbody>
-            </table>
-          </div>
-        </Panel>
-      </div>
-
-      <Panel title="Recent Work Orders" subtitle="Latest maintenance work order activity">
+      <Panel title="Recent work orders" subtitle="Latest visible work orders by recorded date">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-[#070b45] text-xs uppercase text-white"><tr>{["Work Order No.", "Vehicle", "Assigned Mechanic", "Status"].map((heading) => <th key={heading} className="px-4 py-3">{heading}</th>)}</tr></thead>
+            <thead className="bg-[#070b45] text-xs uppercase text-white">
+              <tr>
+                {["Work Order", "Vehicle / Assignee", "Recorded Date", "Status"].map((heading) => (
+                  <th key={heading} className="px-4 py-3">{heading}</th>
+                ))}
+              </tr>
+            </thead>
             <tbody className="divide-y divide-[var(--color-divider)]">
-              {recent.map((task) => <tr key={task.id} className="hover:bg-[var(--color-input-bg)]"><td className="px-4 py-3 font-bold">{task.workOrderNumber ?? "N/A"}</td><td className="px-4 py-3">{plateNumber(task)}</td><td className="px-4 py-3">{task.assignedDriver || "Unassigned"}</td><td className="px-4 py-3"><StatusPill status={task.status} /></td></tr>)}
-              {!loading && recent.length === 0 ? <tr><td colSpan={4} className="px-4 py-10 text-center text-[var(--color-text-secondary)]">No work orders found.</td></tr> : null}
+              {model.recentWorkOrders.map((item) => (
+                <tr key={item.id} className="hover:bg-[var(--color-input-bg)]">
+                  <td className="px-4 py-3 font-bold text-[var(--color-text-primary)]">{item.primary}</td>
+                  <td className="px-4 py-3 text-[var(--color-text-primary)]">{item.secondary}</td>
+                  <td className="px-4 py-3 text-[var(--color-text-secondary)]">{item.meta ?? "—"}</td>
+                  <td className="px-4 py-3">
+                    {item.status && (Object.values(MaintenanceStatus) as string[]).includes(item.status) ? (
+                      <MaintenanceStatusBadge status={item.status as MaintenanceStatus} />
+                    ) : (
+                      item.status ?? "—"
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {!loading && model.recentWorkOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-10 text-center text-[var(--color-text-secondary)]">No work orders found.</td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
       </Panel>
-
     </div>
   );
 }

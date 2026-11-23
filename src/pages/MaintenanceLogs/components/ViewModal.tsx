@@ -73,7 +73,7 @@ export default function ViewModal({ isOpen, log, onClose }: ViewModalProps) {
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-2xl">
+      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6">
         <div className="mb-5 flex items-center justify-between border-b border-[var(--color-divider)] pb-4">
           <div>
             <h3 className="text-lg font-bold text-[var(--color-text-primary)]">

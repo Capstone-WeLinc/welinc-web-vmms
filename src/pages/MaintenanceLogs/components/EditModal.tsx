@@ -48,7 +48,7 @@ export default function EditModal({ log, isSaving, onClose, onSave }: EditModalP
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget && !isSaving) onClose(); }}>
-      <form onSubmit={(event) => void submit(event)} className="w-full max-w-xl rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6 shadow-2xl">
+      <form onSubmit={(event) => void submit(event)} className="w-full max-w-xl rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6">
         <div className="mb-5 flex items-start justify-between border-b border-[var(--color-divider)] pb-4">
           <div>
             <h2 className="text-lg font-bold text-[var(--color-text-primary)]">Edit maintenance log</h2>

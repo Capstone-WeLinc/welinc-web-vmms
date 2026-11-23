@@ -647,7 +647,7 @@ export default function CreateScheduleModal({
       getCalendarDays(calendarDate);
 
     return (
-      <div className="card-base w-72 shadow-2xl">
+      <div className="card-base w-72">
         <div className="flex items-center justify-between mb-3">
           <button
             type="button"
@@ -706,7 +706,7 @@ export default function CreateScheduleModal({
       <div className="fixed right-6 top-6 z-[80] flex w-[340px] max-w-[calc(100vw-2rem)] flex-col gap-3">
         {toast && <ToastNotification type={toast.type} message={toast.message} />}
       </div>
-      <div className="modal-content max-w-6xl w-full rounded-[30px] flex flex-col max-h-[92vh] overflow-hidden shadow-[0_30px_90px_rgba(0,0,0,0.35)]">
+      <div className="modal-content max-w-6xl w-full rounded-[30px] flex flex-col max-h-[92vh] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-card-bg)] px-6 py-5 shrink-0">
           <div>
@@ -918,7 +918,7 @@ export default function CreateScheduleModal({
                   key={option.value}
                   className={`group flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-sm font-semibold transition ${
                     triggerType === option.value
-                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] shadow-[0_10px_24px_rgba(47,124,255,0.14)]"
+                      ? "border-[var(--color-brand-primary)] bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)]"
                       : "border-[var(--color-border)] bg-[var(--color-card-bg)] text-[var(--color-text-secondary)] hover:border-[var(--color-brand-primary)]/50 hover:bg-[var(--color-card-bg-hover)]"
                   }`}
                 >

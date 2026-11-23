@@ -31,7 +31,7 @@ function MetricCard({ title, value, icon: Icon, detail }: {
   title: string; value: string; icon: typeof Truck; detail?: string;
 }) {
   return (
-    <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 shadow-card">
+    <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-[var(--color-text-secondary)]">{title}</p>
@@ -275,7 +275,7 @@ export default function MaintenanceCosting() {
             <p className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">High-cost flags are inactive until Admin configures a positive threshold.</p>
           )}
 
-          <section className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card">
+          <section className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)]">
             <div className="border-b border-[var(--color-divider)] px-5 py-4">
               <h2 className="text-base font-bold text-[var(--color-text-primary)]">Maintenance Costs by Truck</h2>
               <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Only completed records approved by the Chief Mechanic are included.</p>
@@ -306,7 +306,7 @@ export default function MaintenanceCosting() {
           </section>
 
           {selectedTruck && (
-            <section className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] shadow-card">
+            <section className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)]">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--color-divider)] px-5 py-4">
                 <div>
                   <h2 className="text-base font-bold text-[var(--color-text-primary)]">Completed Maintenance — {selectedTruck.plateNumber}</h2>
