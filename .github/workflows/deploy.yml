@@ -55,7 +55,7 @@ jobs:
       - name: Remove source maps
         run: find dist -name '*.map' -delete
 
-      - uses: azure/login@v2
+      - uses: azure/login@v3
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID_STAGING }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
