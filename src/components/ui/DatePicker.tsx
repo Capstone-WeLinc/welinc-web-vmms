@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Calendar, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 interface DatePickerProps {
@@ -19,6 +20,12 @@ const formatLocalDate = (date: Date) => {
 const getInitialMonth = (value: string) =>
   value ? new Date(value.replace(/-/g, "/")) : new Date();
 
+interface CalendarPosition {
+  top: number;
+  left: number;
+  maxHeight: number;
+}
+
 export default function DatePicker({
   value,
   onChange,
@@ -31,6 +38,45 @@ export default function DatePicker({
     getInitialMonth(value),
   );
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const calendarRef = useRef<HTMLDivElement | null>(null);
+  const [calendarPosition, setCalendarPosition] =
+    useState<CalendarPosition | null>(null);
+
+  const updateCalendarPosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    const calendar = calendarRef.current;
+    if (!trigger || !calendar) return;
+
+    const triggerRect = trigger.getBoundingClientRect();
+    const margin = 8;
+    const gap = 8;
+    const width = Math.min(window.innerWidth * 0.92, 390);
+    const left = Math.min(
+      Math.max(margin, triggerRect.left),
+      Math.max(margin, window.innerWidth - width - margin),
+    );
+    const calendarHeight = Math.min(
+      calendar.scrollHeight || 400,
+      window.innerHeight - margin * 2,
+    );
+    const spaceBelow = Math.max(
+      0,
+      window.innerHeight - triggerRect.bottom - gap - margin,
+    );
+    const spaceAbove = Math.max(0, triggerRect.top - gap - margin);
+    const placeBelow =
+      calendarHeight <= spaceBelow || spaceBelow >= spaceAbove;
+    const maxHeight = Math.min(
+      calendarHeight,
+      placeBelow ? spaceBelow : spaceAbove,
+    );
+    const top = placeBelow
+      ? triggerRect.bottom + gap
+      : triggerRect.top - gap - maxHeight;
+
+    setCalendarPosition({ top, left, maxHeight });
+  }, []);
 
   useEffect(() => {
     // Keep the visible month aligned when a form changes the selected date.
@@ -43,7 +89,11 @@ export default function DatePicker({
 
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as Node | null;
-      if (target && !wrapperRef.current?.contains(target)) {
+      if (
+        target &&
+        !wrapperRef.current?.contains(target) &&
+        !calendarRef.current?.contains(target)
+      ) {
         setOpen(false);
       }
     };
@@ -51,6 +101,21 @@ export default function DatePicker({
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setCalendarPosition(null);
+      return;
+    }
+
+    updateCalendarPosition();
+    window.addEventListener("resize", updateCalendarPosition);
+    window.addEventListener("scroll", updateCalendarPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateCalendarPosition);
+      window.removeEventListener("scroll", updateCalendarPosition, true);
+    };
+  }, [open, updateCalendarPosition]);
 
   const year = calendarMonth.getFullYear();
   const month = calendarMonth.getMonth();
@@ -73,8 +138,10 @@ export default function DatePicker({
   return (
     <div ref={wrapperRef} className={`relative ${className}`}>
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled}
+        aria-expanded={open}
         onClick={() => {
           if (!disabled) setOpen((current) => !current);
         }}
@@ -104,8 +171,19 @@ export default function DatePicker({
         </button>
       ) : null}
 
-      {open ? (
-        <div className="absolute left-0 top-[3.25rem] z-50 w-[min(92vw,390px)] rounded-xl border border-[#e0e5ee] bg-white p-6 animate-in fade-in zoom-in-95 duration-150">
+      {open && typeof document !== "undefined" ? createPortal(
+        <div
+          ref={calendarRef}
+          className="fixed z-[80] w-[min(92vw,390px)] overflow-y-auto rounded-xl border border-[#e0e5ee] bg-white p-6 animate-in fade-in zoom-in-95 duration-150"
+          style={{
+            top: calendarPosition?.top ?? 0,
+            left: calendarPosition?.left ?? 0,
+            maxHeight: calendarPosition?.maxHeight ?? 400,
+            visibility: calendarPosition ? "visible" : "hidden",
+          }}
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+        >
           <div className="mb-7 flex items-center justify-between">
             <button
               type="button"
@@ -155,7 +233,8 @@ export default function DatePicker({
               );
             })}
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );

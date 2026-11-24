@@ -15,6 +15,7 @@ import {
   getGarageRecords,
   getVehicleAuditHistory,
   getVehicleRepairHistory,
+  getMaintenanceSchedules,
   getVehicleMaintenanceDefaults,
   updateVehicleMaintenanceDefaults,
   type VehicleRecord,
@@ -24,7 +25,7 @@ import {
   type OdometerImportRow,
   type VehicleMaintenanceDefaults,
 } from "../../lib/api/vmmsApi";
-import type { VehicleRepairHistoryItem } from "../../types/maintenance";
+import type { MaintenanceTask, VehicleRepairHistoryItem } from "../../types/maintenance";
 import {
   DataTable,
   ConfirmationModal,
@@ -83,6 +84,19 @@ const formatRepairDate = (value: string | null): string => {
   });
 };
 
+const keepsVehicleUnderMaintenance = (task: MaintenanceTask) => {
+  if (task.status === "IN_PROGRESS" || task.status === "DONE") return true;
+  const progress = task.workOrderProgress;
+  return (
+    task.status === "OVERDUE" &&
+    typeof progress === "object" &&
+    progress !== null &&
+    !Array.isArray(progress) &&
+    "overdueFromStatus" in progress &&
+    progress.overdueFromStatus === "IN_PROGRESS"
+  );
+};
+
 export default function Vehicles() {
   const currentUser = useAuthStore((state) => state.currentUser);
   const canManage = canManageVehicles(currentUser);
@@ -116,11 +130,15 @@ export default function Vehicles() {
   const [repairHistoryLoading, setRepairHistoryLoading] = useState(false);
   const [repairHistoryLoadingMore, setRepairHistoryLoadingMore] = useState(false);
   const [repairHistoryError, setRepairHistoryError] = useState(false);
+  const [maintenanceWorkOrders, setMaintenanceWorkOrders] = useState<MaintenanceTask[]>([]);
+  const [maintenanceWorkOrdersLoading, setMaintenanceWorkOrdersLoading] = useState(false);
+  const [maintenanceWorkOrdersError, setMaintenanceWorkOrdersError] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [odometerVehicle, setOdometerVehicle] = useState<VehicleRecord | null>(null);
   const [odometerInput, setOdometerInput] = useState("");
   const [odometerError, setOdometerError] = useState("");
   const [odometerSaving, setOdometerSaving] = useState(false);
+  const [odometerConfirmOpen, setOdometerConfirmOpen] = useState(false);
   const [maintenanceDefaultsVehicle, setMaintenanceDefaultsVehicle] =
     useState<VehicleRecord | null>(null);
   const [maintenanceDefaults, setMaintenanceDefaults] =
@@ -200,6 +218,7 @@ export default function Vehicles() {
   }, [load]);
 
   const vehicleDetailsId = vehicleDetails?.id;
+  const vehicleDetailsPlateNumber = vehicleDetails?.plateNumber;
   useEffect(() => {
     if (!vehicleDetailsId || !canViewAudit) {
       // Clear details from the previous vehicle when its modal closes or access changes.
@@ -219,6 +238,44 @@ export default function Vehicles() {
 
     return () => { active = false; };
   }, [vehicleDetailsId, canViewAudit]);
+
+  useEffect(() => {
+    if (!vehicleDetailsId) {
+      // Clear details when the vehicle modal closes.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMaintenanceWorkOrders([]);
+      setMaintenanceWorkOrdersError(false);
+      return;
+    }
+
+    let active = true;
+    setMaintenanceWorkOrdersLoading(true);
+    setMaintenanceWorkOrdersError(false);
+    getMaintenanceSchedules({
+      statuses: ["IN_PROGRESS", "DONE", "OVERDUE"],
+    })
+      .then((schedules) => {
+        if (!active) return;
+        const vehicleIdentifiers = [vehicleDetailsId, vehicleDetailsPlateNumber];
+        setMaintenanceWorkOrders(
+          schedules.filter(
+            (schedule) =>
+              vehicleIdentifiers.includes(schedule.vehicleId) &&
+              keepsVehicleUnderMaintenance(schedule),
+          ),
+        );
+      })
+      .catch(() => {
+        if (active) setMaintenanceWorkOrdersError(true);
+      })
+      .finally(() => {
+        if (active) setMaintenanceWorkOrdersLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [vehicleDetailsId, vehicleDetailsPlateNumber]);
 
   useEffect(() => {
     if (!vehicleDetailsId) {
@@ -405,8 +462,9 @@ export default function Vehicles() {
     if (!canManage || !vehicle.isActive) return;
     setOpenMenuId(null);
     setOdometerVehicle(vehicle);
-    setOdometerInput("");
+    setOdometerInput(String(vehicle.odometer));
     setOdometerError("");
+    setOdometerConfirmOpen(false);
   };
 
   const openManualBulkOdometer = () => {
@@ -707,8 +765,8 @@ export default function Vehicles() {
     }
   };
 
-  const handleOdometerUpdate = async () => {
-    if (!canManage || !odometerVehicle || odometerSaving) return;
+  const validateOdometerInput = () => {
+    if (!odometerVehicle) return null;
     setOdometerError("");
     const odometer = Number(odometerInput);
     if (
@@ -718,18 +776,24 @@ export default function Vehicles() {
       odometer > 2147483647
     ) {
       setOdometerError("Enter a positive whole-number odometer reading.");
-      return;
+      return null;
     }
     if (odometer < odometerVehicle.odometer) {
       setOdometerError(
         `Reading cannot be lower than the current value (${odometerVehicle.odometer.toLocaleString()} km).`,
       );
-      return;
+      return null;
     }
 
+    return odometer;
+  };
+
+  const saveOdometerUpdate = async (odometer: number) => {
+    if (!canManage || !odometerVehicle || odometerSaving) return;
     setOdometerSaving(true);
     try {
       await updateVehicleOdometerRecord(odometerVehicle.id, odometer);
+      setOdometerConfirmOpen(false);
       setOdometerVehicle(null);
       showToast("Odometer updated successfully.");
       await load();
@@ -740,6 +804,28 @@ export default function Vehicles() {
     } finally {
       setOdometerSaving(false);
     }
+  };
+
+  const handleOdometerUpdate = async () => {
+    if (!canManage || !odometerVehicle || odometerSaving) return;
+    const odometer = validateOdometerInput();
+    if (odometer === null) return;
+    if (odometer !== odometerVehicle.odometer) {
+      setOdometerConfirmOpen(true);
+      return;
+    }
+    await saveOdometerUpdate(odometer);
+  };
+
+  const confirmOdometerUpdate = async () => {
+    if (!canManage || !odometerVehicle || odometerSaving) return;
+    const odometer = validateOdometerInput();
+    if (odometer === null) {
+      setOdometerConfirmOpen(false);
+      return;
+    }
+    setOdometerConfirmOpen(false);
+    await saveOdometerUpdate(odometer);
   };
 
   const confirmDelete = (v: VehicleRecord) => {
@@ -1537,7 +1623,10 @@ export default function Vehicles() {
       <Modal
         isOpen={canManage && odometerVehicle !== null}
         title={odometerVehicle ? `Update Odometer — ${odometerVehicle.plateNumber}` : "Update Odometer"}
-        onClose={() => setOdometerVehicle(null)}
+        onClose={() => {
+          setOdometerConfirmOpen(false);
+          setOdometerVehicle(null);
+        }}
         onConfirm={handleOdometerUpdate}
         confirmLabel={odometerSaving ? "Updating…" : "Update Odometer"}
         size="sm"
@@ -1568,6 +1657,25 @@ export default function Vehicles() {
           </div>
         )}
       </Modal>
+
+      <ConfirmationModal
+        isOpen={odometerConfirmOpen}
+        title="Confirm odometer change"
+        message={
+          odometerVehicle ? (
+            <p>
+              Update <strong>{odometerVehicle.plateNumber}</strong> from{" "}
+              <strong>{odometerVehicle.odometer.toLocaleString()} km</strong>{" "}
+              to{" "}
+              <strong>{Number(odometerInput).toLocaleString()} km</strong>?
+            </p>
+          ) : null
+        }
+        confirmLabel={odometerSaving ? "Updating…" : "Confirm update"}
+        busy={odometerSaving}
+        onConfirm={() => void confirmOdometerUpdate()}
+        onCancel={() => setOdometerConfirmOpen(false)}
+      />
 
       {/* Vehicle Details */}
       <Modal
@@ -1610,6 +1718,59 @@ export default function Vehicles() {
                 </div>
               ))}
             </dl>
+
+            <section
+              className="mt-6 border-t border-[#dde4ef] pt-5"
+              aria-labelledby="vehicle-maintenance-work-orders-title"
+            >
+              <h3
+                id="vehicle-maintenance-work-orders-title"
+                className="text-sm font-bold uppercase tracking-wide text-[#141827]"
+              >
+                Maintenance Work Orders
+              </h3>
+              <p className="mt-1 text-xs text-[#64748b]">
+                In-progress or awaiting-review work orders explain this vehicle’s maintenance status.
+              </p>
+              {maintenanceWorkOrdersLoading ? (
+                <p className="py-4 text-sm text-[#64748b]" role="status">
+                  Loading maintenance work orders…
+                </p>
+              ) : maintenanceWorkOrdersError ? (
+                <p className="py-4 text-sm text-red-700" role="alert">
+                  Could not load maintenance work orders. Try closing and reopening this vehicle.
+                </p>
+              ) : maintenanceWorkOrders.length === 0 ? (
+                <p className="py-4 text-sm text-[#64748b]">
+                  No active maintenance work orders were found for this vehicle.
+                </p>
+              ) : (
+                <ul className="mt-2 divide-y divide-[#dde4ef]">
+                  {maintenanceWorkOrders.map((workOrder) => (
+                    <li
+                      key={workOrder.id}
+                      className="flex flex-wrap items-start justify-between gap-3 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="break-words text-sm font-semibold text-[#141827]">
+                          {workOrder.workOrderNumber ?? workOrder.id}
+                        </p>
+                        <p className="mt-1 break-words text-sm text-[#344158]">
+                          {workOrder.title}
+                        </p>
+                      </div>
+                      <StatusBadge
+                        status={
+                          workOrder.status === "DONE"
+                            ? "Awaiting Review"
+                            : workOrder.status.replace(/_/g, " ")
+                        }
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
 
             <section
               className="mt-6 border-t border-[#dde4ef] pt-5"

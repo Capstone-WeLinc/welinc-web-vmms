@@ -914,12 +914,20 @@ export const ToastNotification = ({ type, message }: ToastProps) => {
     info: "border-[#168cff] bg-[#e8f3ff] text-[#075fa8]",
   }[type];
 
-  return (
-    <div className={`flex min-h-11 items-center gap-3 rounded-lg border px-4 py-2.5 text-sm font-medium ${styles}`}>
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-current/10">
-        <Check className="h-3.5 w-3.5" />
-      </span>
-      {message}
-    </div>
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="pointer-events-none fixed right-4 top-4 z-[100] w-[min(24rem,calc(100vw-2rem))]">
+      <div
+        role={type === "error" ? "alert" : "status"}
+        className={`pointer-events-auto flex min-h-11 w-full min-w-0 items-center gap-3 rounded-lg border px-4 py-2.5 text-sm font-medium ${styles}`}
+      >
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-current/10">
+          <Check className="h-3.5 w-3.5" />
+        </span>
+        <span className="min-w-0 break-words">{message}</span>
+      </div>
+    </div>,
+    document.body,
   );
 };
