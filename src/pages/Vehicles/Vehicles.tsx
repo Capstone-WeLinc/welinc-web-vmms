@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect, useCallback, useRef, type ChangeEvent, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { Eye, FileSpreadsheet, Filter, Gauge, Plus, Settings2, Truck } from "lucide-react";
 import {
   getVehicleRecords,
@@ -31,6 +32,7 @@ import {
   ToastNotification,
 } from "../../components/ui";
 import type { DataTableColumn } from "../../components/ui";
+import { useFilterPanelPosition } from "../../components/ui/filterPanelPosition";
 import { Modal, FormInput } from "../../components/ui";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import { useAuthStore } from "../../store/authStore";
@@ -80,6 +82,13 @@ export default function Vehicles() {
   const [vehicleSort, setVehicleSort] = useState<VehicleSortMode>("DATE_DESC");
   const [showFilters, setShowFilters] = useState(false);
   const filterPanelRef = useRef<HTMLDivElement>(null);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
+  const filterContentRef = useRef<HTMLDivElement>(null);
+  const { position: filterPanelPosition, preparePosition } = useFilterPanelPosition(
+    showFilters,
+    filterButtonRef,
+    filterContentRef,
+  );
   const [showModal, setShowModal] = useState(false);
   const [vehicleSaveConfirmMode, setVehicleSaveConfirmMode] = useState<"create" | "edit" | null>(null);
   const [initialEditForm, setInitialEditForm] = useState<ReturnType<typeof emptyForm> | null>(null);
@@ -203,7 +212,11 @@ export default function Vehicles() {
   useEffect(() => {
     if (!showFilters) return;
     const handlePointerDown = (event: globalThis.MouseEvent) => {
-      if (!filterPanelRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        !filterPanelRef.current?.contains(target) &&
+        !filterContentRef.current?.contains(target)
+      ) {
         setShowFilters(false);
       }
     };
@@ -1062,9 +1075,11 @@ export default function Vehicles() {
             <div className="flex gap-3">
               <div ref={filterPanelRef} className="relative">
                 <button
+                  ref={filterButtonRef}
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
+                    if (!showFilters) preparePosition();
                     setShowFilters((current) => !current);
                   }}
                   aria-expanded={showFilters}
@@ -1082,9 +1097,16 @@ export default function Vehicles() {
                   </span>
                 </button>
 
-                {showFilters && (
+                {showFilters && typeof document !== "undefined" && createPortal(
                   <div
-                    className="absolute right-0 top-14 z-40 w-[min(92vw,430px)] rounded-xl border border-[#e0e5ee] bg-white p-5 animate-in fade-in zoom-in-95 duration-150"
+                    ref={filterContentRef}
+                    className="fixed z-50 w-[min(92vw,430px)] overflow-y-auto rounded-xl border border-[#e0e5ee] bg-white p-5 animate-in fade-in zoom-in-95 duration-150"
+                    style={{
+                      top: filterPanelPosition?.top ?? 0,
+                      left: filterPanelPosition?.left ?? 0,
+                      maxHeight: filterPanelPosition?.maxHeight ?? 320,
+                      visibility: filterPanelPosition ? "visible" : "hidden",
+                    }}
                     onClick={(event) => event.stopPropagation()}
                   >
                     <h3 className="text-lg font-extrabold uppercase tracking-wide text-[#141827]">
@@ -1142,7 +1164,8 @@ export default function Vehicles() {
                         Clear
                       </button>
                     </div>
-                  </div>
+                  </div>,
+                  document.body,
                 )}
               </div>
             </div>

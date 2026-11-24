@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Droplet, TrendingUp, AlertTriangle, BarChart3, Settings2 } from 'lucide-react';
 import Button from '../../components/ui/Button';
+import KpiCard from '../../components/ui/KpiCard';
 import PageHeader from '../../components/PageHeader/PageHeader';
 import FuelLog from './components/FuelLog';
 import EfficiencyTrendsWithFilters from './components/EfficiencyTrendsWithFilters';
@@ -13,43 +14,6 @@ import { getVehicles } from '../../lib/api/vmmsApi';
 import { acknowledgeFuelAnomaly, createFuelEntry, createFuelStation, getFuelAnomalies, getFuelAnomalyAttachment, getFuelAnomalyThreshold, getFuelEntries, getFuelReceiptAttachment, getFuelStations, recordFuelReportExport, updateFuelAnomaly, updateFuelAnomalyThreshold, updateFuelStation, uploadFuelAnomalyAttachment, voidFuelEntry, type FuelAnomalyRecord, type FuelFillUpInput, type FuelStation, type FuelStationManagement, type FuelStationUpdate, type FuelVehicle } from '../../lib/api/fuelService';
 import type { FuelFillUp } from './types';
 import { excludeVoidedFuelFillUps } from './fuelReportData';
-
-type KPIStatCardProps = {
-  icon: ReactNode;
-  value: string | number;
-  label: string;
-  subtitle?: string;
-  iconBgColor: string;
-  iconColor: string;
-};
-
-function KPIStatCard({ icon, value, label, subtitle, iconBgColor, iconColor }: KPIStatCardProps) {
-  return (
-    <div className="flex h-full min-h-40 min-w-0 flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 transition-theme">
-      <div className="mb-4 flex items-center">
-        <div
-          style={{
-            display: 'flex',
-            height: '2.5rem',
-            width: '2.5rem',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: '1rem',
-            background: iconBgColor,
-            color: iconColor,
-          }}
-        >
-          {icon}
-        </div>
-      </div>
-      <div className="mt-auto min-w-0">
-        <div className="break-words text-2xl font-bold leading-tight tracking-tight tabular-nums text-[var(--color-text-primary)]">{value}</div>
-        <div className="mt-2 text-xs font-semibold uppercase leading-5 tracking-wide text-[var(--color-text-secondary)]">{label}</div>
-        {subtitle && <div className="mt-1 break-words text-xs leading-5" style={{ color: iconColor }}>{subtitle}</div>}
-      </div>
-    </div>
-  );
-}
 
 type Tab = 'fuel-log' | 'efficiency-trends' | 'anomaly-detection';
 const MAX_FUEL_ANOMALY_ATTACHMENT_BYTES = 10 * 1024 * 1024;
@@ -311,37 +275,37 @@ export default function FuelManagement() {
       </div>
       {/* KPI Cards */}
       <div className={kpiGridClasses}>
-        <KPIStatCard
+        <KpiCard
           icon={<Droplet size={20} strokeWidth={1.8} />}
           value={totalFillUps.toString()}
           label="Total Fill-ups"
-          subtitle={`${appliedFrom} to ${appliedTo}`}
-          iconBgColor="rgba(59, 130, 246, 0.12)"
-          iconColor="#3b82f6"
+          hint={`${appliedFrom} to ${appliedTo}`}
+          color="#3b82f6"
+          iconBackgroundColor="rgba(59, 130, 246, 0.12)"
         />
-        <KPIStatCard
+        <KpiCard
           icon={<BarChart3 size={20} strokeWidth={1.8} />}
           value={`${totalLiters.toLocaleString()}L`}
           label="Total Liters"
-          subtitle="Filtered range metrics"
-          iconBgColor="rgba(16, 185, 129, 0.12)"
-          iconColor="#10b981"
+          hint="Filtered range metrics"
+          color="#10b981"
+          iconBackgroundColor="rgba(16, 185, 129, 0.12)"
         />
-        <KPIStatCard
+        <KpiCard
           icon={<AlertTriangle size={20} strokeWidth={1.8} />}
           value={`₱${totalCost.toLocaleString()}`}
           label="Total Fuel Cost"
-          subtitle="Filtered range spent"
-          iconBgColor="rgba(239, 68, 68, 0.12)"
-          iconColor="#ef4444"
+          hint="Filtered range spent"
+          color="#ef4444"
+          iconBackgroundColor="rgba(239, 68, 68, 0.12)"
         />
-        <KPIStatCard
+        <KpiCard
           icon={<TrendingUp size={20} strokeWidth={1.8} />}
           value={`${avgEfficiency} km/L`}
           label="Avg Efficiency"
-          subtitle="Filtered range avg"
-          iconBgColor="rgba(16, 185, 129, 0.12)"
-          iconColor="#10b981"
+          hint="Filtered range avg"
+          color="#10b981"
+          iconBackgroundColor="rgba(16, 185, 129, 0.12)"
         />
       </div>
       {!loading && !pageError && kpiFilteredFillUps.length === 0 && <div role="status" className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 text-sm text-[var(--color-text-secondary)]">No fuel records for {appliedFrom} to {appliedTo}. Choose another period or have Operations log a fill-up.</div>}

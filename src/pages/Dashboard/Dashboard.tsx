@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import MaintenanceStatusBadge from "../../components/ui/MaintenanceStatusBadge";
+import KpiCard from "../../components/ui/KpiCard";
 import { getVmmsDashboardData, type VmmsDashboardData } from "../../lib/api/dashboardService";
 import { getFuelAnomalies, type FuelAnomalyRecord } from "../../lib/api/fuelService";
 import { useAuthStore } from "../../store/authStore";
@@ -66,42 +67,6 @@ function Panel({
       </div>
       {children}
     </section>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  icon: Icon,
-  color,
-  onClick,
-  hint,
-}: {
-  label: string;
-  value: string | number;
-  icon: ComponentType<{ size?: number }>;
-  color: string;
-  onClick: () => void;
-  hint?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex h-full w-full flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 text-left transition hover:-translate-y-0.5 hover:border-[var(--color-brand-primary)]"
-    >
-      <div className="flex min-h-10 items-center gap-3">
-        <div
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-          style={{ color, backgroundColor: `${color}16` }}
-        >
-          <Icon size={20} />
-        </div>
-        <div className="text-2xl font-bold leading-none text-[var(--color-text-primary)]">{value}</div>
-      </div>
-      <div className="mt-3 text-xs font-bold uppercase tracking-wide text-[var(--color-text-secondary)]">{label}</div>
-      {hint ? <div className="mt-2 text-xs text-[var(--color-text-secondary)]">{hint}</div> : <div className="mt-2 min-h-[1rem]" aria-hidden="true" />}
-    </button>
   );
 }
 
@@ -371,17 +336,20 @@ export default function Dashboard() {
                 <div className="mt-2 h-3 w-28 rounded bg-[var(--color-input-bg)]" />
               </div>
             ))
-          : summaryCards.map((card) => (
-              <StatCard
-                key={card.label}
-                label={card.label}
-                value={card.value}
-                icon={card.icon}
-                color={card.color}
-                hint={card.hint}
-                onClick={() => navigate(card.path)}
-              />
-            ))}
+          : summaryCards.map((card) => {
+              const Icon = card.icon;
+              return (
+                <KpiCard
+                  key={card.label}
+                  label={card.label}
+                  value={card.value}
+                  icon={<Icon size={20} />}
+                  color={card.color}
+                  hint={card.hint}
+                  onClick={() => navigate(card.path)}
+                />
+              );
+            })}
       </div>
 
       <Panel
@@ -400,20 +368,27 @@ export default function Dashboard() {
         }
       >
         <div className="grid gap-4 p-5 sm:grid-cols-3">
-          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
-            <div className="text-xs font-bold uppercase tracking-wide text-[var(--color-text-secondary)]">Work orders in period</div>
-            <div className="mt-2 text-2xl font-bold text-[var(--color-text-primary)]">{model.periodActivity.workOrdersInPeriod}</div>
-          </div>
-          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
-            <div className="text-xs font-bold uppercase tracking-wide text-[var(--color-text-secondary)]">Completed in period</div>
-            <div className="mt-2 text-2xl font-bold text-[var(--color-text-primary)]">{model.periodActivity.completedInPeriodByDate}</div>
-            <div className="mt-1 text-xs text-[var(--color-text-secondary)]">Completed status, by recorded date</div>
-          </div>
-          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
-            <div className="text-xs font-bold uppercase tracking-wide text-[var(--color-text-secondary)]">Visible schedules</div>
-            <div className="mt-2 text-2xl font-bold text-[var(--color-text-primary)]">{model.visibleSchedules.length}</div>
-            <div className="mt-1 text-xs text-[var(--color-text-secondary)]">Current scope (role/entity)</div>
-          </div>
+          <KpiCard
+            label="Work orders in period"
+            value={model.periodActivity.workOrdersInPeriod}
+            icon={<ClipboardList size={20} />}
+            color="#0284c7"
+            hint="Current report period"
+          />
+          <KpiCard
+            label="Completed in period"
+            value={model.periodActivity.completedInPeriodByDate}
+            icon={<CheckCircle2 size={20} />}
+            color="#059669"
+            hint="Completed status, by recorded date"
+          />
+          <KpiCard
+            label="Visible schedules"
+            value={model.visibleSchedules.length}
+            icon={<CalendarClock size={20} />}
+            color="#7c3aed"
+            hint="Current scope (role/entity)"
+          />
         </div>
       </Panel>
 

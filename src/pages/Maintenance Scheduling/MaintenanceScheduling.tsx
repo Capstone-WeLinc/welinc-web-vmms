@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -35,6 +34,7 @@ import {
   MaintenanceStatusLegend,
   ToastNotification,
 } from "../../components/ui";
+import KpiCard from "../../components/ui/KpiCard";
 import CreateSchedule from "./CreateSchedule";
 import { useAuthStore } from "../../store/authStore";
 import { canEditWorkOrderPriority, canManageSchedules } from "../../lib/utils/permissions";
@@ -96,47 +96,6 @@ type PendingScheduleAction = {
   task: MaintenanceTask;
   requestId?: string;
 };
-
-interface KPIStatCardProps {
-  icon: ReactNode;
-  value: string | number;
-  label: string;
-  subtitle: string;
-  iconBgColor: string;
-  iconColor: string;
-}
-
-const KPIStatCard = ({
-  icon,
-  value,
-  label,
-  subtitle,
-  iconBgColor,
-  iconColor,
-}: KPIStatCardProps) => (
-  <Card
-    padding="none"
-    className="p-5 transition duration-200 hover:-translate-y-0.5"
-  >
-    <div className="flex items-start justify-between gap-4">
-      <div>
-        <p className="text-sm text-[var(--color-text-secondary)]">{label}</p>
-        <p className="mt-3 text-3xl font-bold text-[var(--color-text-primary)]">
-          {value}
-        </p>
-        <p className="mt-2 text-sm font-medium" style={{ color: iconColor }}>
-          {subtitle}
-        </p>
-      </div>
-      <div
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[var(--color-border)]"
-        style={{ background: iconBgColor, color: iconColor }}
-      >
-        {icon}
-      </div>
-    </div>
-  </Card>
-);
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "secondary" | "danger" | "warning";
@@ -1238,53 +1197,53 @@ const MaintenanceSchedulingCombined = () => {
 
       <div className="space-y-6">
         <div className="grid gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
-          <KPIStatCard
+          <KpiCard
             icon={<TrendingUp size={20} strokeWidth={1.8} />}
             value={`${compliance}%`}
             label="Compliance"
-            subtitle="Fleet score"
-            iconColor="#22c55e"
-            iconBgColor="rgba(34, 197, 94, 0.12)"
+            hint="Fleet score"
+            color="#22c55e"
+            iconBackgroundColor="rgba(34, 197, 94, 0.12)"
           />
-          <KPIStatCard
+          <KpiCard
             icon={<Clock size={20} strokeWidth={1.8} />}
             value={pendingCount}
             label="Pending"
-            subtitle="Awaiting start"
-            iconColor="#047857"
-            iconBgColor="rgba(4, 120, 87, 0.12)"
+            hint="Awaiting start"
+            color="#047857"
+            iconBackgroundColor="rgba(4, 120, 87, 0.12)"
           />
-          <KPIStatCard
+          <KpiCard
             icon={<AlertCircle size={20} strokeWidth={1.8} />}
             value={dueCount}
             label="Due"
-            subtitle="Ready to start"
-            iconColor="#c2410c"
-            iconBgColor="rgba(194, 65, 12, 0.12)"
+            hint="Ready to start"
+            color="#c2410c"
+            iconBackgroundColor="rgba(194, 65, 12, 0.12)"
           />
-          <KPIStatCard
+          <KpiCard
             icon={<Play size={20} strokeWidth={1.8} />}
             value={inProgressCount}
             label="In-Progress"
-            subtitle="Ongoing tasks"
-            iconColor="#14b8a6"
-            iconBgColor="rgba(20, 184, 166, 0.12)"
+            hint="Ongoing tasks"
+            color="#14b8a6"
+            iconBackgroundColor="rgba(20, 184, 166, 0.12)"
           />
-          <KPIStatCard
+          <KpiCard
             icon={<AlertCircle size={20} strokeWidth={1.8} />}
             value={overdueCount}
             label="Overdue"
-            subtitle="Tasks overdue"
-            iconColor="#ef4444"
-            iconBgColor="rgba(239, 68, 68, 0.12)"
+            hint="Tasks overdue"
+            color="#ef4444"
+            iconBackgroundColor="rgba(239, 68, 68, 0.12)"
           />
-          <KPIStatCard
+          <KpiCard
             icon={<CheckCircle2 size={20} strokeWidth={1.8} />}
             value={completedCount}
             label="Completed"
-            subtitle="Finished tasks"
-            iconColor="#94a3b8"
-            iconBgColor="rgba(148, 163, 184, 0.12)"
+            hint="Finished tasks"
+            color="#94a3b8"
+            iconBackgroundColor="rgba(148, 163, 184, 0.12)"
           />
         </div>
 

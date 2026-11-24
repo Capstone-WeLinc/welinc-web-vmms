@@ -146,24 +146,24 @@ export default function Navbar() {
         title="Notifications"
         onClose={() => setIsNotificationsOpen(false)}
         size="lg"
-        className="max-w-2xl"
+        className="!max-w-5xl !h-[85dvh] !max-h-[calc(100dvh-2rem)] !p-0 flex flex-col overflow-hidden"
         footer={
           <div className="flex justify-end">
             <button
               type="button"
               onClick={() => setIsNotificationsOpen(false)}
-              className="rounded-lg bg-[#070b45] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#111a62]"
+              className="rounded-lg bg-[#070b45] px-6 py-3 text-base font-semibold text-white transition hover:bg-[#111a62]"
             >
               Close
             </button>
           </div>
         }
       >
-        <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+        <div className="h-full space-y-4 overflow-y-auto pr-2">
           {isLoadingNotifications ? (
-            <p className="text-xs text-[#8a98ad]">Loading notifications...</p>
+            <p className="text-base text-[#667085]">Loading notifications...</p>
           ) : notifications.length === 0 ? (
-            <p className="text-xs text-[#8a98ad]">You have no new notifications.</p>
+            <p className="text-base text-[#667085]">You have no new notifications.</p>
           ) : (
             notifications.map((notification) => (
               <button
@@ -179,7 +179,7 @@ export default function Navbar() {
                   }
                 }}
                 aria-label={`${notification.title}. ${notification.message}${notification.maintenanceScheduleId ? ". Open work order." : ". Mark as read."}`}
-                className={`w-full rounded-lg border p-3 text-left transition ${
+                className={`w-full rounded-lg border p-5 text-left transition ${
                   notification.title === "Critical maintenance escalation"
                     ? notification.isRead
                       ? "border-red-300 bg-red-50"
@@ -193,10 +193,10 @@ export default function Navbar() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       {notification.title === "Critical maintenance escalation" ? (
-                        <AlertTriangle size={15} className="text-red-700" aria-hidden="true" />
+                        <AlertTriangle size={18} className="text-red-700" aria-hidden="true" />
                       ) : null}
                       <p
-                        className={`text-sm font-bold ${
+                        className={`text-lg font-bold ${
                           notification.title === "Critical maintenance escalation"
                             ? "text-red-900"
                             : "text-[#141827]"
@@ -205,23 +205,23 @@ export default function Navbar() {
                         {notification.title}
                       </p>
                       {notification.title === "Critical maintenance escalation" ? (
-                        <span className="rounded-full bg-red-700 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-white">
+                        <span className="rounded-full bg-red-700 px-2.5 py-1 text-xs font-extrabold tracking-wide text-white">
                           CRITICAL
                         </span>
                       ) : null}
                       {/fleet .*report/i.test(notification.title) ? (
-                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold tracking-wide text-blue-800">
+                        <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold tracking-wide text-blue-800">
                           SCHEDULED REPORT
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-1 text-sm text-[#667085]">{notification.message}</p>
+                    <p className="mt-2 text-base leading-6 text-[#667085]">{notification.message}</p>
                   </div>
                   {!notification.isRead && (
                     <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-[#f4c400]" />
                   )}
                 </div>
-                <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-[#8a98ad]">
+                <p className="mt-3 text-sm font-medium uppercase tracking-wide text-[#667085]">
                   {new Date(notification.createdAt).toLocaleString(undefined, {
                     month: "short",
                     day: "numeric",
@@ -231,7 +231,7 @@ export default function Navbar() {
                   })}
                 </p>
                 {notification.maintenanceScheduleId ? (
-                  <p className="mt-2 text-xs font-semibold text-[#1a1f6e]">Open overdue work order â†’</p>
+                  <p className="mt-3 text-sm font-semibold text-[#1a1f6e]">Open overdue work order â†’</p>
                 ) : null}
               </button>
             ))

@@ -6,6 +6,7 @@ export { default as FormInput } from './FormInput';
 export { default as Alert } from './Alert';
 export { default as Modal } from './Modal';
 export { default as DatePicker } from './DatePicker';
+export { default as KpiCard } from './KpiCard';
 export { default as MaintenanceStatusBadge } from './MaintenanceStatusBadge';
 export { default as MaintenanceStatusLegend } from './MaintenanceStatusLegend';
 export { default as SearchableSelect } from './SearchableSelect';

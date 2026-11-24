@@ -1,6 +1,15 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import { Check, Pencil, Plus, RefreshCw, Trash2, Warehouse, X } from "lucide-react";
-import { ConfirmationModal } from "../../components/ui";
+import {
+  ActionMenu,
+  ConfirmationModal,
+  DataTable,
+  FormInput,
+  Modal,
+  SearchInput,
+  StatusBadge,
+} from "../../components/ui";
+import type { DataTableColumn } from "../../components/ui";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import { useAuthStore } from "../../store/authStore";
 import { canManageSchedules } from "../../lib/utils/permissions";
@@ -16,15 +25,17 @@ export default function OutsourcedProviders() {
   const currentUser = useAuthStore((state) => state.currentUser);
   const canManage = canManageSchedules(currentUser);
   const [providers, setProviders] = useState<OutsourcedProviderRecord[]>([]);
+  const [search, setSearch] = useState("");
   const [name, setName] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState("");
+  const [editingProvider, setEditingProvider] = useState<OutsourcedProviderRecord | null>(null);
+  const [showModal, setShowModal] = useState(false);
   const [deleteTarget, setDeleteTarget] =
     useState<OutsourcedProviderRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [busyProviderId, setBusyProviderId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -59,47 +70,44 @@ export default function OutsourcedProviders() {
     };
   }, []);
 
-  async function addProvider(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function openCreate() {
+    setName("");
+    setEditingProvider(null);
+    setError("");
+    setShowModal(true);
+  }
+
+  function openEdit(provider: OutsourcedProviderRecord) {
+    setName(provider.name);
+    setEditingProvider(provider);
+    setError("");
+    setShowModal(true);
+  }
+
+  async function saveProvider() {
+    if (saving) return;
     const trimmedName = name.trim();
-    if (!trimmedName) return;
-    setSaving(true);
-    setError("");
-    try {
-      await createOutsourcedProvider(trimmedName);
-      setName("");
-      await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to save provider.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function startEditing(provider: OutsourcedProviderRecord) {
-    setEditingId(provider.id);
-    setEditingName(provider.name);
-    setError("");
-  }
-
-  async function saveName(provider: OutsourcedProviderRecord) {
-    const trimmedName = editingName.trim();
     if (!trimmedName) {
       setError("Provider name is required.");
       return;
     }
 
-    setBusyProviderId(provider.id);
+    setSaving(true);
     setError("");
     try {
-      await updateOutsourcedProvider(provider.id, { name: trimmedName });
-      setEditingId(null);
-      setEditingName("");
+      if (editingProvider) {
+        await updateOutsourcedProvider(editingProvider.id, { name: trimmedName });
+      } else {
+        await createOutsourcedProvider(trimmedName);
+      }
+      setShowModal(false);
+      setName("");
+      setEditingProvider(null);
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to update provider.");
+      setError(e instanceof Error ? e.message : "Unable to save the provider.");
     } finally {
-      setBusyProviderId(null);
+      setSaving(false);
     }
   }
 
@@ -133,183 +141,176 @@ export default function OutsourcedProviders() {
     }
   }
 
+  useEffect(() => {
+    if (!openMenuId) return;
+    const close = () => setOpenMenuId(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [openMenuId]);
+
+  const filteredProviders = providers.filter((provider) =>
+    provider.name.toLowerCase().includes(search.trim().toLowerCase()),
+  );
+  const columns: DataTableColumn<OutsourcedProviderRecord>[] = [
+    {
+      key: "name",
+      header: "Provider Name",
+      width: "40%",
+      render: (provider) => <span className="font-bold text-[#141827]">{provider.name}</span>,
+    },
+    {
+      key: "usageCount",
+      header: "Used by",
+      width: "25%",
+      render: (provider) =>
+        provider.usageCount === 0
+          ? "Not used"
+          : `${provider.usageCount} ${provider.usageCount === 1 ? "schedule" : "schedules"}`,
+    },
+    {
+      key: "isActive",
+      header: "Status",
+      width: "20%",
+      align: "center",
+      render: (provider) => <StatusBadge status={provider.isActive ? "Active" : "Inactive"} />,
+    },
+  ];
+
+  if (canManage) {
+    columns.push({
+      key: "actions",
+      header: "Actions",
+      width: "15%",
+      align: "center",
+      render: (provider) => {
+        const isBusy = busyProviderId === provider.id;
+        const isUsed = provider.usageCount > 0;
+        if (isBusy) {
+          return <span className="text-xs text-[#64748b]">Updating…</span>;
+        }
+
+        return (
+          <ActionMenu
+            open={openMenuId === provider.id}
+            onToggle={(event: MouseEvent<HTMLButtonElement>) => {
+              event.stopPropagation();
+              setOpenMenuId((current) => (current === provider.id ? null : provider.id));
+            }}
+            items={[
+              ...(!isUsed
+                ? [
+                    {
+                      label: "Edit",
+                      icon: Pencil,
+                      onClick: () => {
+                        setOpenMenuId(null);
+                        openEdit(provider);
+                      },
+                    },
+                    {
+                      label: "Delete",
+                      icon: Trash2,
+                      danger: true,
+                      onClick: () => {
+                        setOpenMenuId(null);
+                        setDeleteTarget(provider);
+                      },
+                    },
+                  ]
+                : []),
+              {
+                label: provider.isActive ? "Deactivate" : "Activate",
+                icon: provider.isActive ? X : Check,
+                onClick: () => {
+                  setOpenMenuId(null);
+                  void toggle(provider);
+                },
+              },
+            ]}
+          />
+        );
+      },
+    });
+  }
+
   return (
-    <main className="mx-auto w-full max-w-5xl p-6">
+    <div>
       <PageHeader
         icon={Warehouse}
         title="OUTSOURCED PROVIDERS"
         subtitle="Providers used by maintenance schedules can only be activated or deactivated."
         action={
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            className="inline-flex items-center gap-2 rounded-md border border-[var(--color-border)] px-3 py-2 text-sm"
-          >
-            <RefreshCw size={16} />
-            Refresh
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void refresh()}
+              className="inline-flex items-center gap-2 rounded-xl border border-[#c8ced8] bg-white px-4 py-2.5 text-sm font-semibold text-[#141827] transition hover:bg-slate-50"
+            >
+              <RefreshCw size={16} />
+              Refresh
+            </button>
+            {canManage && (
+              <button
+                type="button"
+                onClick={openCreate}
+                className="flex items-center gap-2 rounded-xl bg-[#070b45] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#11175f]"
+              >
+                <Plus className="h-4 w-4" />
+                Create Provider
+              </button>
+            )}
+          </div>
         }
       />
 
       {error && (
-        <p role="alert" className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+        <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {error}
         </p>
       )}
 
-      {canManage && (
-        <form
-          onSubmit={(event) => void addProvider(event)}
-          className="mb-6 flex gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-4"
-        >
-          <input
-            aria-label="Provider name"
-            maxLength={150}
-            required
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Provider name"
-            className="min-w-0 flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm"
+      <div className="overflow-hidden rounded-2xl border border-[#dde4ef] bg-white">
+        <div className="border-b border-[#dde4ef] p-5">
+          <SearchInput
+            placeholder="Search providers by name…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="max-w-sm"
           />
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex items-center gap-2 rounded-md bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            <Plus size={16} />
-            Add provider
-          </button>
-        </form>
-      )}
-
-      <div className="overflow-x-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
+        </div>
         {loading ? (
-          <p className="p-5 text-sm">Loading providers…</p>
-        ) : providers.length === 0 ? (
-          <p className="p-5 text-sm text-[var(--color-text-secondary)]">
-            No providers registered.
-          </p>
+          <div className="flex items-center justify-center py-16 text-sm text-[#64748b]">Loading providers…</div>
         ) : (
-          <table className="w-full min-w-[42rem] text-left text-sm">
-            <thead className="bg-[var(--color-surface)] text-xs uppercase text-[var(--color-text-secondary)]">
-              <tr>
-                <th className="px-4 py-3">Provider</th>
-                <th className="px-4 py-3">Used by</th>
-                <th className="px-4 py-3">Status</th>
-                {canManage && (
-                  <th className="px-4 py-3 text-right">Actions</th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {providers.map((provider) => {
-                const isEditing = editingId === provider.id;
-                const isBusy = busyProviderId === provider.id;
-                const isUsed = provider.usageCount > 0;
-
-                return (
-                  <tr
-                    key={provider.id}
-                    className="border-t border-[var(--color-border)]"
-                  >
-                    <td className="px-4 py-3 font-medium">
-                      {isEditing ? (
-                        <input
-                          aria-label={`Edit ${provider.name}`}
-                          maxLength={150}
-                          value={editingName}
-                          onChange={(event) =>
-                            setEditingName(event.target.value)
-                          }
-                          className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-sm"
-                        />
-                      ) : (
-                        provider.name
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {provider.usageCount === 0
-                        ? "Not used"
-                        : `${provider.usageCount} ${
-                            provider.usageCount === 1 ? "schedule" : "schedules"
-                          }`}
-                    </td>
-                    <td className="px-4 py-3">
-                      {provider.isActive ? "Active" : "Inactive"}
-                    </td>
-                    {canManage && (
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap justify-end gap-2">
-                          {isUsed ? (
-                            <span className="self-center text-xs text-[var(--color-text-secondary)]">
-                              In use
-                            </span>
-                          ) : isEditing ? (
-                            <>
-                              <button
-                                type="button"
-                                disabled={isBusy}
-                                onClick={() => void saveName(provider)}
-                                className="inline-flex items-center gap-1 rounded-md bg-[var(--color-brand-primary)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-                              >
-                                <Check size={14} />
-                                Save
-                              </button>
-                              <button
-                                type="button"
-                                disabled={isBusy}
-                                onClick={() => {
-                                  setEditingId(null);
-                                  setEditingName("");
-                                }}
-                                className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] px-3 py-1.5 text-xs disabled:opacity-50"
-                              >
-                                <X size={14} />
-                                Cancel
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                disabled={isBusy}
-                                onClick={() => startEditing(provider)}
-                                className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] px-3 py-1.5 text-xs disabled:opacity-50"
-                              >
-                                <Pencil size={14} />
-                                Edit
-                              </button>
-                              <button
-                                type="button"
-                                disabled={isBusy}
-                                onClick={() => setDeleteTarget(provider)}
-                                className="inline-flex items-center gap-1 rounded-md border border-red-200 px-3 py-1.5 text-xs text-red-700 disabled:opacity-50"
-                              >
-                                <Trash2 size={14} />
-                                Delete
-                              </button>
-                            </>
-                          )}
-                          {!isEditing && (
-                            <button
-                              type="button"
-                              disabled={isBusy}
-                              onClick={() => void toggle(provider)}
-                              className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-xs disabled:opacity-50"
-                            >
-                              {provider.isActive ? "Deactivate" : "Activate"}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <DataTable<OutsourcedProviderRecord>
+            columns={columns}
+            data={filteredProviders}
+            getRowKey={(provider) => provider.id}
+            emptyMessage={providers.length ? "No providers match your search." : "No providers registered."}
+          />
         )}
       </div>
+
+      <Modal
+        isOpen={showModal}
+        title={editingProvider ? "Edit Provider" : "Create New Provider"}
+        onClose={() => {
+          if (saving) return;
+          setShowModal(false);
+          setError("");
+        }}
+        onConfirm={() => void saveProvider()}
+        confirmLabel={saving ? "Saving…" : editingProvider ? "Save Provider" : "Create Provider"}
+        size="md"
+      >
+        <FormInput
+          id="provider-name"
+          label="Provider Name"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="e.g. Northline Auto Services"
+        />
+        {error && <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      </Modal>
 
       <ConfirmationModal
         isOpen={deleteTarget !== null}
@@ -329,6 +330,6 @@ export default function OutsourcedProviders() {
           if (busyProviderId === null) setDeleteTarget(null);
         }}
       />
-    </main>
+    </div>
   );
 }

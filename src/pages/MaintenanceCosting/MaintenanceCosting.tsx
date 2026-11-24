@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CalendarDays, CircleDollarSign, Download, Truck } from 'lucide-react';
 import PageHeader from '../../components/PageHeader/PageHeader';
+import KpiCard from '../../components/ui/KpiCard';
 import { printRowsAsPdf } from '../../lib/utils/frontendExport';
 import { getMaintenanceCostPeriod, type MaintenanceCostHalf, type MaintenanceCostPeriodType } from '../../lib/utils/maintenanceCostingPeriod';
 import { useAuthStore } from '../../store/authStore';
@@ -26,23 +27,6 @@ function currentMonthPeriod() {
 const formatCurrency = (value: number) => new Intl.NumberFormat('en-PH', {
   style: 'currency', currency: 'PHP', maximumFractionDigits: 2,
 }).format(value);
-
-function MetricCard({ title, value, icon: Icon, detail }: {
-  title: string; value: string; icon: typeof Truck; detail?: string;
-}) {
-  return (
-    <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-[var(--color-text-secondary)]">{title}</p>
-          <p className="mt-2 text-2xl font-bold text-[var(--color-text-primary)]">{value}</p>
-          {detail && <p className="mt-1 text-xs text-[var(--color-text-secondary)]">{detail}</p>}
-        </div>
-        <span className="rounded-lg bg-[var(--color-input-bg)] p-2 text-[var(--color-brand-primary)]"><Icon size={20} /></span>
-      </div>
-    </section>
-  );
-}
 
 function exportTruckCosts(trucks: MaintenanceCostTruck[], from: string, to: string) {
   const headers = ['Truck Plate', 'Make', 'Model', 'Garage', 'Completed Maintenance Cost', 'High-Cost Flag', 'Recurring High-Cost Candidate'];
@@ -265,10 +249,10 @@ export default function MaintenanceCosting() {
       {!loading && data && (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricCard title="Total Maintenance Costs" value={formatCurrency(data.totalMaintenanceCosts)} icon={CircleDollarSign} detail={`${appliedPeriod.from} to ${appliedPeriod.to}`} />
-            <MetricCard title="Most Costly Truck" value={data.mostCostlyTruck?.plateNumber ?? 'No completed costs'} icon={AlertTriangle} detail={data.mostCostlyTruck ? formatCurrency(data.mostCostlyTruck.totalCost) : undefined} />
-            <MetricCard title="Average Cost per Active Truck" value={formatCurrency(data.averageCostPerTruck)} icon={CalendarDays} />
-            <MetricCard title="Total Active Trucks" value={String(data.totalActiveTrucks)} icon={Truck} detail={`${data.trucksWithCosts} with completed costs in this period`} />
+            <KpiCard label="Total Maintenance Costs" value={formatCurrency(data.totalMaintenanceCosts)} icon={<CircleDollarSign size={20} />} hint={`${appliedPeriod.from} to ${appliedPeriod.to}`} />
+            <KpiCard label="Most Costly Truck" value={data.mostCostlyTruck?.plateNumber ?? 'No completed costs'} icon={<AlertTriangle size={20} />} hint={data.mostCostlyTruck ? formatCurrency(data.mostCostlyTruck.totalCost) : undefined} />
+            <KpiCard label="Average Cost per Active Truck" value={formatCurrency(data.averageCostPerTruck)} icon={<CalendarDays size={20} />} />
+            <KpiCard label="Total Active Trucks" value={String(data.totalActiveTrucks)} icon={<Truck size={20} />} hint={`${data.trucksWithCosts} with completed costs in this period`} />
           </div>
 
           {data.threshold == null && (
