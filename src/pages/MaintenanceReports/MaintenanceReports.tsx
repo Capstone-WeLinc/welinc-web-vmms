@@ -21,10 +21,19 @@ import {
   MaintenanceStatusBadge,
   TableToolbar,
 } from "../../components/ui";
+import FleetWideFuelReport from "../FuelManagement/components/FleetWideFuelReport";
+import FuelCostSummary from "../FuelManagement/components/FuelCostSummary";
 import { getVmmsDashboardData, type VmmsDashboardData } from "../../lib/api/dashboardService";
-import { getFuelReport, recordFuelReportExport, type FuelReport } from "../../lib/api/fuelService";
+import {
+  getFuelAnomalies,
+  getFuelReport,
+  recordFuelReportExport,
+  type FuelAnomalyRecord,
+  type FuelReport,
+} from "../../lib/api/fuelService";
 import { getScheduledFleetReports, type ScheduledFleetReport } from "../../lib/api/scheduledReportsService";
 import { exportRowsToCsv, exportRowsToExcel, printRowsAsPdf } from "../../lib/utils/frontendExport";
+import { excludeVoidedFuelFillUps } from "../FuelManagement/fuelReportData";
 import {
   isInTimeFilterRange,
   timeFilterOptions,
@@ -166,9 +175,13 @@ function CompactLineChart({ rows }: { rows: { label: string; value: number }[] }
   );
 }
 
+type FuelReportTab = "fleet-wide" | "per-vehicle" | "anomaly-log";
+
 export default function MaintenanceReports() {
   const [data, setData] = useState<VmmsDashboardData>({ schedules: [], vehicles: [], garages: [] });
   const [fuelEntries, setFuelEntries] = useState<FuelReport["entries"]>([]);
+  const [fuelAnomalies, setFuelAnomalies] = useState<FuelAnomalyRecord[]>([]);
+  const [fuelReportTab, setFuelReportTab] = useState<FuelReportTab>("fleet-wide");
   const [loading, setLoading] = useState(true);
   const [upcomingSearch, setUpcomingSearch] = useState("");
   const [upcomingSort, setUpcomingSort] = useState<UpcomingSort>("date-desc");
@@ -217,6 +230,14 @@ export default function MaintenanceReports() {
     getFuelReport()
       .then((result) => { if (active) setFuelEntries(result.entries); })
       .catch((error) => console.error("Failed to load fuel report totals", error));
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    getFuelAnomalies()
+      .then((rows) => { if (active) setFuelAnomalies(rows); })
+      .catch((error) => console.error("Failed to load fuel anomalies", error));
     return () => { active = false; };
   }, []);
 
@@ -425,6 +446,21 @@ export default function MaintenanceReports() {
     ));
   const exportReportsPdf = () =>
     (auditFuelExport("pdf"), printRowsAsPdf("Maintenance Reports", reportExportHeaders, reportExportRows));
+
+  const filteredFuelFillUps = useMemo(
+    () =>
+      excludeVoidedFuelFillUps(
+        fuelEntries.filter((entry) =>
+          isInTimeFilterRange(new Date(`${entry.date}T00:00:00`), timeFilter, customDateFrom, customDateTo),
+        ),
+      ),
+    [customDateFrom, customDateTo, fuelEntries, timeFilter],
+  );
+
+  const fuelReportPeriodLabel =
+    timeFilter === "custom"
+      ? `${customDateFrom || "..."} - ${customDateTo || "..."}`
+      : timeFilterOptions.find((option) => option.value === timeFilter)?.label ?? "All Time";
 
   return (
     <div className="space-y-6 pt-6">
@@ -754,6 +790,96 @@ export default function MaintenanceReports() {
               setUpcomingPage(1);
             }}
           />
+        </div>
+      </section>
+
+      <section className="space-y-6 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5" aria-labelledby="fuel-reports-title">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 id="fuel-reports-title" className="text-2xl font-bold text-[var(--color-text-primary)]">Fuel Reports</h2>
+            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+              Fuel cost and anomaly reporting for the selected period: {fuelReportPeriodLabel}.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-1" role="group" aria-label="Fuel reports">
+            <button
+              type="button"
+              aria-pressed={fuelReportTab === "fleet-wide"}
+              onClick={() => setFuelReportTab("fleet-wide")}
+              className={`${fuelReportTab === "fleet-wide" ? "bg-[var(--color-brand-primary)] text-white" : "text-[var(--color-text-secondary)]"} whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium`}
+            >
+              Fleet-Wide Cost
+            </button>
+            <button
+              type="button"
+              aria-pressed={fuelReportTab === "per-vehicle"}
+              onClick={() => setFuelReportTab("per-vehicle")}
+              className={`${fuelReportTab === "per-vehicle" ? "bg-[var(--color-brand-primary)] text-white" : "text-[var(--color-text-secondary)]"} whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium`}
+            >
+              Per-Vehicle Summary
+            </button>
+            <button
+              type="button"
+              aria-pressed={fuelReportTab === "anomaly-log"}
+              onClick={() => setFuelReportTab("anomaly-log")}
+              className={`${fuelReportTab === "anomaly-log" ? "bg-[var(--color-brand-primary)] text-white" : "text-[var(--color-text-secondary)]"} whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium`}
+            >
+              Anomaly Logs
+            </button>
+          </div>
+        </div>
+
+        <div className="min-h-[15.625rem] pt-2">
+          {fuelReportTab === "fleet-wide" && (
+            <div className="space-y-3">
+              <div className="text-xs font-mono uppercase tracking-wider text-[var(--color-text-secondary)]">Active View - Fleet-Wide Fuel Cost Report</div>
+              <FleetWideFuelReport
+                fillUps={filteredFuelFillUps}
+                onExport={(format) => {
+                  void recordFuelReportExport(format, customDateFrom || undefined, customDateTo || undefined).catch((error) =>
+                    console.error("Failed to record fuel report export", error),
+                  );
+                }}
+              />
+            </div>
+          )}
+
+          {fuelReportTab === "per-vehicle" && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs font-mono uppercase tracking-wider text-[var(--color-text-secondary)]">Active View - Fuel Cost Summary - Per Vehicle</div>
+                <div className="rounded bg-[var(--color-card-bg-hover)] px-2 py-0.5 font-mono text-xs text-[var(--color-text-secondary)]">
+                  {fuelReportPeriodLabel}
+                </div>
+              </div>
+              <FuelCostSummary
+                fillUps={filteredFuelFillUps}
+                onExport={(format) => {
+                  void recordFuelReportExport(format, customDateFrom || undefined, customDateTo || undefined).catch((error) =>
+                    console.error("Failed to record fuel report export", error),
+                  );
+                }}
+              />
+            </div>
+          )}
+
+          {fuelReportTab === "anomaly-log" && (
+            <div className="space-y-3">
+              <div className="text-xs font-mono uppercase tracking-wider text-[var(--color-text-secondary)]">Active View - Anomaly Detection Log</div>
+              <div className="space-y-2">
+                {fuelAnomalies.length ? (
+                  fuelAnomalies.map((item) => (
+                    <div key={item.id} className="rounded border border-[var(--color-border)] p-3 text-sm">
+                      {item.vehicle.plateNumber} - {item.severity} - {item.status} - {item.note || "No note"}
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-[var(--color-text-secondary)]">No anomaly history.</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </section>
     </div>
