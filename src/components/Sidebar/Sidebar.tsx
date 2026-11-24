@@ -31,6 +31,7 @@ import {
   Layers,
   ShieldCheck,
   ScrollText,
+  Settings2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -92,6 +93,7 @@ const navGroups: NavGroup[] = [
     category: "Administration",
     icon: ShieldCheck,
     items: [
+      { label: "Settings", icon: Settings2, path: "/settings" },
       {
         label: "Manage people",
         icon: Users,

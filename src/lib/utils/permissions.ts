@@ -67,6 +67,7 @@ const OPERATIONS_NAV_PATHS = new Set([
   "/maintenance-costing",
   "/fuel-management",
   "/ai-analytics",
+  "/settings",
 ]);
 
 export function canSeeVmmsNavigationPath(

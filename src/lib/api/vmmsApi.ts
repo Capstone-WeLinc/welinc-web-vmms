@@ -1084,6 +1084,12 @@ const mockVehicleMaintenanceDefaults = new Map<
 export type AuditLogRecord = {
   id: string;
   source: "business";
+  category:
+    | "work_order"
+    | "vehicle"
+    | "fuel"
+    | "maintenance_schedule"
+    | "maintenance_costing";
   actor: string;
   action: string;
   entity: string;

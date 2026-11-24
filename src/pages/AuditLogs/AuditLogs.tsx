@@ -9,6 +9,7 @@ const dateTime = (value: string) => new Date(value).toLocaleString("en-PH", {
 
 export default function AuditLogs() {
   const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("all");
   const [records, setRecords] = useState<AuditLogRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -33,11 +34,13 @@ export default function AuditLogs() {
 
   const filteredRecords = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
-    if (!query) return records;
-    return records.filter((record) => [record.actor, record.action, record.entity, record.details,
+    return records.filter((record) =>
+      (category === "all" || record.category === category) &&
+      (!query || [record.actor, record.action, record.entity, record.details,
       record.previousValue, record.newValue, "Business"]
-      .some((value) => value?.toLocaleLowerCase().includes(query)));
-  }, [records, search]);
+        .some((value) => value?.toLocaleLowerCase().includes(query))),
+    );
+  }, [records, search, category]);
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -63,6 +66,20 @@ export default function AuditLogs() {
                 </button>
               ) : null}
             </div>
+            <label className="sr-only" htmlFor="audit-category">Filter audit category</label>
+            <select
+              id="audit-category"
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+              className="min-h-10 rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 text-sm text-[var(--color-text-primary)]"
+            >
+              <option value="all">All categories</option>
+              <option value="work_order">Work orders</option>
+              <option value="vehicle">Vehicles</option>
+              <option value="fuel">Fuel</option>
+              <option value="maintenance_schedule">Maintenance schedule</option>
+              <option value="maintenance_costing">Maintenance costing</option>
+            </select>
           </div>
           <button type="button" onClick={() => void load()} disabled={loading}
             className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-page-bg)] disabled:opacity-50">
@@ -89,7 +106,7 @@ export default function AuditLogs() {
                 {filteredRecords.map((record) => (
                   <tr key={record.id} className="align-top text-[var(--color-text-primary)]">
                     <td className="whitespace-nowrap px-4 py-3">{dateTime(record.createdAt)}</td>
-                    <td className="px-4 py-3">Business</td>
+                    <td className="px-4 py-3">{record.category.replaceAll("_", " ")}</td>
                     <td className="px-4 py-3">{record.actor}</td>
                     <td className="px-4 py-3 font-medium">{record.action.replaceAll("_", " ")}</td>
                     <td className="px-4 py-3">{record.entity}</td>
