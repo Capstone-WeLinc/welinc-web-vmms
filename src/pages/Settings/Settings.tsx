@@ -116,9 +116,7 @@ export default function Settings() {
         icon={Settings2}
         title="Settings"
         subtitle={
-          isAdmin
-            ? 'Review and update VMMS system thresholds.'
-            : 'View VMMS system thresholds. Settings are read-only for Operations.'
+          'Review and update VMMS system thresholds.'
         }
       />
 

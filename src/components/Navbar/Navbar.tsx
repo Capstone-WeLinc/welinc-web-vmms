@@ -29,6 +29,7 @@ const routeMeta: Record<string, { group: string; label: string }> = {
   "/fuel-management": { group: "Finance", label: "Fuel Management" },
   "/maintenance-costing": { group: "Finance", label: "Maintenance Costing" },
   "/audit-logs": { group: "Administration", label: "Audit Logs" },
+  "/settings": { group: "Administration", label: "Settings" },
   "/profile": { group: "Account", label: "Profile" },
 };
 

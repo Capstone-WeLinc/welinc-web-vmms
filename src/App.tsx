@@ -112,7 +112,7 @@ export default function App() {
             />
             <Route
               path="/settings"
-              element={['ADMIN', 'OPERATIONS'].includes(currentUser?.role ?? '') ? <Protected><Settings /></Protected> : <Navigate to="/dashboard" replace />}
+              element={currentUser?.role === 'ADMIN' ? <Protected><Settings /></Protected> : <Navigate to="/dashboard" replace />}
             />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
