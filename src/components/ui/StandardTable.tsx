@@ -5,9 +5,10 @@ import type {
   MouseEvent,
   ReactNode,
 } from "react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import DatePicker from "./DatePicker";
+import { useFilterPanelPosition } from "./filterPanelPosition";
 import {
   Check,
   Download,
@@ -328,38 +329,11 @@ export const FilterDropdown = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const [panelStyle, setPanelStyle] = useState<{ top: number; left: number; maxHeight: number }>({
-    top: 0,
-    left: 0,
-    maxHeight: 320,
-  });
-
-  useLayoutEffect(() => {
-    if (!open) return;
-
-    const updatePosition = () => {
-      const button = buttonRef.current;
-      if (!button) return;
-      const rect = button.getBoundingClientRect();
-      const width = Math.min(window.innerWidth * 0.92, 430);
-      const margin = 8;
-      const left = Math.min(
-        Math.max(margin, rect.right - width),
-        Math.max(margin, window.innerWidth - width - margin),
-      );
-      const top = Math.min(rect.bottom + 8, window.innerHeight - margin);
-      const maxHeight = Math.max(160, window.innerHeight - top - margin);
-      setPanelStyle({ top, left, maxHeight });
-    };
-
-    updatePosition();
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-    return () => {
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-    };
-  }, [open]);
+  const { position: panelPosition, preparePosition } = useFilterPanelPosition(
+    open,
+    buttonRef,
+    panelRef,
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -401,6 +375,7 @@ export const FilterDropdown = ({
         type="button"
         onClick={(event) => {
           event.stopPropagation();
+          if (!open) preparePosition();
           onToggle();
         }}
         aria-expanded={open}
@@ -418,11 +393,16 @@ export const FilterDropdown = ({
         <span className="text-sm font-bold uppercase tracking-wide text-[#141827]"></span>
       </button>
 
-      {open && (
+      {open && typeof document !== "undefined" && createPortal(
         <div
           ref={panelRef}
           className="fixed z-50 w-[min(92vw,430px)] overflow-y-auto rounded-xl border border-[#e0e5ee] bg-white p-5 animate-in fade-in zoom-in-95 duration-150"
-          style={{ top: panelStyle.top, left: panelStyle.left, maxHeight: panelStyle.maxHeight }}
+          style={{
+            top: panelPosition?.top ?? 0,
+            left: panelPosition?.left ?? 0,
+            maxHeight: panelPosition?.maxHeight ?? 320,
+            visibility: panelPosition ? "visible" : "hidden",
+          }}
           onClick={(event) => event.stopPropagation()}
         >
           <h3 className="text-lg font-extrabold uppercase tracking-wide text-[#141827]">
@@ -515,7 +495,8 @@ export const FilterDropdown = ({
               Clear
             </button>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

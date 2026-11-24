@@ -18,7 +18,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
-import { Card, Button, Badge } from "../../components/ui";
+import { Card, Button, Badge, KpiCard } from "../../components/ui";
 import {
   getAnalyticsHealth,
   getAnalyticsOverview,
@@ -190,18 +190,14 @@ function renderAiSummary(summary?: string) {
 
 function MetricTile({ label, value, hint, icon: Icon }: { label: string; value: string; hint: string; icon: typeof Activity }) {
   return (
-    <Card className="p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm text-[var(--color-text-secondary)]">{label}</p>
-          <p className="mt-3 text-2xl font-bold text-[var(--color-text-primary)]">{value}</p>
-          <p className="mt-2 text-xs text-[var(--color-text-secondary)]">{hint}</p>
-        </div>
-        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-2.5 text-[var(--color-brand-primary)]">
-          <Icon className="h-5 w-5" />
-        </div>
-      </div>
-    </Card>
+    <KpiCard
+      label={label}
+      value={value}
+      hint={hint}
+      icon={<Icon className="h-5 w-5" />}
+      color="#1a1f6e"
+      iconBackgroundColor="rgba(26, 31, 110, 0.1)"
+    />
   );
 }
 

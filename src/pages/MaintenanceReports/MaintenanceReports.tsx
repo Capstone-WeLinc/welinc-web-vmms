@@ -3,11 +3,13 @@ import {
   BarChart3,
   CalendarClock,
   CheckCircle2,
+  Droplet,
   PhilippinePeso,
   PieChart,
   RefreshCw,
   TimerReset,
   Truck,
+  TrendingUp,
 } from "lucide-react";
 import PageHeader from "../../components/PageHeader/PageHeader";
 import {
@@ -15,6 +17,7 @@ import {
   DropdownSelect,
   ExportButton,
   FilterDropdown,
+  KpiCard,
   Pagination,
   SearchInput,
   SortSelect,
@@ -87,30 +90,6 @@ const getTaskCost = (task: MaintenanceTask) => {
   }, 0);
 };
 
-function Metric({
-  label,
-  value,
-  icon: Icon,
-  color,
-}: {
-  label: string;
-  value: string | number;
-  icon: typeof BarChart3;
-  color: string;
-}) {
-  return (
-    <div className="flex h-full min-h-32 min-w-0 items-start justify-between gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
-      <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold uppercase leading-5 tracking-wide text-[var(--color-text-secondary)]">{label}</p>
-        <p className="mt-2 break-words text-2xl font-bold leading-tight tabular-nums text-[var(--color-text-primary)]">{value}</p>
-      </div>
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: `${color}14`, color }} aria-hidden="true">
-        <Icon size={22} strokeWidth={2.2} />
-      </div>
-    </div>
-  );
-}
-
 function StatusDonut({ rows }: { rows: { label: string; count: number; color: string }[] }) {
   const total = rows.reduce((sum, row) => sum + row.count, 0);
   let offset = 0;
@@ -176,11 +155,13 @@ function CompactLineChart({ rows }: { rows: { label: string; value: number }[] }
 }
 
 type FuelReportTab = "fleet-wide" | "per-vehicle" | "anomaly-log";
+type ReportTab = "maintenance" | "fuel";
 
 export default function MaintenanceReports() {
   const [data, setData] = useState<VmmsDashboardData>({ schedules: [], vehicles: [], garages: [] });
   const [fuelEntries, setFuelEntries] = useState<FuelReport["entries"]>([]);
   const [fuelAnomalies, setFuelAnomalies] = useState<FuelAnomalyRecord[]>([]);
+  const [reportTab, setReportTab] = useState<ReportTab>("maintenance");
   const [fuelReportTab, setFuelReportTab] = useState<FuelReportTab>("fleet-wide");
   const [loading, setLoading] = useState(true);
   const [upcomingSearch, setUpcomingSearch] = useState("");
@@ -281,9 +262,6 @@ export default function MaintenanceReports() {
     const completed = filteredReportSchedules.filter((task) => task.status === MaintenanceStatus.COMPLETED);
     const active = filteredReportSchedules.filter((task) => activeStatuses.includes(task.status));
     const maintenanceExpense = filteredReportSchedules.reduce((total, task) => total + getTaskCost(task), 0);
-    const fuelExpense = fuelEntries
-      .filter((entry) => isInTimeFilterRange(new Date(`${entry.date}T00:00:00`), timeFilter, customDateFrom, customDateTo))
-      .reduce((total, entry) => total + entry.totalCost, 0);
     const downtimeVehicles = new Set(active.map((task) => task.vehicleId)).size;
     const fleetPerformance = data.vehicles.length
       ? Math.round(((data.vehicles.length - downtimeVehicles) / data.vehicles.length) * 100)
@@ -324,13 +302,12 @@ export default function MaintenanceReports() {
       completed,
       active,
       maintenanceExpense,
-      fuelExpense,
       downtimeVehicles,
       fleetPerformance,
       statusBreakdown,
       downtimeTrend,
     };
-  }, [data.vehicles.length, filteredReportSchedules, fuelEntries, timeFilter, customDateFrom, customDateTo]);
+  }, [data.vehicles.length, filteredReportSchedules]);
 
   const filteredUpcoming = useMemo(() => {
     const query = upcomingSearch.trim().toLowerCase();
@@ -398,54 +375,40 @@ export default function MaintenanceReports() {
   );
 
   const reportExportHeaders = [
-    "Record Type",
     "Work Order",
     "Vehicle",
     "Status",
     "Schedule Date",
     "Mechanic",
     "Maintenance Cost",
-    "Fuel Cost",
-    "Liters",
-    "Average Efficiency (km/L)",
-    "Fuel Anomalies",
   ];
   const maintenanceExportRows = filteredReportSchedules.map((task) => {
     const vehicle = vehicleById.get(task.vehicleId);
     return [
-      "Maintenance",
       task.title,
       vehicle?.plateNumber ?? vehicle?.value ?? task.vehicleId,
       maintenanceStatusLabels[task.status],
       task.startReferenceDate || task.date || "Not scheduled",
       task.assignedDriver || "Unassigned",
       getTaskCost(task),
-      "", "", "", "",
     ];
   });
-  const filteredFuelForExport = fuelEntries.filter((entry) => isInTimeFilterRange(new Date(`${entry.date}T00:00:00`), timeFilter, customDateFrom, customDateTo));
-  const fuelExportRows = [...new Set(filteredFuelForExport.map((entry) => entry.vehicleId))].map((vehicleId) => {
-    const rows = filteredFuelForExport.filter((entry) => entry.vehicleId === vehicleId);
-    const efficiencies = rows.map((entry) => entry.efficiency).filter((value): value is number => value != null);
-    return ["Fuel", "", rows[0].vehicleName, "", "", "", "", rows.reduce((sum, entry) => sum + entry.totalCost, 0), rows.reduce((sum, entry) => sum + entry.liters, 0), efficiencies.length ? (efficiencies.reduce((sum, value) => sum + value, 0) / efficiencies.length).toFixed(1) : "Insufficient Data", rows.filter((entry) => entry.anomaly).length];
-  });
-  const reportExportRows = [...maintenanceExportRows, ...fuelExportRows];
+  const reportExportRows = maintenanceExportRows;
   const exportDate = new Date().toISOString().slice(0, 10);
-  const auditFuelExport = (format: string) => { void recordFuelReportExport(format, customDateFrom || undefined, customDateTo || undefined).catch((error) => console.error("Failed to audit report export", error)); };
   const exportReportsCsv = () =>
-    (auditFuelExport("csv"), exportRowsToCsv(
+    exportRowsToCsv(
       `maintenance-reports-${exportDate}.csv`,
       reportExportHeaders,
       reportExportRows,
-    ));
+    );
   const exportReportsExcel = () =>
-    (auditFuelExport("excel"), exportRowsToExcel(
+    exportRowsToExcel(
       `maintenance-reports-${exportDate}.xls`,
       reportExportHeaders,
       reportExportRows,
-    ));
+    );
   const exportReportsPdf = () =>
-    (auditFuelExport("pdf"), printRowsAsPdf("Maintenance Reports", reportExportHeaders, reportExportRows));
+    printRowsAsPdf("Maintenance Reports", reportExportHeaders, reportExportRows);
 
   const filteredFuelFillUps = useMemo(
     () =>
@@ -461,13 +424,27 @@ export default function MaintenanceReports() {
     timeFilter === "custom"
       ? `${customDateFrom || "..."} - ${customDateTo || "..."}`
       : timeFilterOptions.find((option) => option.value === timeFilter)?.label ?? "All Time";
+  const fuelReportSummary = useMemo(() => {
+    const efficiencies = filteredFuelFillUps
+      .map((entry) => entry.efficiency)
+      .filter((value): value is number => value !== null && Number.isFinite(value));
+
+    return {
+      fillUps: filteredFuelFillUps.length,
+      liters: filteredFuelFillUps.reduce((total, entry) => total + entry.liters, 0),
+      cost: filteredFuelFillUps.reduce((total, entry) => total + entry.totalCost, 0),
+      averageEfficiency: efficiencies.length
+        ? efficiencies.reduce((total, value) => total + value, 0) / efficiencies.length
+        : null,
+    };
+  }, [filteredFuelFillUps]);
 
   return (
     <div className="space-y-6 pt-6">
       <PageHeader
         icon={BarChart3}
-        title="MAINTENANCE REPORTS"
-        subtitle="Reports on upcoming maintenance, completed services, total fuel and maintenance expenses, downtime, and fleet performance"
+        title={reportTab === "maintenance" ? "MAINTENANCE REPORTS" : "FUEL REPORTS"}
+        subtitle={reportTab === "maintenance" ? "Upcoming maintenance, completed services, downtime, and fleet performance" : "Fuel costs, efficiency, and anomaly reporting"}
         action={
           <div className="flex flex-wrap items-center justify-end gap-2">
             <SortSelect
@@ -504,37 +481,88 @@ export default function MaintenanceReports() {
                 />
               </div>
             ) : null}
-            <ExportButton
-              open={isExportMenuOpen}
-              onToggle={(event) => {
-                event.stopPropagation();
-                setIsExportMenuOpen((current) => !current);
-              }}
-              onPdf={() => {
-                setIsExportMenuOpen(false);
-                exportReportsPdf();
-              }}
-              onCsv={() => {
-                setIsExportMenuOpen(false);
-                exportReportsCsv();
-              }}
-              onExcel={() => {
-                setIsExportMenuOpen(false);
-                exportReportsExcel();
-              }}
-            />
+            {reportTab === "maintenance" ? (
+              <ExportButton
+                open={isExportMenuOpen}
+                onToggle={(event) => {
+                  event.stopPropagation();
+                  setIsExportMenuOpen((current) => !current);
+                }}
+                onPdf={() => {
+                  setIsExportMenuOpen(false);
+                  exportReportsPdf();
+                }}
+                onCsv={() => {
+                  setIsExportMenuOpen(false);
+                  exportReportsCsv();
+                }}
+                onExcel={() => {
+                  setIsExportMenuOpen(false);
+                  exportReportsExcel();
+                }}
+              />
+            ) : null}
           </div>
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-        <Metric label="Upcoming Maintenance" value={report.upcoming.length} icon={CalendarClock} color="#7c3aed" />
-        <Metric label="Completed Services" value={report.completed.length} icon={CheckCircle2} color="#059669" />
-        <Metric label="Fuel + Maintenance" value={formatCurrency(report.fuelExpense + report.maintenanceExpense)} icon={PhilippinePeso} color="#0f766e" />
-        <Metric label="Vehicle Downtime" value={report.downtimeVehicles} icon={TimerReset} color="#dc2626" />
-        <Metric label="Fleet Performance" value={`${report.fleetPerformance}%`} icon={Truck} color="#2563eb" />
+      <div className="flex flex-wrap gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-1" role="tablist" aria-label="Report type">
+        <button
+          type="button"
+          id="report-tab-maintenance"
+          role="tab"
+          aria-selected={reportTab === "maintenance"}
+          aria-controls="report-panel-maintenance"
+          tabIndex={reportTab === "maintenance" ? 0 : -1}
+          onClick={() => {
+            setReportTab("maintenance");
+            setIsExportMenuOpen(false);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+              event.preventDefault();
+              setReportTab("fuel");
+              setIsExportMenuOpen(false);
+              document.getElementById("report-tab-fuel")?.focus();
+            }
+          }}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-primary)] ${reportTab === "maintenance" ? "bg-[var(--color-brand-primary)] text-white" : "text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"}`}
+        >
+          Maintenance Reports
+        </button>
+        <button
+          type="button"
+          id="report-tab-fuel"
+          role="tab"
+          aria-selected={reportTab === "fuel"}
+          aria-controls="report-panel-fuel"
+          tabIndex={reportTab === "fuel" ? 0 : -1}
+          onClick={() => {
+            setReportTab("fuel");
+            setIsExportMenuOpen(false);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+              event.preventDefault();
+              setReportTab("maintenance");
+              setIsExportMenuOpen(false);
+              document.getElementById("report-tab-maintenance")?.focus();
+            }
+          }}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-primary)] ${reportTab === "fuel" ? "bg-[var(--color-brand-primary)] text-white" : "text-[var(--color-text-secondary)] hover:bg-[var(--color-card-bg-hover)] hover:text-[var(--color-text-primary)]"}`}
+        >
+          Fuel Reports
+        </button>
       </div>
 
+      <div id="report-panel-maintenance" role="tabpanel" aria-labelledby="report-tab-maintenance" hidden={reportTab !== "maintenance"} className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+        <KpiCard label="Upcoming Maintenance" value={report.upcoming.length} icon={<CalendarClock size={20} />} color="#7c3aed" />
+        <KpiCard label="Completed Services" value={report.completed.length} icon={<CheckCircle2 size={20} />} color="#059669" />
+        <KpiCard label="Maintenance Cost" value={formatCurrency(report.maintenanceExpense)} icon={<PhilippinePeso size={20} />} color="#0f766e" />
+        <KpiCard label="Vehicle Downtime" value={report.downtimeVehicles} icon={<TimerReset size={20} />} color="#dc2626" />
+        <KpiCard label="Fleet Performance" value={`${report.fleetPerformance}%`} icon={<Truck size={20} />} color="#2563eb" />
+      </div>
       <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)]" aria-labelledby="scheduled-report-history-title">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-divider)] px-5 py-4">
           <div>
@@ -602,10 +630,9 @@ export default function MaintenanceReports() {
         </div>
       </section>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Metric label="Due Within 7 Days" value={report.upcomingThisWeek.length} icon={CalendarClock} color="#2563eb" />
-        <Metric label="Active Maintenance Load" value={`${report.active.length} work orders`} icon={TimerReset} color="#0f766e" />
-        <Metric label="Fuel Expense" value={formatCurrency(report.fuelExpense)} icon={PhilippinePeso} color="#d97706" />
+      <div className="grid gap-4 md:grid-cols-2">
+        <KpiCard label="Due Within 7 Days" value={report.upcomingThisWeek.length} icon={<CalendarClock size={20} />} color="#2563eb" />
+        <KpiCard label="Active Maintenance Load" value={`${report.active.length} work orders`} icon={<TimerReset size={20} />} color="#0f766e" />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
@@ -793,6 +820,16 @@ export default function MaintenanceReports() {
         </div>
       </section>
 
+      </div>
+
+      <div id="report-panel-fuel" role="tabpanel" aria-labelledby="report-tab-fuel" hidden={reportTab !== "fuel"} className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard label="Total Fill-ups" value={fuelReportSummary.fillUps} icon={<Droplet size={20} />} color="#2563eb" hint={fuelReportPeriodLabel} />
+        <KpiCard label="Total Liters" value={`${fuelReportSummary.liters.toLocaleString()} L`} icon={<Truck size={20} />} color="#059669" hint="Filtered range" />
+        <KpiCard label="Fuel Cost" value={formatCurrency(fuelReportSummary.cost)} icon={<PhilippinePeso size={20} />} color="#d97706" hint="Filtered range" />
+        <KpiCard label="Average Efficiency" value={fuelReportSummary.averageEfficiency === null ? "Insufficient Data" : `${fuelReportSummary.averageEfficiency.toFixed(1)} km/L`} icon={<TrendingUp size={20} />} color="#10b981" hint="Filtered range" />
+      </div>
+
       <section className="space-y-6 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5" aria-labelledby="fuel-reports-title">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -833,7 +870,7 @@ export default function MaintenanceReports() {
         <div className="min-h-[15.625rem] pt-2">
           {fuelReportTab === "fleet-wide" && (
             <div className="space-y-3">
-              <div className="text-xs font-mono uppercase tracking-wider text-[var(--color-text-secondary)]">Active View - Fleet-Wide Fuel Cost Report</div>
+              <h3 className="text-base font-bold text-[var(--color-text-primary)]">Fleet-wide fuel costs</h3>
               <FleetWideFuelReport
                 fillUps={filteredFuelFillUps}
                 onExport={(format) => {
@@ -848,7 +885,7 @@ export default function MaintenanceReports() {
           {fuelReportTab === "per-vehicle" && (
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <div className="text-xs font-mono uppercase tracking-wider text-[var(--color-text-secondary)]">Active View - Fuel Cost Summary - Per Vehicle</div>
+                <h3 className="text-base font-bold text-[var(--color-text-primary)]">Fuel cost by vehicle</h3>
                 <div className="rounded bg-[var(--color-card-bg-hover)] px-2 py-0.5 font-mono text-xs text-[var(--color-text-secondary)]">
                   {fuelReportPeriodLabel}
                 </div>
@@ -866,7 +903,7 @@ export default function MaintenanceReports() {
 
           {fuelReportTab === "anomaly-log" && (
             <div className="space-y-3">
-              <div className="text-xs font-mono uppercase tracking-wider text-[var(--color-text-secondary)]">Active View - Anomaly Detection Log</div>
+              <h3 className="text-base font-bold text-[var(--color-text-primary)]">Fuel anomaly log</h3>
               <div className="space-y-2">
                 {fuelAnomalies.length ? (
                   fuelAnomalies.map((item) => (
@@ -882,6 +919,7 @@ export default function MaintenanceReports() {
           )}
         </div>
       </section>
+      </div>
     </div>
   );
 }
