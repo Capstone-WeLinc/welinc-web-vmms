@@ -20,6 +20,8 @@ export {
   updateWorkOrderPriority,
   updateWorkOrder,
   updateWorkOrderProgress,
+  retryWorkOrderRepairReferral,
+  getWorkOrderRepairStatus,
   reviewMaintenanceScheduleExtension,
   uploadWorkOrderAttachment,
   deleteWorkOrderAttachment,

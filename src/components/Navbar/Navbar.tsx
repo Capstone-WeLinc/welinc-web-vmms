@@ -231,7 +231,7 @@ export default function Navbar() {
                   })}
                 </p>
                 {notification.maintenanceScheduleId ? (
-                  <p className="mt-3 text-sm font-semibold text-[#1a1f6e]">Open overdue work order â†’</p>
+                  <p className="mt-3 text-sm font-semibold text-[#1a1f6e]">Open overdue work order →</p>
                 ) : null}
               </button>
             ))

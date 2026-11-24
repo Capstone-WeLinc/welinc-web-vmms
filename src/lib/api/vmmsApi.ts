@@ -50,6 +50,8 @@ import {
   MaintenanceTriggerType,
   type MaintenancePrediction,
   type MaintenanceTask,
+  type VehicleRepairHistoryItem,
+  type WorkOrderRepairReferral,
 } from "../../types/maintenance";
 import {
   getCalculatedMaintenanceStatus,
@@ -496,12 +498,51 @@ export async function updateWorkOrderProgress(
     return { id: taskId, workOrderProgress: progress };
   }
 
-  return fetchJSON<{ id: string; workOrderProgress: unknown }>(
+  return fetchJSON<{
+    id: string;
+    status?: MaintenanceStatus;
+    approvalStatus?: string;
+    workOrderProgress: unknown;
+    repairReferral?: WorkOrderRepairReferral | null;
+  }>(
     `/maintenance-schedules/${encodeURIComponent(taskId)}/progress`,
     {
       method: "PATCH",
       body: JSON.stringify(progress),
     },
+  );
+}
+
+export async function retryWorkOrderRepairReferral(
+  referralId: string,
+): Promise<WorkOrderRepairReferral> {
+  return fetchJSON<WorkOrderRepairReferral>(
+    `/integrations/vrms/repair-referrals/${encodeURIComponent(referralId)}/retry`,
+    { method: "POST" },
+  );
+}
+
+export async function getWorkOrderRepairStatus(
+  taskId: string,
+): Promise<{
+  repairReferral: WorkOrderRepairReferral | null;
+  repairTicket: {
+    repairTicketId: string;
+    repairTicketNumber: string | null;
+    status: string;
+    outsideShopName: string | null;
+  } | null;
+}> {
+  return fetchJSON<{
+    repairReferral: WorkOrderRepairReferral | null;
+    repairTicket: {
+      repairTicketId: string;
+      repairTicketNumber: string | null;
+      status: string;
+      outsideShopName: string | null;
+    } | null;
+  }>(
+    `/maintenance-schedules/${encodeURIComponent(taskId)}/repair-status`,
   );
 }
 
@@ -1085,7 +1126,6 @@ export type AuditLogRecord = {
   id: string;
   source: "business";
   category:
-    | "work_order"
     | "vehicle"
     | "fuel"
     | "maintenance_schedule"
@@ -1113,6 +1153,22 @@ export async function getVehicleRecords(): Promise<VehicleRecord[]> {
 export async function getVehicleAuditHistory(vehicleId: string): Promise<VehicleAuditEntry[]> {
   if (!useBackend) return [];
   return fetchJSON<VehicleAuditEntry[]>(`/vehicles/${encodeURIComponent(vehicleId)}/audit`);
+}
+
+export async function getVehicleRepairHistory(
+  vehicleId: string,
+  cursor?: string | null,
+  limit = 50,
+): Promise<{ items: VehicleRepairHistoryItem[]; nextCursor: string | null }> {
+  if (!useBackend) return { items: [], nextCursor: null };
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
+  return fetchJSON<{
+    items: VehicleRepairHistoryItem[];
+    nextCursor: string | null;
+  }>(
+    `/vehicles/${encodeURIComponent(vehicleId)}/repair-history?${params.toString()}`,
+  );
 }
 
 export async function getVehicleMaintenanceDefaults(
