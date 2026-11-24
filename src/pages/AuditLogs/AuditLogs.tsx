@@ -74,7 +74,6 @@ export default function AuditLogs() {
               className="min-h-10 rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 text-sm text-[var(--color-text-primary)]"
             >
               <option value="all">All categories</option>
-              <option value="work_order">Work orders</option>
               <option value="vehicle">Vehicles</option>
               <option value="fuel">Fuel</option>
               <option value="maintenance_schedule">Maintenance schedule</option>

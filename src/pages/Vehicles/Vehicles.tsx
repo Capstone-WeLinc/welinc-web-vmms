@@ -14,6 +14,7 @@ import {
   saveOdometerImport,
   getGarageRecords,
   getVehicleAuditHistory,
+  getVehicleRepairHistory,
   getVehicleMaintenanceDefaults,
   updateVehicleMaintenanceDefaults,
   type VehicleRecord,
@@ -23,6 +24,7 @@ import {
   type OdometerImportRow,
   type VehicleMaintenanceDefaults,
 } from "../../lib/api/vmmsApi";
+import type { VehicleRepairHistoryItem } from "../../types/maintenance";
 import {
   DataTable,
   ConfirmationModal,
@@ -70,6 +72,17 @@ const formatMaintenanceDate = (value: string | null): string => {
   return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 };
 
+const formatRepairDate = (value: string | null): string => {
+  if (!value) return "Unknown";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown";
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+};
+
 export default function Vehicles() {
   const currentUser = useAuthStore((state) => state.currentUser);
   const canManage = canManageVehicles(currentUser);
@@ -96,6 +109,13 @@ export default function Vehicles() {
   const [auditEntries, setAuditEntries] = useState<VehicleAuditEntry[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState(false);
+  const [repairHistory, setRepairHistory] = useState<{
+    items: VehicleRepairHistoryItem[];
+    nextCursor: string | null;
+  } | null>(null);
+  const [repairHistoryLoading, setRepairHistoryLoading] = useState(false);
+  const [repairHistoryLoadingMore, setRepairHistoryLoadingMore] = useState(false);
+  const [repairHistoryError, setRepairHistoryError] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [odometerVehicle, setOdometerVehicle] = useState<VehicleRecord | null>(null);
   const [odometerInput, setOdometerInput] = useState("");
@@ -199,6 +219,58 @@ export default function Vehicles() {
 
     return () => { active = false; };
   }, [vehicleDetailsId, canViewAudit]);
+
+  useEffect(() => {
+    if (!vehicleDetailsId) {
+      setRepairHistory(null);
+      setRepairHistoryError(false);
+      return;
+    }
+
+    let active = true;
+    setRepairHistoryLoading(true);
+    setRepairHistoryError(false);
+    getVehicleRepairHistory(vehicleDetailsId)
+      .then((page) => {
+        if (active) setRepairHistory(page);
+      })
+      .catch(() => {
+        if (active) setRepairHistoryError(true);
+      })
+      .finally(() => {
+        if (active) setRepairHistoryLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [vehicleDetailsId]);
+
+  const loadMoreRepairHistory = async () => {
+    if (!vehicleDetailsId || !repairHistory?.nextCursor || repairHistoryLoadingMore) {
+      return;
+    }
+    setRepairHistoryLoadingMore(true);
+    setRepairHistoryError(false);
+    try {
+      const nextPage = await getVehicleRepairHistory(
+        vehicleDetailsId,
+        repairHistory.nextCursor,
+      );
+      setRepairHistory((current) =>
+        current
+          ? {
+              items: [...current.items, ...nextPage.items],
+              nextCursor: nextPage.nextCursor,
+            }
+          : nextPage,
+      );
+    } catch {
+      setRepairHistoryError(true);
+    } finally {
+      setRepairHistoryLoadingMore(false);
+    }
+  };
 
   // Close menu on outside click
   useEffect(() => {
@@ -819,7 +891,7 @@ export default function Vehicles() {
       key: "make",
       header: "Make",
       width: "10%",
-      render: (v) => <span className="text-[#344158]">{v.make ?? "â€”"}</span>,
+      render: (v) => <span className="text-[#344158]">{v.make ?? "—"}</span>,
     },
     {
       key: "model",
@@ -927,7 +999,7 @@ export default function Vehicles() {
                 className="flex items-center gap-2 rounded-xl border border-[#c8ced8] bg-white px-4 py-2.5 text-sm font-semibold text-[#141827] transition hover:bg-slate-50 disabled:opacity-60"
               >
                 <FileSpreadsheet className="h-4 w-4" />
-                {importing ? "Workingâ€¦" : "Import vehicles"}
+                {importing ? "Working…" : "Import vehicles"}
               </button>
               <button
                 type="button"
@@ -936,7 +1008,7 @@ export default function Vehicles() {
                 className="flex items-center gap-2 rounded-xl border border-[#c8ced8] bg-white px-4 py-2.5 text-sm font-semibold text-[#141827] transition hover:bg-slate-50 disabled:opacity-60"
               >
                 <Gauge className="h-4 w-4" />
-                {importing ? "Workingâ€¦" : "Bulk odometer update"}
+                {importing ? "Working…" : "Bulk odometer update"}
               </button>
               <button
                 type="button"
@@ -979,7 +1051,7 @@ export default function Vehicles() {
                   disabled={importing || !odometerImportRows.some((row) => row.status === "READY" || row.status === "ERROR")}
                   className="rounded-lg bg-[#070b45] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                 >
-                  {importing ? "Savingâ€¦" : "Save valid rows"}
+                  {importing ? "Saving…" : "Save valid rows"}
                 </button>
               </div>
             </div>
@@ -1000,7 +1072,7 @@ export default function Vehicles() {
                         onChange={(event) => updateOdometerImportRow(index, "plateNumber", event.target.value)}
                       />
                     </td>
-                    <td className="p-2">{row.currentOdometer === null ? "â€”" : `${row.currentOdometer.toLocaleString()} km`}</td>
+                    <td className="p-2">{row.currentOdometer === null ? "—" : `${row.currentOdometer.toLocaleString()} km`}</td>
                     <td className="p-2">
                       <input
                         aria-label={`Row ${row.row} odometer reading`}
@@ -1030,7 +1102,7 @@ export default function Vehicles() {
               </div>
               <div className="flex gap-2">
                 <button type="button" onClick={() => setImportRows(null)} disabled={importing} className="rounded-lg border border-[#c8ced8] bg-white px-3 py-2 text-sm font-semibold text-[#344158] disabled:opacity-60">Cancel</button>
-                <button type="button" onClick={handleSaveImport} disabled={importing || importRows.length === 0} className="rounded-lg bg-[#070b45] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{importing ? "Savingâ€¦" : "Save vehicles"}</button>
+                <button type="button" onClick={handleSaveImport} disabled={importing || importRows.length === 0} className="rounded-lg bg-[#070b45] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{importing ? "Saving…" : "Save vehicles"}</button>
               </div>
             </div>
             <div className="overflow-x-auto rounded-lg border border-[#dde4ef] bg-white">
@@ -1173,7 +1245,7 @@ export default function Vehicles() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-sm text-[#64748b]">Loading vehiclesâ€¦</div>
+          <div className="flex items-center justify-center py-16 text-sm text-[#64748b]">Loading vehicles…</div>
         ) : (
           <div className="overflow-x-auto">
           <DataTable<VehicleRecord>
@@ -1192,7 +1264,7 @@ export default function Vehicles() {
         title={modalMode === "create" ? "Create New Vehicle" : "Edit Vehicle"}
         onClose={() => setShowModal(false)}
         onConfirm={handleRequestVehicleSave}
-        confirmLabel={saving ? "Savingâ€¦" : "Save Vehicle"}
+        confirmLabel={saving ? "Saving…" : "Save Vehicle"}
         size="lg"
         className="!p-0 flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden"
       >
@@ -1300,18 +1372,18 @@ export default function Vehicles() {
         isOpen={canManage && maintenanceDefaultsVehicle !== null}
         title={
           maintenanceDefaultsVehicle
-            ? `Maintenance Defaults â€” ${maintenanceDefaultsVehicle.plateNumber}`
+            ? `Maintenance Defaults — ${maintenanceDefaultsVehicle.plateNumber}`
             : "Maintenance Defaults"
         }
         onClose={() => setMaintenanceDefaultsVehicle(null)}
         onConfirm={handleRequestSaveMaintenanceDefaults}
-        confirmLabel={maintenanceDefaultsSaving ? "Savingâ€¦" : "Save Defaults"}
+        confirmLabel={maintenanceDefaultsSaving ? "Saving…" : "Save Defaults"}
         size="lg"
         className="!max-w-4xl !p-0 flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden"
       >
         {maintenanceDefaultsLoading ? (
           <p className="py-8 text-center text-sm text-[#64748b]">
-            Loading vehicle maintenance defaultsâ€¦
+            Loading vehicle maintenance defaults…
           </p>
         ) : maintenanceDefaultsError && !maintenanceDefaults ? (
           <div
@@ -1464,10 +1536,10 @@ export default function Vehicles() {
 
       <Modal
         isOpen={canManage && odometerVehicle !== null}
-        title={odometerVehicle ? `Update Odometer â€” ${odometerVehicle.plateNumber}` : "Update Odometer"}
+        title={odometerVehicle ? `Update Odometer — ${odometerVehicle.plateNumber}` : "Update Odometer"}
         onClose={() => setOdometerVehicle(null)}
         onConfirm={handleOdometerUpdate}
-        confirmLabel={odometerSaving ? "Updatingâ€¦" : "Update Odometer"}
+        confirmLabel={odometerSaving ? "Updating…" : "Update Odometer"}
         size="sm"
       >
         {odometerVehicle && (
@@ -1500,7 +1572,7 @@ export default function Vehicles() {
       {/* Vehicle Details */}
       <Modal
         isOpen={vehicleDetails !== null}
-        title={vehicleDetails ? `Vehicle Details â€” ${vehicleDetails.plateNumber}` : "Vehicle Details"}
+        title={vehicleDetails ? `Vehicle Details — ${vehicleDetails.plateNumber}` : "Vehicle Details"}
         onClose={() => setVehicleDetails(null)}
         footer={(
           <div className="flex justify-end">
@@ -1539,11 +1611,112 @@ export default function Vehicles() {
               ))}
             </dl>
 
+            <section
+              className="mt-6 border-t border-[#dde4ef] pt-5"
+              aria-labelledby="vehicle-repair-history-title"
+            >
+              <h3
+                id="vehicle-repair-history-title"
+                className="text-sm font-bold uppercase tracking-wide text-[#141827]"
+              >
+                VRMS Repair History
+              </h3>
+              <p className="mt-1 text-xs text-[#64748b]">
+                Records are read from VRMS; VMMS does not store a repair-history copy.
+              </p>
+              {repairHistoryLoading ? (
+                <p className="py-4 text-sm text-[#64748b]" role="status">
+                  Loading VRMS repair history…
+                </p>
+              ) : repairHistoryError && !repairHistory?.items.length ? (
+                <p className="py-4 text-sm text-red-700" role="alert">
+                  Could not load repair history from VRMS. Try closing and reopening this vehicle.
+                </p>
+              ) : !repairHistory?.items.length ? (
+                <p className="py-4 text-sm text-[#64748b]">
+                  No VRMS repairs are recorded for this vehicle.
+                </p>
+              ) : (
+                <ol className="mt-2 divide-y divide-[#dde4ef]">
+                  {repairHistory.items.map((repair, index) => (
+                    <li
+                      key={repair.repairTicketId ?? repair.repairTicketNumber ?? index}
+                      className="py-4"
+                    >
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                        <span className="text-sm font-semibold text-[#141827]">
+                          {repair.repairTicketNumber ?? "VRMS repair"}
+                        </span>
+                        <span className="text-xs text-[#64748b]">
+                          {formatRepairDate(repair.openedAt)}
+                          {repair.closedAt
+                            ? ` – ${formatRepairDate(repair.closedAt)}`
+                            : ""}
+                        </span>
+                      </div>
+                      {repair.issues.length > 0 && (
+                        <p className="mt-2 text-sm text-[#344158]">
+                          <span className="font-semibold">Issues:</span>{" "}
+                          {repair.issues.join(", ")}
+                        </p>
+                      )}
+                      {repair.partsUsed.length > 0 && (
+                        <p className="mt-1 text-sm text-[#344158]">
+                          <span className="font-semibold">Parts used:</span>{" "}
+                          {repair.partsUsed.join(", ")}
+                        </p>
+                      )}
+                      {repair.repairPersonnel.length > 0 && (
+                        <p className="mt-1 text-sm text-[#344158]">
+                          <span className="font-semibold">Work performed by:</span>{" "}
+                          {repair.repairPersonnel.join(", ")}
+                        </p>
+                      )}
+                      {repair.provider && (
+                        <p className="mt-1 text-sm text-[#344158]">
+                          <span className="font-semibold">Provider:</span>{" "}
+                          {repair.provider}
+                        </p>
+                      )}
+                      {repair.totalRepairCost !== undefined && (
+                        <p className="mt-1 text-sm font-semibold text-[#141827]">
+                          Total repair cost:{" "}
+                          {repair.totalRepairCost == null
+                            ? "Not recorded"
+                            : Number(repair.totalRepairCost).toLocaleString(
+                                undefined,
+                                { style: "currency", currency: "PHP" },
+                              )}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              )}
+              {repairHistoryError && repairHistory?.items.length ? (
+                <p className="py-2 text-sm text-red-700" role="alert">
+                  Could not load more repair history.
+                </p>
+              ) : null}
+              {repairHistory?.nextCursor && (
+                <button
+                  type="button"
+                  onClick={() => void loadMoreRepairHistory()}
+                  disabled={repairHistoryLoadingMore}
+                  className="mt-2 rounded-lg border border-[#c8ced8] px-3 py-2 text-sm font-semibold text-[#141827] hover:bg-slate-50 disabled:opacity-60"
+                >
+                  {repairHistoryLoadingMore
+                    ? "Loading older repairs…"
+                    : "Load older repairs"}
+                </button>
+              )}
+            </section>
+
             {canViewAudit && (
               <section className="mt-6 border-t border-[#dde4ef] pt-5" aria-labelledby="vehicle-audit-title">
                 <h3 id="vehicle-audit-title" className="text-sm font-bold uppercase tracking-wide text-[#141827]">Audit History</h3>
                 {auditLoading ? (
-                  <p className="py-4 text-sm text-[#64748b]">Loading audit historyâ€¦</p>
+                  <p className="py-4 text-sm text-[#64748b]">Loading audit history…</p>
                 ) : auditError ? (
                   <p className="py-4 text-sm text-red-700" role="alert">Could not load audit history.</p>
                 ) : auditEntries.length === 0 ? (
@@ -1557,7 +1730,7 @@ export default function Vehicles() {
                           <time className="text-xs text-[#64748b]" dateTime={entry.createdAt}>{new Date(entry.createdAt).toLocaleString()}</time>
                         </div>
                         <p className="mt-1 break-words text-sm text-[#344158]">
-                          {entry.previousValue ?? "Empty"} <span aria-label="changed to">â†’</span> {entry.newValue ?? "Empty"}
+                          {entry.previousValue ?? "Empty"} <span aria-label="changed to">→</span> {entry.newValue ?? "Empty"}
                         </p>
                         <p className="mt-1 text-xs text-[#64748b]">Edited by {entry.email}</p>
                       </li>

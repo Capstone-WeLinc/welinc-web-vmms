@@ -46,6 +46,8 @@ import {
   uploadWorkOrderAttachment,
   deleteWorkOrderAttachment,
   openWorkOrderAttachment,
+  retryWorkOrderRepairReferral,
+  getWorkOrderRepairStatus,
   type WorkOrderAttachment,
 } from "../../lib/api/maintenanceService";
 import { getVehicles, type VehicleOption } from "../../lib/api/vehicleService";
@@ -305,6 +307,15 @@ export default function WorkOrders() {
   const [toast, setToast] = useState<ToastState | null>(null);
   const [savingPriorityId, setSavingPriorityId] = useState<string | null>(null);
   const [cancellingTaskId, setCancellingTaskId] = useState<string | null>(null);
+  const [retryingReferralId, setRetryingReferralId] = useState<string | null>(null);
+  const [refreshingRepairStatus, setRefreshingRepairStatus] = useState(false);
+  const [liveRepairTicket, setLiveRepairTicket] = useState<{
+    scheduleId: string;
+    status: string;
+    repairTicketNumber: string | null;
+    outsideShopName: string | null;
+  } | null>(null);
+  const [repairStatusReadError, setRepairStatusReadError] = useState(false);
   const [pendingWorkOrderAction, setPendingWorkOrderAction] =
     useState<PendingWorkOrderAction>(null);
   const [pendingStartChange, setPendingStartChange] = useState<(() => void) | null>(null);
@@ -492,6 +503,8 @@ export default function WorkOrders() {
   const handleSelectTask = (task: MaintenanceTask) => {
     setSelectedTask(task);
     setAiState(null);
+    setLiveRepairTicket(null);
+    setRepairStatusReadError(false);
     setWorkOrderStep(1);
     const templateItems = findTemplateItems(templates, task.title);
 
@@ -567,6 +580,68 @@ export default function WorkOrders() {
       setToast({ type: "error", message: error instanceof Error ? error.message : "Could not cancel maintenance log." });
     } finally {
       setCancellingTaskId(null);
+    }
+  };
+
+  const handleRetryRepairReferral = async (task: MaintenanceTask) => {
+    const referral = task.repairReferral;
+    if (!isAdmin || referral?.status !== "FAILED" || retryingReferralId) return;
+    setRetryingReferralId(referral.id);
+    try {
+      const updatedReferral = await retryWorkOrderRepairReferral(referral.id);
+      setTasks((current) =>
+        current.map((entry) =>
+          entry.id === task.id
+            ? { ...entry, repairReferral: updatedReferral }
+            : entry,
+        ),
+      );
+      setSelectedTask((current) =>
+        current?.id === task.id
+          ? { ...current, repairReferral: updatedReferral }
+          : current,
+      );
+      setToast({
+        type: updatedReferral.status === "FAILED" ? "warning" : "success",
+        message:
+          updatedReferral.status === "FAILED"
+            ? "VRMS still could not be reached. You can retry again."
+            : "Repair referral retry submitted.",
+      });
+    } catch (error) {
+      setToast({
+        type: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Could not retry the repair referral.",
+      });
+    } finally {
+      setRetryingReferralId(null);
+    }
+  };
+
+  const handleRefreshRepairStatus = async (task: MaintenanceTask) => {
+    setRefreshingRepairStatus(true);
+    setRepairStatusReadError(false);
+    try {
+      const response = await getWorkOrderRepairStatus(task.id);
+      setLiveRepairTicket(
+        response.repairTicket
+          ? {
+              scheduleId: task.id,
+              status: response.repairTicket.status,
+              repairTicketNumber:
+                response.repairTicket.repairTicketNumber,
+              outsideShopName: response.repairTicket.outsideShopName,
+            }
+          : null,
+      );
+      if (!response.repairTicket) setRepairStatusReadError(true);
+    } catch {
+      setRepairStatusReadError(true);
+    } finally {
+      setRefreshingRepairStatus(false);
     }
   };
 
@@ -1975,6 +2050,108 @@ export default function WorkOrders() {
             </span>
             <span className="text-sm font-semibold">{selectedTask.title}</span>
           </div>
+
+          {selectedTask.repairReferral && (
+            <section
+              className="mb-6 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5"
+              aria-labelledby="repair-referral-title"
+              aria-live="polite"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h3
+                    id="repair-referral-title"
+                    className="text-sm font-bold text-[var(--color-text-primary)]"
+                  >
+                    VRMS repair handoff
+                  </h3>
+                  <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                    {selectedTask.repairReferral.status === "QUEUED"
+                      ? "Sending this work order to VRMS."
+                      : selectedTask.repairReferral.status === "SENT"
+                        ? "Sent to VRMS; awaiting Admin review."
+                        : selectedTask.repairReferral.status === "FAILED"
+                          ? "Couldn't reach VRMS."
+                          : selectedTask.repairReferral.status === "REJECTED"
+                            ? "VRMS rejected this referral."
+                            : selectedTask.repairReferral.status === "CANCELLED"
+                              ? "The VRMS repair was cancelled; Chief Mechanic follow-up is needed."
+                              : "This work order is linked to a VRMS repair."}
+                  </p>
+                </div>
+                <span className="rounded-full bg-[var(--color-input-bg)] px-3 py-1 text-xs font-semibold text-[var(--color-text-primary)]">
+                  {selectedTask.repairReferral.status}
+                </span>
+              </div>
+
+              {selectedTask.repairReferral.status === "ACCEPTED" && (
+                <div className="mt-3 space-y-1 text-sm text-[var(--color-text-secondary)]">
+                  <p>
+                    Ticket:{" "}
+                    <span className="font-semibold text-[var(--color-text-primary)]">
+                      {liveRepairTicket?.scheduleId === selectedTask.id
+                        ? liveRepairTicket.repairTicketNumber
+                        : selectedTask.repairReferral.repairTicketNumber ??
+                          "Linked"}
+                    </span>
+                    {" · "}
+                    Status:{" "}
+                    <span className="font-semibold text-[var(--color-text-primary)]">
+                      {(liveRepairTicket?.scheduleId === selectedTask.id
+                        ? liveRepairTicket.status
+                        : selectedTask.repairReferral.repairStatus ??
+                          "Awaiting update"
+                      ).replace(/_/g, " ")}
+                    </span>
+                  </p>
+                  {(liveRepairTicket?.scheduleId === selectedTask.id
+                    ? liveRepairTicket.outsideShopName
+                    : selectedTask.repairReferral.outsideShopName) && (
+                    <p>
+                      Outside shop:{" "}
+                      {liveRepairTicket?.scheduleId === selectedTask.id
+                        ? liveRepairTicket.outsideShopName
+                        : selectedTask.repairReferral.outsideShopName}
+                    </p>
+                  )}
+                  {repairStatusReadError && (
+                    <p className="text-amber-700" role="status">
+                      Live status could not be refreshed. Showing the last
+                      status received from VRMS.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void handleRefreshRepairStatus(selectedTask)}
+                    disabled={refreshingRepairStatus}
+                    className="mt-2 rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm font-semibold text-[var(--color-text-primary)] hover:bg-[var(--color-input-bg)] disabled:opacity-60"
+                  >
+                    {refreshingRepairStatus
+                      ? "Refreshing status…"
+                      : "Refresh live status"}
+                  </button>
+                </div>
+              )}
+
+              {selectedTask.repairReferral.outcomeReason && (
+                <p className="mt-3 rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-800">
+                  VRMS reason: {selectedTask.repairReferral.outcomeReason}
+                </p>
+              )}
+              {selectedTask.repairReferral.status === "FAILED" && isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => void handleRetryRepairReferral(selectedTask)}
+                  disabled={retryingReferralId === selectedTask.repairReferral.id}
+                  className="mt-4 rounded-lg bg-[var(--color-brand-primary)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                >
+                  {retryingReferralId === selectedTask.repairReferral.id
+                    ? "Retrying…"
+                    : "Retry referral"}
+                </button>
+              )}
+            </section>
+          )}
 
           {isMechanic && (
             <div className="mb-6 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-1">

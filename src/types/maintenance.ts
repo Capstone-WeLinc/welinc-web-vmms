@@ -145,11 +145,36 @@ export interface MaintenanceTask {
   intervalType?: MaintenanceIntervalType;
   startReferenceDate?: string;
   workOrderProgress?: unknown;
+  repairReferral?: WorkOrderRepairReferral | null;
   partsCost?: number | string;
   laborCost?: number | string;
   totalCost?: number | string;
   materialCost?: number | string;
   deletedAt?: string | null;
+}
+
+export interface WorkOrderRepairReferral {
+  id: string;
+  status: "QUEUED" | "SENT" | "FAILED" | "ACCEPTED" | "REJECTED" | "CANCELLED";
+  repairTicketId: string | null;
+  repairTicketNumber: string | null;
+  repairStatus: string | null;
+  outsideShopName: string | null;
+  outcomeReason: string | null;
+  lastErrorCode: string | null;
+  createdAt?: string;
+}
+
+export interface VehicleRepairHistoryItem {
+  repairTicketId?: string;
+  repairTicketNumber?: string;
+  openedAt: string | null;
+  closedAt: string | null;
+  issues: string[];
+  partsUsed: string[];
+  repairPersonnel: string[];
+  provider: string | null;
+  totalRepairCost?: number | null;
 }
 
 export interface MaintenancePrediction {
