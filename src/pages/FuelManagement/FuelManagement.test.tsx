@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import FuelManagement from './FuelManagement';
 import type { FuelFillUp } from './types';
@@ -79,7 +79,7 @@ describe('Fuel Management period and log filters', () => {
     vi.mocked(exportRowsToPDF).mockReset();
   });
 
-  it('keeps KPIs and reports aligned when log filters change after a period is applied', async () => {
+  it('keeps KPIs and fuel log exports aligned when log filters change after a period is applied', async () => {
     const user = userEvent.setup();
     render(<FuelManagement />);
 
@@ -126,58 +126,6 @@ describe('Fuel Management period and log filters', () => {
     expect(visibleText('CAK 9043')).toHaveLength(0);
     expect(visibleText('10.0 km/L').length).toBeGreaterThan(0);
 
-    await user.click(screen.getByRole('button', { name: 'Per-Vehicle Summary' }));
-    const vehicleTable = within(document.getElementById('fuel-cost-summary-table')!);
-    expect(vehicleTable.getByText('NDG 5821')).toBeTruthy();
-    expect(vehicleTable.queryByText('CAK 9043')).toBeNull();
-    expect(vehicleTable.getAllByText('10.0 km/L').length).toBeGreaterThan(0);
-
-    await user.click(screen.getByRole('button', { name: 'Fleet-Wide Cost' }));
-    let fleetTable = within(document.getElementById('fuel-fleet-report-table')!);
-    expect(fleetTable.getByText('NDG 5821')).toBeTruthy();
-    expect(fleetTable.queryByText('CAK 9043')).toBeNull();
-    expect(fleetTable.getByText('1')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Export PDF' }));
-    await waitFor(() => expect(recordFuelReportExport).toHaveBeenCalledWith('pdf', '2026-11-01', '2026-11-30'));
-    expect(exportRowsToPDF).toHaveBeenCalledTimes(2);
-    const [fleetFilename, fleetTitle, , fleetPdfRows] = vi.mocked(exportRowsToPDF).mock.calls[1];
-    expect(fleetFilename).toBe('fleet-fuel-cost');
-    expect(fleetTitle).toBe('Fleet Fuel Cost');
-    expect(fleetPdfRows).toHaveLength(1);
-    expect(fleetPdfRows[0]).toEqual(expect.arrayContaining(['NDG 5821', 'Truck A', 1, '100.00 L', '10.0 km/L']));
-    expect(fleetPdfRows[0]).not.toEqual(expect.arrayContaining(['CAK 9043']));
-    await user.click(screen.getByRole('button', { name: 'Export Excel' }));
-    await waitFor(() => expect(recordFuelReportExport).toHaveBeenCalledWith('excel', '2026-11-01', '2026-11-30'));
-    expect(exportRowsAsXlsx).toHaveBeenCalledTimes(2);
-    const [fleetXlsxFilename, fleetXlsxTitle, fleetXlsxRows] = vi.mocked(exportRowsAsXlsx).mock.calls[1];
-    expect(fleetXlsxFilename).toContain('fleet_fuel_cost_');
-    expect(fleetXlsxTitle).toBe('Fleet Fuel Cost');
-    expect(fleetXlsxRows).toHaveLength(2);
-    expect(fleetXlsxRows[1]).toEqual(expect.arrayContaining(['NDG 5821', 'Truck A', 1, 100, 6000, 10]));
-    expect(fleetXlsxRows[1]).not.toEqual(expect.arrayContaining(['CAK 9043']));
-
-    await user.click(screen.getByRole('button', { name: 'Per-Vehicle Summary' }));
-    await user.click(screen.getByRole('button', { name: 'Export PDF' }));
-    await waitFor(() => expect(recordFuelReportExport).toHaveBeenCalledTimes(5));
-    expect(recordFuelReportExport).toHaveBeenLastCalledWith('pdf', '2026-11-01', '2026-11-30');
-    expect(exportRowsToPDF).toHaveBeenCalledTimes(3);
-    const [summaryFilename, summaryTitle, , summaryPdfRows] = vi.mocked(exportRowsToPDF).mock.calls[2];
-    expect(summaryFilename).toBe('fuel-cost-summary');
-    expect(summaryTitle).toBe('Fuel Cost Summary');
-    expect(summaryPdfRows).toHaveLength(1);
-    expect(summaryPdfRows[0]).toEqual(expect.arrayContaining(['NDG 5821', 'Truck A', 1, 100, '10.0 km/L']));
-    expect(summaryPdfRows[0]).not.toEqual(expect.arrayContaining(['CAK 9043']));
-    await user.click(screen.getByRole('button', { name: 'Export .xlsx' }));
-    await waitFor(() => expect(recordFuelReportExport).toHaveBeenCalledTimes(6));
-    expect(recordFuelReportExport).toHaveBeenLastCalledWith('excel', '2026-11-01', '2026-11-30');
-    expect(exportRowsAsXlsx).toHaveBeenCalledTimes(3);
-    const [summaryXlsxFilename, summaryXlsxTitle, summaryXlsxRows] = vi.mocked(exportRowsAsXlsx).mock.calls[2];
-    expect(summaryXlsxFilename).toContain('fuel_cost_summary_');
-    expect(summaryXlsxTitle).toBe('Fuel Cost Summary');
-    expect(summaryXlsxRows).toHaveLength(2);
-    expect(summaryXlsxRows[1]).toEqual(expect.arrayContaining(['NDG 5821', 'Truck A', 1, 100, 60, 6000, 10]));
-    expect(summaryXlsxRows[1]).not.toEqual(expect.arrayContaining(['CAK 9043']));
-
     await user.click(screen.getByRole('button', { name: 'Fuel Log' }));
     await user.click(screen.getByRole('button', { name: /Clear all active filters/ }));
     await waitFor(() => {
@@ -185,14 +133,9 @@ describe('Fuel Management period and log filters', () => {
       expect(kpiValue('Total Liters')).toBe('210L');
     });
     expect(screen.getByText('Showing 2026-11-01 to 2026-11-30')).toBeTruthy();
-
-    await user.click(screen.getByRole('button', { name: 'Fleet-Wide Cost' }));
-    fleetTable = within(document.getElementById('fuel-fleet-report-table')!);
-    expect(fleetTable.getByText('NDG 5821')).toBeTruthy();
-    expect(fleetTable.getByText('CAK 9043')).toBeTruthy();
   });
 
-  it('voids a fill-up, refreshes totals and reports, and excludes it from later exports', async () => {
+  it('voids a fill-up, refreshes totals, and excludes it from later exports', async () => {
     const user = userEvent.setup();
     authMock.role = 'OPERATIONS';
     render(<FuelManagement />);
@@ -236,35 +179,6 @@ describe('Fuel Management period and log filters', () => {
     expect(vi.mocked(exportRowsAsXlsx).mock.calls[0][2][1]).toEqual(expect.arrayContaining(['NDG 5821', '2026-11-10', 30, 'Shell']));
     expect(vi.mocked(exportRowsAsXlsx).mock.calls[0][2][1]).not.toEqual(expect.arrayContaining([100, 6000, 'Petron']));
 
-    await user.click(screen.getByRole('button', { name: 'Fleet-Wide Cost' }));
-    const fleetTable = within(document.getElementById('fuel-fleet-report-table')!);
-    expect(fleetTable.getByText('NDG 5821')).toBeTruthy();
-    expect(fleetTable.getByText('1')).toBeTruthy();
-    expect(fleetTable.getByText((_, element) => element?.tagName === 'TD' && element.textContent?.replace(/\s/g, '') === '30.00L')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Export PDF' }));
-    await waitFor(() => expect(exportRowsToPDF).toHaveBeenCalledTimes(2));
-    expect(vi.mocked(exportRowsToPDF).mock.calls[1][3]).toHaveLength(1);
-    expect(vi.mocked(exportRowsToPDF).mock.calls[1][3][0]).toEqual(expect.arrayContaining(['NDG 5821', 'Truck A', 1, '30.00 L']));
-    await user.click(screen.getByRole('button', { name: 'Export Excel' }));
-    await waitFor(() => expect(exportRowsAsXlsx).toHaveBeenCalledTimes(2));
-    expect(vi.mocked(exportRowsAsXlsx).mock.calls[1][2]).toHaveLength(2);
-    expect(vi.mocked(exportRowsAsXlsx).mock.calls[1][2][1]).toEqual(expect.arrayContaining(['NDG 5821', 'Truck A', 1, 30, 1800]));
-
-    await user.click(screen.getByRole('button', { name: 'Per-Vehicle Summary' }));
-    const vehicleTable = within(document.getElementById('fuel-cost-summary-table')!);
-    expect(vehicleTable.getByText('NDG 5821')).toBeTruthy();
-    expect(vehicleTable.getAllByText('1').length).toBeGreaterThan(0);
-    expect(vehicleTable.getAllByText('30L').length).toBeGreaterThan(0);
-    await user.click(screen.getByRole('button', { name: 'Export PDF' }));
-    await waitFor(() => expect(exportRowsToPDF).toHaveBeenCalledTimes(3));
-    expect(vi.mocked(exportRowsToPDF).mock.calls[2][3]).toHaveLength(1);
-    expect(vi.mocked(exportRowsToPDF).mock.calls[2][3][0]).toEqual(expect.arrayContaining(['NDG 5821', 'Truck A', 1, 30]));
-    await user.click(screen.getByRole('button', { name: 'Export .xlsx' }));
-    await waitFor(() => expect(exportRowsAsXlsx).toHaveBeenCalledTimes(3));
-    expect(vi.mocked(exportRowsAsXlsx).mock.calls[2][2]).toHaveLength(2);
-    expect(vi.mocked(exportRowsAsXlsx).mock.calls[2][2][1]).toEqual(expect.arrayContaining(['NDG 5821', 'Truck A', 1, 30, 60, 1800]));
-    expect(recordFuelReportExport).toHaveBeenCalledTimes(6);
-    expect(recordFuelReportExport).toHaveBeenLastCalledWith('excel', '2026-11-01', '2026-11-30');
     expect(screen.getByText('Showing 2026-11-01 to 2026-11-30')).toBeTruthy();
   });
 
@@ -297,11 +211,6 @@ describe('Fuel Management period and log filters', () => {
     expect(kpiValue('Total Fill-ups')).toBe('2');
     expect(kpiValue('Total Liters')).toBe('130L');
     expect(kpiValue('Total Fuel Cost')).toContain('7,800');
-
-    await user.click(screen.getByRole('button', { name: 'Fleet-Wide Cost' }));
-    const fleetTable = within(document.getElementById('fuel-fleet-report-table')!);
-    expect(fleetTable.getByText('2')).toBeTruthy();
-    expect(fleetTable.getByText((_, element) => element?.tagName === 'TD' && element.textContent?.replace(/\s/g, '') === '130.00L')).toBeTruthy();
   });
 
   it('blocks void confirmation without a reason and does not call the API', async () => {
@@ -355,24 +264,6 @@ describe('Fuel Management period and log filters', () => {
     await waitFor(() => expect(exportRowsAsXlsx).toHaveBeenCalledTimes(1));
     expect(vi.mocked(exportRowsAsXlsx).mock.calls[0][2]).toHaveLength(2);
     expect(vi.mocked(exportRowsAsXlsx).mock.calls[0][2][1]).toEqual(expect.arrayContaining(['CAK 9043', '2026-11-11', 80, 'Petron']));
-
-    await user.click(screen.getByRole('button', { name: 'Fleet-Wide Cost' }));
-    const fleetTable = within(document.getElementById('fuel-fleet-report-table')!);
-    expect(fleetTable.getByText('CAK 9043')).toBeTruthy();
-    expect(fleetTable.queryByText('NDG 5821')).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Export PDF' }));
-    await waitFor(() => expect(exportRowsToPDF).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(exportRowsToPDF).mock.calls[0][3]).toHaveLength(1);
-    expect(vi.mocked(exportRowsToPDF).mock.calls[0][3][0]).toEqual(expect.arrayContaining(['CAK 9043', 'Truck B', 1, '80.00 L']));
-
-    await user.click(screen.getByRole('button', { name: 'Per-Vehicle Summary' }));
-    const vehicleTable = within(document.getElementById('fuel-cost-summary-table')!);
-    expect(vehicleTable.getByText('CAK 9043')).toBeTruthy();
-    expect(vehicleTable.queryByText('NDG 5821')).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Export .xlsx' }));
-    await waitFor(() => expect(exportRowsAsXlsx).toHaveBeenCalledTimes(2));
-    expect(vi.mocked(exportRowsAsXlsx).mock.calls[1][2]).toHaveLength(2);
-    expect(vi.mocked(exportRowsAsXlsx).mock.calls[1][2][1]).toEqual(expect.arrayContaining(['CAK 9043', 'Truck B', 1, 80, 62.5, 5000, 5]));
   });
 
   it('preserves a successful first void and the remaining active data when the next bulk void fails', async () => {

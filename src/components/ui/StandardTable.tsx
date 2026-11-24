@@ -5,7 +5,7 @@ import type {
   MouseEvent,
   ReactNode,
 } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import DatePicker from "./DatePicker";
 import {
@@ -325,6 +325,67 @@ export const FilterDropdown = ({
   className = "",
   children,
 }: FilterPanelProps) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [panelStyle, setPanelStyle] = useState<{ top: number; left: number; maxHeight: number }>({
+    top: 0,
+    left: 0,
+    maxHeight: 320,
+  });
+
+  useLayoutEffect(() => {
+    if (!open) return;
+
+    const updatePosition = () => {
+      const button = buttonRef.current;
+      if (!button) return;
+      const rect = button.getBoundingClientRect();
+      const width = Math.min(window.innerWidth * 0.92, 430);
+      const margin = 8;
+      const left = Math.min(
+        Math.max(margin, rect.right - width),
+        Math.max(margin, window.innerWidth - width - margin),
+      );
+      const top = Math.min(rect.bottom + 8, window.innerHeight - margin);
+      const maxHeight = Math.max(160, window.innerHeight - top - margin);
+      setPanelStyle({ top, left, maxHeight });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: globalThis.MouseEvent) => {
+      const target = event.target as Node;
+      if (containerRef.current?.contains(target) || panelRef.current?.contains(target)) {
+        return;
+      }
+      onToggle();
+    };
+
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onToggle();
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open, onToggle]);
+
   const toggleStatus = (status: string) => {
     onStatusChange(
       selectedStatuses.includes(status)
@@ -334,8 +395,9 @@ export const FilterDropdown = ({
   };
 
   return (
-    <div className={`relative ${className}`}>
+    <div ref={containerRef} className={`relative ${className}`}>
       <button
+        ref={buttonRef}
         type="button"
         onClick={(event) => {
           event.stopPropagation();
@@ -358,7 +420,9 @@ export const FilterDropdown = ({
 
       {open && (
         <div
-          className="absolute right-0 top-14 z-40 w-[min(92vw,430px)] rounded-xl border border-[#e0e5ee] bg-white p-5 animate-in fade-in zoom-in-95 duration-150"
+          ref={panelRef}
+          className="fixed z-50 w-[min(92vw,430px)] overflow-y-auto rounded-xl border border-[#e0e5ee] bg-white p-5 animate-in fade-in zoom-in-95 duration-150"
+          style={{ top: panelStyle.top, left: panelStyle.left, maxHeight: panelStyle.maxHeight }}
           onClick={(event) => event.stopPropagation()}
         >
           <h3 className="text-lg font-extrabold uppercase tracking-wide text-[#141827]">

@@ -242,7 +242,7 @@
   }
 
   .modal-content {
-    @apply rounded-xl bg-[var(--color-card-bg)] border border-[var(--color-border)] p-6 max-w-md w-full;
+    @apply flex max-h-[calc(100vh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-6;
   }
 
   /* Focus Ring Utility */

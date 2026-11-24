@@ -145,6 +145,7 @@ export default function Navbar() {
         title="Notifications"
         onClose={() => setIsNotificationsOpen(false)}
         size="lg"
+        className="max-w-2xl"
         footer={
           <div className="flex justify-end">
             <button
@@ -157,7 +158,7 @@ export default function Navbar() {
           </div>
         }
       >
-        <div className="space-y-3">
+        <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
           {isLoadingNotifications ? (
             <p className="text-xs text-[#8a98ad]">Loading notifications...</p>
           ) : notifications.length === 0 ? (

@@ -649,6 +649,7 @@ const MaintenanceSchedulingCombined = () => {
           (!dateFromFilter || date >= dateFromFilter) && (!dateToFilter || date <= dateToFilter));
       const query = searchQuery.toLowerCase();
       const searchMatches =
+        task.id.toLowerCase().includes(query) ||
         (task.workOrderNumber ?? "").toLowerCase().includes(query) ||
         task.title.toLowerCase().includes(query) ||
         task.vehicleId.toLowerCase().includes(query) ||
@@ -802,6 +803,23 @@ const MaintenanceSchedulingCombined = () => {
       { replace: true },
     );
   }, [location.pathname, location.search, navigate]);
+
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(trimmed)) {
+      return;
+    }
+    const match = tasks.find((task) => task.id === trimmed);
+    if (!match) return;
+    const friendly =
+      match.workOrderNumber?.trim() ||
+      getVehiclePlateNumber(match.vehicleId) ||
+      match.title ||
+      trimmed;
+    if (friendly && friendly !== searchQuery) {
+      setSearchQuery(friendly);
+    }
+  }, [searchQuery, tasks]);
 
   const closeScheduleDetails = () => {
     extensionHistoryRequest.current += 1;

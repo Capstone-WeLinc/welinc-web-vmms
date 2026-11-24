@@ -16,6 +16,7 @@ import OutsourcedProviders from './pages/OutsourcedProviders/OutsourcedProviders
 import MaintenanceReports from './pages/MaintenanceReports/MaintenanceReports';
 import MaintenanceCosting from './pages/MaintenanceCosting/MaintenanceCosting';
 import AuditLogs from './pages/AuditLogs/AuditLogs';
+import Settings from './pages/Settings/Settings';
 import SessionExpiryNotice from './components/session/SessionExpiryNotice';
 import { useBackend } from './lib/api/httpClient';
 import { useAuthStore } from './store/authStore';
@@ -108,6 +109,10 @@ export default function App() {
             <Route
               path="/audit-logs"
               element={currentUser?.role === 'ADMIN' ? <Protected><AuditLogs /></Protected> : <Navigate to="/dashboard" replace />}
+            />
+            <Route
+              path="/settings"
+              element={['ADMIN', 'OPERATIONS'].includes(currentUser?.role ?? '') ? <Protected><Settings /></Protected> : <Navigate to="/dashboard" replace />}
             />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>

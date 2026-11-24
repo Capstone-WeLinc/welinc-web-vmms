@@ -180,6 +180,20 @@ export default function ImportFuelStatement({
             setDraftSyncState('idle');
             return;
           }
+
+          if (!snapshot.length && draftIdRef.current) {
+            const draftId = draftIdRef.current;
+            setDraftSyncState('saving');
+            await deleteFuelImportDraft(draftId);
+            draftIdRef.current = null;
+            setDrafts((current) => current.filter((item) => item.id !== draftId));
+            if (version === draftVersionRef.current) {
+              savedDraftVersionRef.current = version;
+              setDraftSyncState('idle');
+            }
+            return;
+          }
+
           setDraftSyncState('saving');
           const draft = draftIdRef.current
             ? await updateFuelImportDraft(
@@ -601,10 +615,29 @@ export default function ImportFuelStatement({
     setDeletingDraft(true);
     setError('');
     try {
+      const deletingActiveDraft = draftIdRef.current === draftToDelete.id;
+      if (deletingActiveDraft) {
+        await flushDraft().catch(() => undefined);
+      }
       await deleteFuelImportDraft(draftToDelete.id);
       setDrafts((current) =>
         current.filter((draft) => draft.id !== draftToDelete.id),
       );
+      if (deletingActiveDraft) {
+        draftVersionRef.current += 1;
+        draftIdRef.current = null;
+        savedDraftVersionRef.current = draftVersionRef.current;
+        setDraftVersion(draftVersionRef.current);
+        setRows([]);
+        setDraftSourceName(MANUAL_DRAFT_NAME);
+        setFileName('');
+        setSkippedSheets([]);
+        setSearch('');
+        setRowFilter('all');
+        setCurrentPage(1);
+        setDraftSyncState('idle');
+        setResultMessage('');
+      }
       setDraftToDelete(null);
     } catch (draftError) {
       setError(

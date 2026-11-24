@@ -6,8 +6,6 @@ import FuelLog from './components/FuelLog';
 import EfficiencyTrendsWithFilters from './components/EfficiencyTrendsWithFilters';
 import LogFuelFillUp from './components/LogFuelFillUp';
 import ConfigureFuelStations from './components/ConfigureFuelStations';
-import FuelCostSummary from './components/FuelCostSummary';
-import FleetWideFuelReport from './components/FleetWideFuelReport';
 import { useAuthStore } from '../../store/authStore';
 import { useBackend } from '../../lib/api/httpClient';
 import { getMaintenanceCostPeriod, type MaintenanceCostHalf, type MaintenanceCostPeriodType } from '../../lib/utils/maintenanceCostingPeriod';
@@ -54,7 +52,6 @@ function KPIStatCard({ icon, value, label, subtitle, iconBgColor, iconColor }: K
 }
 
 type Tab = 'fuel-log' | 'efficiency-trends' | 'anomaly-detection';
-type ReportTab = 'fleet-wide' | 'per-vehicle' | 'anomaly-log';
 const MAX_FUEL_ANOMALY_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const FUEL_ANOMALY_ATTACHMENT_TYPES: Record<string, string> = {
   '.pdf': 'application/pdf',
@@ -74,7 +71,6 @@ export default function FuelManagement() {
   const canWrite = role === 'OPERATIONS';
   const canAcknowledge = role === 'ADMIN';
   const [activeTab, setActiveTab] = useState<Tab>('fuel-log');
-  const [activeReport, setActiveReport] = useState<ReportTab>('fleet-wide');
   const [showLogForm, setShowLogForm] = useState(false);
   const [showStationConfig, setShowStationConfig] = useState(false);
   const [fillUps, setFillUps] = useState<FuelFillUp[]>([]);
@@ -138,9 +134,6 @@ export default function FuelManagement() {
   // Layout className constants (interaction/layout only)
   const containerClasses = 'space-y-6 relative';
   const kpiGridClasses = 'grid gap-4 sm:grid-cols-2 2xl:grid-cols-4';
-  const reportsHeaderClasses = 'flex flex-col sm:flex-row sm:items-center justify-between gap-4';
-  const reportSwitcherClasses = 'flex flex-wrap gap-1 rounded-xl p-1 border';
-  const reportPanelClasses = 'min-h-[15.625rem] pt-4';
 
   const handleFilteredFillUpsChange = useCallback((filtered: FuelFillUp[]) => {
     setFuelLogFilteredFillUps(filtered);
@@ -461,68 +454,6 @@ export default function FuelManagement() {
             </div>
           );
         })}</div>}
-      </div>
-
-      {/* Switcher Reports Section */}
-      <div className="space-y-6 border-t border-[var(--color-border)] pt-8">
-        <div className={reportsHeaderClasses}>
-          <h2 className="text-2xl font-bold text-[var(--color-text-primary)]">Reports</h2>
-
-          <div className={`${reportSwitcherClasses} bg-[var(--color-input-bg)] border-[var(--color-border)]`} role="group" aria-label="Fuel reports">
-            <button
-              type="button"
-              aria-pressed={activeReport === 'fleet-wide'}
-              onClick={() => setActiveReport('fleet-wide')}
-              className={`${activeReport === 'fleet-wide' ? 'bg-[var(--color-brand-primary)] text-white' : 'text-[var(--color-text-secondary)]'} whitespace-nowrap rounded-md px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)]`}
-            >
-              Fleet-Wide Cost
-            </button>
-            <button
-              type="button"
-              aria-pressed={activeReport === 'per-vehicle'}
-              onClick={() => setActiveReport('per-vehicle')}
-              className={`${activeReport === 'per-vehicle' ? 'bg-[var(--color-brand-primary)] text-white' : 'text-[var(--color-text-secondary)]'} whitespace-nowrap rounded-md px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)]`}
-            >
-              Per-Vehicle Summary
-            </button>
-            <button
-              type="button"
-              aria-pressed={activeReport === 'anomaly-log'}
-              onClick={() => setActiveReport('anomaly-log')}
-              className={`${activeReport === 'anomaly-log' ? 'bg-[var(--color-brand-primary)] text-white' : 'text-[var(--color-text-secondary)]'} whitespace-nowrap rounded-md px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)]`}
-            >
-              Anomaly Logs
-            </button>
-          </div>
-        </div>
-
-        <div className={reportPanelClasses}>
-          {activeReport === 'fleet-wide' && (
-            <div className="space-y-3">
-              <div className="text-xs text-[var(--color-text-secondary)] font-mono tracking-wider uppercase">Active View  -  Fleet-Wide Fuel Cost Report</div>
-              <FleetWideFuelReport fillUps={kpiFilteredFillUps} onExport={(format) => { void recordFuelReportExport(format, appliedFrom || undefined, appliedTo || undefined).catch((error) => setPageError(error instanceof Error ? error.message : 'Unable to record export.')); }} />
-            </div>
-          )}
-
-          {activeReport === 'per-vehicle' && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="text-xs text-[var(--color-text-secondary)] font-mono tracking-wider uppercase">Active View  -  Fuel Cost Summary  -  Per Vehicle</div>
-                <div className="text-xs text-[var(--color-text-secondary)] font-mono bg-[var(--color-card-bg-hover)] px-2 py-0.5 rounded">
-                  {appliedFrom}  -  {appliedTo || '...'}
-                </div>
-              </div>
-              <FuelCostSummary fillUps={kpiFilteredFillUps} onExport={(format) => { void recordFuelReportExport(format, appliedFrom || undefined, appliedTo || undefined).catch((error) => setPageError(error instanceof Error ? error.message : 'Unable to record export.')); }} />
-            </div>
-          )}
-
-          {activeReport === 'anomaly-log' && (
-              <div className="space-y-3">
-              <div className="text-xs text-[var(--color-text-secondary)] font-mono tracking-wider uppercase">Active View  -  Anomaly Detection Log</div>
-              <div className="space-y-2">{anomalies.length ? anomalies.map((item) => <div key={item.id} className="rounded border p-3">{item.vehicle.plateNumber}  -  {item.severity}  -  {item.status}  -  {item.note || 'No note'}</div>) : <p>No anomaly history.</p>}</div>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Action Modals */}
