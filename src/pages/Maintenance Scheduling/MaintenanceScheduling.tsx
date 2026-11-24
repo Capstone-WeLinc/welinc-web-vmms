@@ -11,8 +11,6 @@ import {
   Play,
   CheckCircle2,
   AlertCircle,
-  ArrowUp,
-  ArrowDown,
   Edit2,
   Ban,
   Power,
@@ -84,7 +82,8 @@ const formatExtensionTimestamp = (value: string) =>
 
 type ScheduleStatusAction = "request-cancel" | "approve-cancel" | "reject-cancel" | "activate";
 type ScheduleSortOrder =
-  | "NONE"
+  | "DUE_DATE_DESC"
+  | "DUE_DATE_ASC"
   | "PRIORITY_DESC"
   | "PRIORITY_ASC"
   | "TYPE_ASC"
@@ -247,10 +246,8 @@ const MaintenanceSchedulingCombined = () => {
   const [dateFromFilter, setDateFromFilter] = useState("");
   const [dateToFilter, setDateToFilter] = useState("");
   const [showFilters, setShowFilters] = useState(false);
-  const [sortOrder, setSortOrder] = useState<ScheduleSortOrder>("NONE");
-  const [dateSortDirection, setDateSortDirection] = useState<"asc" | "desc">(
-    "desc",
-  );
+  const [sortOrder, setSortOrder] =
+    useState<ScheduleSortOrder>("DUE_DATE_DESC");
   const [currentPage, setCurrentPage] = useState(1);
   const [schedulesPerPage, setSchedulesPerPage] = useState(8);
   const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
@@ -626,6 +623,16 @@ const MaintenanceSchedulingCombined = () => {
       );
     })
     .sort((left, right) => {
+      const dateComparison = (left.dueDate ?? "").localeCompare(
+        right.dueDate ?? "",
+      );
+      if (sortOrder === "DUE_DATE_ASC" || sortOrder === "DUE_DATE_DESC") {
+        const dueDateOrder =
+          sortOrder === "DUE_DATE_ASC" ? dateComparison : -dateComparison;
+        if (dueDateOrder !== 0) return dueDateOrder;
+        return right.id.localeCompare(left.id);
+      }
+
       let comparison = 0;
       if (sortOrder === "PRIORITY_ASC" || sortOrder === "PRIORITY_DESC") {
         const rank: Record<MaintenancePriority, number> = {
@@ -651,12 +658,7 @@ const MaintenanceSchedulingCombined = () => {
         if (sortOrder === "BRANCH_DESC") comparison *= -1;
       }
       if (comparison !== 0) return comparison;
-      const dateComparison = (left.dueDate ?? "").localeCompare(
-        right.dueDate ?? "",
-      );
-      if (dateComparison !== 0) {
-        return dateSortDirection === "asc" ? dateComparison : -dateComparison;
-      }
+      if (dateComparison !== 0) return -dateComparison;
       return right.id.localeCompare(left.id);
     });
   const totalPages = Math.max(
@@ -1325,7 +1327,7 @@ const MaintenanceSchedulingCombined = () => {
                   setSelectedStatusFilters([]);
                   setPriorityFilter("All");
                   setGarageBranchFilter("All");
-                  setSortOrder("NONE");
+                  setSortOrder("DUE_DATE_DESC");
                   setDateFromFilter("");
                   setDateToFilter("");
                   setVehicleFilter("All");
@@ -1385,7 +1387,8 @@ const MaintenanceSchedulingCombined = () => {
                     label="Sort by"
                     id="sortOrderF"
                     options={[
-                      { value: "NONE", label: "Due Date" },
+                      { value: "DUE_DATE_DESC", label: "Due Date: Descending" },
+                      { value: "DUE_DATE_ASC", label: "Due Date: Ascending" },
                       { value: "PRIORITY_DESC", label: "Priority: High to Low" },
                       { value: "PRIORITY_ASC", label: "Priority: Low to High" },
                       { value: "TYPE_ASC", label: "Maintenance Type: A to Z" },
@@ -1483,25 +1486,7 @@ const MaintenanceSchedulingCombined = () => {
                   },
                   {
                     key: "dueDate",
-                    header: (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDateSortDirection((direction) =>
-                            direction === "desc" ? "asc" : "desc",
-                          );
-                          setCurrentPage(1);
-                        }}
-                        className="inline-flex items-center gap-2 uppercase tracking-wide hover:text-white/80"
-                      >
-                        <span>Due Date</span>
-                        {dateSortDirection === "asc" ? (
-                          <ArrowUp className="h-3.5 w-3.5" />
-                        ) : (
-                          <ArrowDown className="h-3.5 w-3.5" />
-                        )}
-                      </button>
-                    ),
+                    header: "Due Date",
                     width: "12%",
                     render: (task) => task.dueDate || 'Not recorded',
                   },
