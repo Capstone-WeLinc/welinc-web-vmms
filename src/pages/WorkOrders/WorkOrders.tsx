@@ -65,6 +65,7 @@ import {
   getTimeBasedActivationDate,
   isDoneStatus,
   isDueStatus,
+  isInProgressWorkOrder,
   isInProgressStatus,
   isOverdueStatus,
   isPendingStatus,
@@ -433,7 +434,7 @@ export default function WorkOrders() {
           status === t.status ||
           (status === MaintenanceStatus.PENDING && isPendingStatus(t.status)) ||
           (status === MaintenanceStatus.DUE && isDueStatus(t.status)) ||
-          (status === MaintenanceStatus.IN_PROGRESS && isInProgressStatus(t.status)) ||
+          (status === MaintenanceStatus.IN_PROGRESS && isInProgressWorkOrder(t)) ||
           (status === MaintenanceStatus.DONE && isDoneStatus(t.status)) ||
           (status === MaintenanceStatus.OVERDUE && isOverdueStatus(t.status)),
       ),

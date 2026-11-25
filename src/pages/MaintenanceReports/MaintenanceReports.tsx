@@ -37,6 +37,7 @@ import {
 import { getScheduledFleetReports, type ScheduledFleetReport } from "../../lib/api/scheduledReportsService";
 import { exportRowsToCsv, exportRowsToExcel, printRowsAsPdf } from "../../lib/utils/frontendExport";
 import { excludeVoidedFuelFillUps } from "../FuelManagement/fuelReportData";
+import { isInProgressWorkOrder } from "../../lib/utils/workOrders";
 import {
   isInTimeFilterRange,
   timeFilterOptions,
@@ -311,7 +312,18 @@ export default function MaintenanceReports() {
 
   const filteredUpcoming = useMemo(() => {
     const query = upcomingSearch.trim().toLowerCase();
-    const rows = report.upcoming.filter((task) => {
+    const includesInProgress = upcomingStatusFilters.includes(
+      maintenanceStatusLabels[MaintenanceStatus.IN_PROGRESS],
+    );
+    const upcomingRows = includesInProgress
+      ? [
+          ...report.upcoming,
+          ...report.active.filter(
+            (task) => task.status === MaintenanceStatus.IN_PROGRESS,
+          ),
+        ]
+      : report.upcoming;
+    const rows = upcomingRows.filter((task) => {
       const vehicle = vehicleById.get(task.vehicleId);
       const displayVehicle = vehicle?.plateNumber ?? vehicle?.value ?? task.vehicleId;
       const date = task.startReferenceDate || task.date || "";
@@ -322,7 +334,11 @@ export default function MaintenanceReports() {
         (task.assignedDriver || "").toLowerCase().includes(query);
       const matchesStatus =
         upcomingStatusFilters.length === 0 ||
-        upcomingStatusFilters.includes(maintenanceStatusLabels[task.status]);
+        upcomingStatusFilters.includes(maintenanceStatusLabels[task.status]) ||
+        (upcomingStatusFilters.includes(
+          maintenanceStatusLabels[MaintenanceStatus.IN_PROGRESS],
+        ) &&
+          isInProgressWorkOrder(task));
       const matchesVehicle =
         upcomingVehicleFilter === "All" || displayVehicle === upcomingVehicleFilter;
       const matchesMechanic =
@@ -347,7 +363,7 @@ export default function MaintenanceReports() {
       }
       return taskDate(right).getTime() - taskDate(left).getTime();
     });
-  }, [report.upcoming, upcomingDateFrom, upcomingDateTo, upcomingMechanicFilter, upcomingSearch, upcomingSort, upcomingStatusFilters, upcomingVehicleFilter, vehicleById]);
+  }, [report.active, report.upcoming, upcomingDateFrom, upcomingDateTo, upcomingMechanicFilter, upcomingSearch, upcomingSort, upcomingStatusFilters, upcomingVehicleFilter, vehicleById]);
 
   const upcomingVehicleOptions = useMemo(
     () => [

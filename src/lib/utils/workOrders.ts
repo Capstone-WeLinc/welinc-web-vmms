@@ -16,7 +16,6 @@ export const isDueStatus = (status?: string | null) =>
   normalizeMaintenanceStatus(status) === "due";
 
 export const isInProgressStatus = (status?: string | null) =>
-  normalizeMaintenanceStatus(status) === "in-progress" ||
   normalizeMaintenanceStatus(status) === "in-progress";
 
 export const isDoneStatus = (status?: string | null) =>
@@ -24,6 +23,23 @@ export const isDoneStatus = (status?: string | null) =>
 
 export const isOverdueStatus = (status?: string | null) =>
   normalizeMaintenanceStatus(status) === "overdue";
+
+export const isInProgressWorkOrder = (
+  task: Pick<MaintenanceTask, "status" | "workOrderProgress">,
+) => {
+  if (isInProgressStatus(task.status)) return true;
+  if (!isOverdueStatus(task.status)) return false;
+
+  const progress = task.workOrderProgress;
+  return (
+    typeof progress === "object" &&
+    progress !== null &&
+    !Array.isArray(progress) &&
+    "overdueFromStatus" in progress &&
+    typeof progress.overdueFromStatus === "string" &&
+    normalizeMaintenanceStatus(progress.overdueFromStatus) === "in-progress"
+  );
+};
 
 export const getNextWorkOrderId = (tasks: Pick<MaintenanceTask, "id">[]) => {
   const nextNumber =

@@ -64,6 +64,7 @@ import { getVehicles, type VehicleOption } from "../../lib/api/vehicleService";
 import { getGarages } from "../../lib/api/locationService";
 import { useBodyScrollLock } from "../../lib/hooks/useBodyScrollLock";
 import {
+  isInProgressWorkOrder,
   isInProgressStatus,
   isDueStatus,
   isOverdueStatus,
@@ -577,7 +578,7 @@ const MaintenanceSchedulingCombined = () => {
           (status) =>
             (status === MaintenanceStatus.PENDING && isPendingStatus(task.status)) ||
             (status === MaintenanceStatus.DUE && isDueStatus(task.status)) ||
-            (status === MaintenanceStatus.IN_PROGRESS && isInProgressStatus(task.status)) ||
+            (status === MaintenanceStatus.IN_PROGRESS && isInProgressWorkOrder(task)) ||
             (status === MaintenanceStatus.OVERDUE && isOverdueStatus(task.status)) ||
             status === task.status,
         );
