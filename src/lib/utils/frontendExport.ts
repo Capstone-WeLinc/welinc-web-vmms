@@ -1,5 +1,14 @@
 export type ExportCellValue = string | number | boolean | null | undefined;
 
+function escapeHtml(value: ExportCellValue): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export function exportRowsToCsv(
   filename: string,
   headers: string[],
@@ -78,6 +87,7 @@ export function printRowsAsPdf(
   title: string,
   headers: string[],
   rows: ExportCellValue[][],
+  onAfterPrint?: () => void,
 ): void {
   const printWindow = window.open("", "_blank");
   if (!printWindow) {
@@ -85,11 +95,11 @@ export function printRowsAsPdf(
     return;
   }
 
-  const tableHeadersHtml = headers.map((h) => `<th>${h}</th>`).join("");
+  const tableHeadersHtml = headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("");
   const tableRowsHtml = rows
     .map(
       (row) =>
-        `<tr>${row.map((val) => `<td>${val ?? ""}</td>`).join("")}</tr>`,
+        `<tr>${row.map((val) => `<td>${escapeHtml(val)}</td>`).join("")}</tr>`,
     )
     .join("");
 
@@ -97,7 +107,7 @@ export function printRowsAsPdf(
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>${title}</title>
+    <title>${escapeHtml(title)}</title>
     <style>
       body { font-family: Arial, sans-serif; color: #111827; margin: 24px; }
       h1 { margin-bottom: 16px; font-size: 20px; text-transform: uppercase; color: #070b45; }
@@ -109,7 +119,7 @@ export function printRowsAsPdf(
     </style>
   </head>
   <body>
-    <h1>${title}</h1>
+    <h1>${escapeHtml(title)}</h1>
     <table>
       <thead>
         <tr>${tableHeadersHtml}</tr>
@@ -118,25 +128,24 @@ export function printRowsAsPdf(
         ${tableRowsHtml}
       </tbody>
     </table>
-    <script>
-      function runPrint() {
-        window.focus();
-        window.print();
-      }
-      window.onload = runPrint;
-    </script>
   </body>
 </html>`;
 
+  let printStarted = false;
+  const runPrint = () => {
+    if (printStarted) return;
+    printStarted = true;
+    printWindow.focus();
+    printWindow.print();
+  };
+  if (onAfterPrint) {
+    printWindow.addEventListener("afterprint", onAfterPrint, { once: true });
+  }
+  printWindow.addEventListener("load", runPrint, { once: true });
   printWindow.document.open();
   printWindow.document.write(html);
   printWindow.document.close();
-
-  const interval = setInterval(() => {
-    if (printWindow.document.readyState === "complete") {
-      clearInterval(interval);
-      printWindow.focus();
-      printWindow.print();
-    }
-  }, 100);
+  if (printWindow.document.readyState === "complete") {
+    window.setTimeout(runPrint, 0);
+  }
 }

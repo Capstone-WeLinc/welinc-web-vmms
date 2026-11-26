@@ -224,6 +224,7 @@ export default function WorkOrders() {
   const partsSuggestionsId = `work-order-parts-${useId().replace(/:/g, "")}`;
   const location = useLocation();
   const navigate = useNavigate();
+  const locationSearchKey = `${location.pathname}${location.search}`;
   const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
   const [selectedTask, setSelectedTask] = useState<MaintenanceTask | null>(
     null,
@@ -293,7 +294,10 @@ export default function WorkOrders() {
     return () => window.removeEventListener("focus", loadWorkOrders);
   }, []);
 
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("search") || params.get("q") || "";
+  });
   const [showFilters, setShowFilters] = useState(false);
   const [selectedStatusFilters, setSelectedStatusFilters] = useState<string[]>([]);
   const [priorityFilter, setPriorityFilter] = useState<MaintenancePriority | "All">("All");
@@ -331,6 +335,18 @@ export default function WorkOrders() {
   const aiRec = selectedAiState?.recommendation ?? null;
   const loadingAiRec = selectedAiState?.loading ?? false;
   const aiError = selectedAiState?.error ?? null;
+  const [handledLocationSearch, setHandledLocationSearch] =
+    useState(locationSearchKey);
+
+  if (handledLocationSearch !== locationSearchKey) {
+    setHandledLocationSearch(locationSearchKey);
+    const params = new URLSearchParams(location.search);
+    const search = params.get("search") || params.get("q");
+    if (search) {
+      setSearchQuery(search);
+      setCurrentPage(1);
+    }
+  }
 
   const handleGenerateWorkOrderAi = (task: MaintenanceTask) => {
     if (!task) return;
@@ -536,8 +552,6 @@ export default function WorkOrders() {
     const params = new URLSearchParams(location.search);
     const search = params.get("search") || params.get("q");
     if (!search) return;
-    setSearchQuery(search);
-    setCurrentPage(1);
     params.delete("search");
     params.delete("q");
     const nextSearch = params.toString();

@@ -25,7 +25,12 @@ import {
   type OdometerImportRow,
   type VehicleMaintenanceDefaults,
 } from "../../lib/api/vmmsApi";
-import type { MaintenanceTask, VehicleRepairHistoryItem } from "../../types/maintenance";
+import type { MaintenanceTask } from "../../types/maintenance";
+import {
+  appendRepairHistoryPage,
+  getCurrentRepairHistory,
+  type VehicleRepairHistoryState,
+} from "./repairHistoryState";
 import {
   DataTable,
   ConfirmationModal,
@@ -123,13 +128,9 @@ export default function Vehicles() {
   const [auditEntries, setAuditEntries] = useState<VehicleAuditEntry[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState(false);
-  const [repairHistory, setRepairHistory] = useState<{
-    items: VehicleRepairHistoryItem[];
-    nextCursor: string | null;
-  } | null>(null);
-  const [repairHistoryLoading, setRepairHistoryLoading] = useState(false);
-  const [repairHistoryLoadingMore, setRepairHistoryLoadingMore] = useState(false);
-  const [repairHistoryError, setRepairHistoryError] = useState(false);
+  const [repairHistoryState, setRepairHistoryState] =
+    useState<VehicleRepairHistoryState | null>(null);
+  const repairHistoryRequestId = useRef(0);
   const [maintenanceWorkOrders, setMaintenanceWorkOrders] = useState<MaintenanceTask[]>([]);
   const [maintenanceWorkOrdersLoading, setMaintenanceWorkOrdersLoading] = useState(false);
   const [maintenanceWorkOrdersError, setMaintenanceWorkOrdersError] = useState(false);
@@ -219,6 +220,28 @@ export default function Vehicles() {
 
   const vehicleDetailsId = vehicleDetails?.id;
   const vehicleDetailsPlateNumber = vehicleDetails?.plateNumber;
+  const currentRepairHistoryState = getCurrentRepairHistory(
+    repairHistoryState,
+    vehicleDetailsId,
+  );
+  const repairHistory = currentRepairHistoryState?.page ?? null;
+  const repairHistoryLoading = Boolean(vehicleDetailsId) && !currentRepairHistoryState;
+  const repairHistoryLoadingMore =
+    currentRepairHistoryState?.loadingMore ?? false;
+  const repairHistoryError = currentRepairHistoryState?.error ?? false;
+
+  const openVehicleDetails = (vehicle: VehicleRecord) => {
+    repairHistoryRequestId.current += 1;
+    setRepairHistoryState(null);
+    setVehicleDetails(vehicle);
+  };
+
+  const closeVehicleDetails = () => {
+    repairHistoryRequestId.current += 1;
+    setRepairHistoryState(null);
+    setVehicleDetails(null);
+  };
+
   useEffect(() => {
     if (!vehicleDetailsId || !canViewAudit) {
       // Clear details from the previous vehicle when its modal closes or access changes.
@@ -278,24 +301,32 @@ export default function Vehicles() {
   }, [vehicleDetailsId, vehicleDetailsPlateNumber]);
 
   useEffect(() => {
-    if (!vehicleDetailsId) {
-      setRepairHistory(null);
-      setRepairHistoryError(false);
-      return;
-    }
+    if (!vehicleDetailsId) return;
 
     let active = true;
-    setRepairHistoryLoading(true);
-    setRepairHistoryError(false);
+    const requestId = repairHistoryRequestId.current;
     getVehicleRepairHistory(vehicleDetailsId)
       .then((page) => {
-        if (active) setRepairHistory(page);
+        if (active && repairHistoryRequestId.current === requestId) {
+          setRepairHistoryState({
+            vehicleId: vehicleDetailsId,
+            requestId,
+            page,
+            loadingMore: false,
+            error: false,
+          });
+        }
       })
       .catch(() => {
-        if (active) setRepairHistoryError(true);
-      })
-      .finally(() => {
-        if (active) setRepairHistoryLoading(false);
+        if (active && repairHistoryRequestId.current === requestId) {
+          setRepairHistoryState({
+            vehicleId: vehicleDetailsId,
+            requestId,
+            page: null,
+            loadingMore: false,
+            error: true,
+          });
+        }
       });
 
     return () => {
@@ -304,28 +335,41 @@ export default function Vehicles() {
   }, [vehicleDetailsId]);
 
   const loadMoreRepairHistory = async () => {
-    if (!vehicleDetailsId || !repairHistory?.nextCursor || repairHistoryLoadingMore) {
+    const current = currentRepairHistoryState;
+    const requestId = current?.requestId;
+    if (
+      !vehicleDetailsId ||
+      !current?.page?.nextCursor ||
+      current.loadingMore ||
+      requestId === undefined
+    ) {
       return;
     }
-    setRepairHistoryLoadingMore(true);
-    setRepairHistoryError(false);
+    setRepairHistoryState((state) =>
+      state?.vehicleId === vehicleDetailsId && state.requestId === requestId
+        ? { ...state, loadingMore: true, error: false }
+        : state,
+    );
     try {
       const nextPage = await getVehicleRepairHistory(
         vehicleDetailsId,
-        repairHistory.nextCursor,
+        current.page.nextCursor,
       );
-      setRepairHistory((current) =>
-        current
-          ? {
-              items: [...current.items, ...nextPage.items],
-              nextCursor: nextPage.nextCursor,
-            }
-          : nextPage,
+      setRepairHistoryState((state) =>
+        appendRepairHistoryPage(
+          state,
+          vehicleDetailsId,
+          requestId,
+          nextPage,
+        ),
       );
     } catch {
-      setRepairHistoryError(true);
-    } finally {
-      setRepairHistoryLoadingMore(false);
+      setRepairHistoryState((state) =>
+        state?.vehicleId === vehicleDetailsId &&
+        state.requestId === requestId
+          ? { ...state, loadingMore: false, error: true }
+          : state,
+      );
     }
   };
 
@@ -1030,7 +1074,7 @@ export default function Vehicles() {
             setOpenMenuId((prev) => (prev === v.id ? null : v.id));
           }}
           items={[
-            { label: "View details", icon: Eye, onClick: () => { setOpenMenuId(null); setVehicleDetails(v); } },
+            { label: "View details", icon: Eye, onClick: () => { setOpenMenuId(null); openVehicleDetails(v); } },
             ...(canManage ? [
               ...(v.isActive ? [{
                 label: "Update odometer",
@@ -1681,12 +1725,12 @@ export default function Vehicles() {
       <Modal
         isOpen={vehicleDetails !== null}
         title={vehicleDetails ? `Vehicle Details — ${vehicleDetails.plateNumber}` : "Vehicle Details"}
-        onClose={() => setVehicleDetails(null)}
+        onClose={closeVehicleDetails}
         footer={(
           <div className="flex justify-end">
             <button
               type="button"
-              onClick={() => setVehicleDetails(null)}
+              onClick={closeVehicleDetails}
               className="rounded-lg bg-[#070b45] px-4 py-2 text-sm font-semibold text-white hover:bg-[#11175f]"
             >
               Close

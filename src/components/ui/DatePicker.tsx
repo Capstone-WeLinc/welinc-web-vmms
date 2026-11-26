@@ -95,6 +95,7 @@ export default function DatePicker({
         !calendarRef.current?.contains(target)
       ) {
         setOpen(false);
+        setCalendarPosition(null);
       }
     };
 
@@ -103,10 +104,7 @@ export default function DatePicker({
   }, [open]);
 
   useLayoutEffect(() => {
-    if (!open) {
-      setCalendarPosition(null);
-      return;
-    }
+    if (!open) return;
 
     updateCalendarPosition();
     window.addEventListener("resize", updateCalendarPosition);
@@ -133,6 +131,7 @@ export default function DatePicker({
   const selectDay = (day: number) => {
     onChange(formatLocalDate(new Date(year, month, day)));
     setOpen(false);
+    setCalendarPosition(null);
   };
 
   return (
@@ -143,7 +142,10 @@ export default function DatePicker({
         disabled={disabled}
         aria-expanded={open}
         onClick={() => {
-          if (!disabled) setOpen((current) => !current);
+          if (!disabled) {
+            setCalendarPosition(null);
+            setOpen((current) => !current);
+          }
         }}
         className={`relative h-11 w-full rounded-xl border bg-white pl-10 pr-10 text-left text-sm outline-none transition ${
           disabled

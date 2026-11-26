@@ -96,7 +96,7 @@ export async function apiRequest<T>(
   if (response.status === 204) return undefined as T;
   const contentType = response.headers.get('content-type') ?? '';
   if (contentType.includes('application/json')) return response.json() as Promise<T>;
-  if (/^(image\/|video\/|application\/pdf|application\/octet-stream|text\/plain)/i.test(contentType)) {
+  if (/^(image\/|video\/|application\/pdf|application\/octet-stream|application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|text\/plain)/i.test(contentType)) {
     return response.blob() as Promise<T>;
   }
   return (await response.text()) as T;
