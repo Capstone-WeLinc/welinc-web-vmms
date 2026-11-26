@@ -38,6 +38,7 @@ export type FuelImportRow = {
   errors: string[];
   status: 'READY' | 'SAVED' | 'ERROR';
   fillUpId?: string;
+  totalCost?: number;
 };
 export type FuelImportResult = {
   saved: number;

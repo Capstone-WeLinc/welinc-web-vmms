@@ -14,6 +14,10 @@ import { getVehicles } from '../../lib/api/vmmsApi';
 import { acknowledgeFuelAnomaly, createFuelEntry, createFuelStation, getFuelAnomalies, getFuelAnomalyAttachment, getFuelAnomalyThreshold, getFuelEntries, getFuelReceiptAttachment, getFuelStations, recordFuelReportExport, updateFuelAnomaly, updateFuelAnomalyThreshold, updateFuelStation, uploadFuelAnomalyAttachment, voidFuelEntry, type FuelAnomalyRecord, type FuelFillUpInput, type FuelStation, type FuelStationManagement, type FuelStationUpdate, type FuelVehicle } from '../../lib/api/fuelService';
 import type { FuelFillUp } from './types';
 import { excludeVoidedFuelFillUps } from './fuelReportData';
+import {
+  formatFuelAnomalyDetectedAt,
+  getFuelAnomalyAgeDays,
+} from './fuelAnomalyTime';
 
 type Tab = 'fuel-log' | 'efficiency-trends' | 'anomaly-detection';
 const MAX_FUEL_ANOMALY_ATTACHMENT_BYTES = 10 * 1024 * 1024;
@@ -208,7 +212,7 @@ export default function FuelManagement() {
     const first = kpiFilteredFillUps.find((entry) => entry.vehicleId === vehicleId)!;
     return { vehicleId, vehicleName: first.vehicleName, model: first.vehicleModel, avgEfficiency: rows.length ? rows.reduce((sum, row) => sum + (row.efficiency ?? 0), 0) / rows.length : 0, fillUps: rows.length, trend: 'normal' as const };
   }), [kpiFilteredFillUps]);
-  const anomalyCards = useMemo(() => anomalies.filter((item) => item.status === 'OPEN').map((item) => ({ vehicleId: item.vehicle.plateNumber, vehicleName: item.vehicle.plateNumber, model: item.vehicle.model, efficiency: item.efficiency, status: 'Anomaly' as const, fleetAvg: item.rollingAverage, recommendation: item.note ?? 'Review the fuel entry and add an operations resolution note.' })), [anomalies]);
+  const anomalyCards = useMemo(() => anomalies.filter((item) => item.status === 'OPEN').map((item) => ({ id: item.id, vehicleId: item.vehicle.plateNumber, vehicleName: item.vehicle.plateNumber, model: item.vehicle.model, efficiency: item.efficiency, status: 'Anomaly' as const, fleetAvg: item.rollingAverage, recommendation: item.note ?? 'Review the fuel entry and add an operations resolution note.' })), [anomalies]);
 
   if (!canView) {
     return <div className="space-y-6"><PageHeader icon={Droplet} title="Fuel Management" subtitle="Fuel tracking and reports" /><p role="status" className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 text-sm text-[var(--color-text-secondary)]">Fuel Management on the web is available to Admin and Operations.</p></div>;
@@ -361,12 +365,16 @@ export default function FuelManagement() {
           </div>
         )}
         {activeTab === 'anomaly-detection' && <div className="space-y-3">{anomalyCards.length === 0 ? <p className="text-sm text-[var(--color-text-secondary)]">No open fuel anomalies.</p> : anomalyCards.map((anomaly) => {
-          const record = anomalies.find((item) => item.vehicle.plateNumber === anomaly.vehicleId && item.status === 'OPEN')!;
+          const record = anomalies.find((item) => item.id === anomaly.id)!;
+          const ageDays = getFuelAnomalyAgeDays(record.createdAt);
           return (
             <div key={record.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
               <div>
                 <strong>{anomaly.vehicleName} - {anomaly.efficiency.toFixed(1)} km/L</strong>
                 <div className="text-sm">Rolling average {anomaly.fleetAvg.toFixed(1)} km/L - {record.severity}</div>
+                <div className="text-sm">Status: {record.status}</div>
+                <div className="text-sm">First detected: {formatFuelAnomalyDetectedAt(record.createdAt)}</div>
+                <div className="text-sm">Age: {ageDays === null ? 'Unavailable' : `${ageDays} ${ageDays === 1 ? 'day' : 'days'}`}</div>
                 <div className="text-sm">{record.note || 'No resolution note recorded'}</div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {record.attachments?.map((attachment) => (

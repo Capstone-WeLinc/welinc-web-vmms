@@ -17,6 +17,10 @@ import {
 import { getVehicles } from '../../lib/api/vmmsApi';
 import { exportRowsAsXlsx } from '../../lib/utils/excelExport';
 import { exportRowsToPDF } from '../../lib/utils/fuelExport';
+import {
+  formatFuelAnomalyDetectedAt,
+  getFuelAnomalyAgeDays,
+} from './fuelAnomalyTime';
 
 const authMock = vi.hoisted(() => ({ role: 'ADMIN' }));
 
@@ -77,6 +81,45 @@ describe('Fuel Management period and log filters', () => {
     });
     vi.mocked(exportRowsAsXlsx).mockReset();
     vi.mocked(exportRowsToPDF).mockReset();
+  });
+
+  it('calculates anomaly age using elapsed 24-hour periods across Manila midnight', () => {
+    const detectedAt = Date.parse('2026-11-01T15:59:59.999Z');
+    const dayMs = 24 * 60 * 60 * 1000;
+
+    expect(getFuelAnomalyAgeDays(new Date(detectedAt).toISOString(), detectedAt + dayMs - 1)).toBe(0);
+    expect(getFuelAnomalyAgeDays(new Date(detectedAt).toISOString(), detectedAt + dayMs)).toBe(1);
+    expect(getFuelAnomalyAgeDays(new Date(detectedAt).toISOString(), detectedAt + 3 * dayMs - 1)).toBe(2);
+    expect(getFuelAnomalyAgeDays(new Date(detectedAt).toISOString(), detectedAt + 3 * dayMs)).toBe(3);
+    expect(getFuelAnomalyAgeDays(new Date(detectedAt).toISOString(), detectedAt + 7 * dayMs - 1)).toBe(6);
+    expect(getFuelAnomalyAgeDays(new Date(detectedAt).toISOString(), detectedAt + 7 * dayMs)).toBe(7);
+  });
+
+  it('shows first-detected time and elapsed age for open anomalies', async () => {
+    const createdAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    vi.mocked(getFuelAnomalies).mockResolvedValue([
+      {
+        id: 'anomaly-aged',
+        vehicle: { plateNumber: 'NDG 5821', model: 'Truck A' },
+        efficiency: 5,
+        rollingAverage: 10,
+        status: 'OPEN',
+        severity: 'WARNING',
+        note: null,
+        acknowledgedAt: null,
+        createdAt,
+        fillUp: { date: '2026-11-01', station: { name: 'Petron' } },
+      },
+    ]);
+    render(<FuelManagement />);
+    await waitFor(() => expect(kpiValue('Total Fill-ups')).toBe('3'));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Anomaly Detection' }));
+
+    expect(screen.getByText('Status: OPEN')).toBeTruthy();
+    expect(
+      screen.getByText(`First detected: ${formatFuelAnomalyDetectedAt(createdAt)}`),
+    ).toBeTruthy();
+    expect(screen.getByText('Age: 1 day')).toBeTruthy();
   });
 
   it('keeps KPIs and fuel log exports aligned when log filters change after a period is applied', async () => {

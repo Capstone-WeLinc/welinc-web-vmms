@@ -1,26 +1,27 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import Sidebar from './components/Sidebar/Sidebar';
 import Navbar from './components/Navbar/Navbar';
-import Dashboard from './pages/Dashboard/Dashboard';
-import SchedulingPage from './pages/Maintenance Scheduling/MaintenanceScheduling';
-import ChecklistTemplates from './pages/ChecklistTemplates/ChecklistTemplates';
-import WorkOrders from './pages/WorkOrders/WorkOrders';
-import MaintenanceLogs from './pages/MaintenanceLogs/MaintenanceLogs';
-import FuelManagement from './pages/FuelManagement/FuelManagement';
-import Profile from './pages/Profile/Profile';
-import AIAnalyticsPage from './pages/AIAnalytics/AIAnalytics';
-import Vehicles from './pages/Vehicles/Vehicles';
-import Garages from './pages/Garages/Garages';
-import OutsourcedProviders from './pages/OutsourcedProviders/OutsourcedProviders';
-import MaintenanceReports from './pages/MaintenanceReports/MaintenanceReports';
-import MaintenanceCosting from './pages/MaintenanceCosting/MaintenanceCosting';
-import AuditLogs from './pages/AuditLogs/AuditLogs';
-import Settings from './pages/Settings/Settings';
 import SessionExpiryNotice from './components/session/SessionExpiryNotice';
 import { useBackend } from './lib/api/httpClient';
 import { useAuthStore } from './store/authStore';
 import { bootSession, PORTAL_URL } from './lib/session/session';
+
+const Dashboard = lazy(() => import('./pages/Dashboard/Dashboard'));
+const SchedulingPage = lazy(() => import('./pages/Maintenance Scheduling/MaintenanceScheduling'));
+const ChecklistTemplates = lazy(() => import('./pages/ChecklistTemplates/ChecklistTemplates'));
+const WorkOrders = lazy(() => import('./pages/WorkOrders/WorkOrders'));
+const MaintenanceLogs = lazy(() => import('./pages/MaintenanceLogs/MaintenanceLogs'));
+const FuelManagement = lazy(() => import('./pages/FuelManagement/FuelManagement'));
+const Profile = lazy(() => import('./pages/Profile/Profile'));
+const AIAnalyticsPage = lazy(() => import('./pages/AIAnalytics/AIAnalytics'));
+const Vehicles = lazy(() => import('./pages/Vehicles/Vehicles'));
+const Garages = lazy(() => import('./pages/Garages/Garages'));
+const OutsourcedProviders = lazy(() => import('./pages/OutsourcedProviders/OutsourcedProviders'));
+const MaintenanceReports = lazy(() => import('./pages/MaintenanceReports/MaintenanceReports'));
+const MaintenanceCosting = lazy(() => import('./pages/MaintenanceCosting/MaintenanceCosting'));
+const AuditLogs = lazy(() => import('./pages/AuditLogs/AuditLogs'));
+const Settings = lazy(() => import('./pages/Settings/Settings'));
 
 function Protected({ children }: { children: ReactNode }) {
   return <>{children}</>;
@@ -89,33 +90,41 @@ export default function App() {
             </div>
           )}
           <SessionExpiryNotice />
-          <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/login" element={<Navigate to="/" replace />} />
-            <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
-            <Route path="/maintenance-scheduling" element={<Protected><SchedulingPage /></Protected>} />
-            <Route path="/work-orders" element={<Protected><WorkOrders /></Protected>} />
-            <Route path="/maintenance-logs" element={<Protected><MaintenanceLogs /></Protected>} />
-            <Route path="/checklist-templates" element={<Protected><ChecklistTemplates /></Protected>} />
-            <Route path="/inspection-checklists" element={<Navigate to="/checklist-templates" replace />} />
-            <Route path="/profile" element={<Protected><Profile /></Protected>} />
-            <Route path="/ai-analytics" element={<Protected><AIAnalyticsPage /></Protected>} />
-            <Route path="/maintenance-reports" element={<Protected><MaintenanceReports /></Protected>} />
-            <Route path="/maintenance-costing" element={<Protected><MaintenanceCosting /></Protected>} />
-            <Route path="/fuel-management" element={<Protected><FuelManagement /></Protected>} />
-            <Route path="/vehicles" element={<Protected><Vehicles /></Protected>} />
-            <Route path="/garages" element={<Protected><Garages /></Protected>} />
-            <Route path="/outsourced-providers" element={<Protected><OutsourcedProviders /></Protected>} />
-            <Route
-              path="/audit-logs"
-              element={currentUser?.role === 'ADMIN' ? <Protected><AuditLogs /></Protected> : <Navigate to="/dashboard" replace />}
-            />
-            <Route
-              path="/settings"
-              element={currentUser?.role === 'ADMIN' ? <Protected><Settings /></Protected> : <Navigate to="/dashboard" replace />}
-            />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
+          <Suspense
+            fallback={
+              <p role="status" className="text-sm text-[var(--color-text-secondary)]">
+                Loading page…
+              </p>
+            }
+          >
+            <Routes>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/login" element={<Navigate to="/" replace />} />
+              <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
+              <Route path="/maintenance-scheduling" element={<Protected><SchedulingPage /></Protected>} />
+              <Route path="/work-orders" element={<Protected><WorkOrders /></Protected>} />
+              <Route path="/maintenance-logs" element={<Protected><MaintenanceLogs /></Protected>} />
+              <Route path="/checklist-templates" element={<Protected><ChecklistTemplates /></Protected>} />
+              <Route path="/inspection-checklists" element={<Navigate to="/checklist-templates" replace />} />
+              <Route path="/profile" element={<Protected><Profile /></Protected>} />
+              <Route path="/ai-analytics" element={<Protected><AIAnalyticsPage /></Protected>} />
+              <Route path="/maintenance-reports" element={<Protected><MaintenanceReports /></Protected>} />
+              <Route path="/maintenance-costing" element={<Protected><MaintenanceCosting /></Protected>} />
+              <Route path="/fuel-management" element={<Protected><FuelManagement /></Protected>} />
+              <Route path="/vehicles" element={<Protected><Vehicles /></Protected>} />
+              <Route path="/garages" element={<Protected><Garages /></Protected>} />
+              <Route path="/outsourced-providers" element={<Protected><OutsourcedProviders /></Protected>} />
+              <Route
+                path="/audit-logs"
+                element={currentUser?.role === 'ADMIN' ? <Protected><AuditLogs /></Protected> : <Navigate to="/dashboard" replace />}
+              />
+              <Route
+                path="/settings"
+                element={currentUser?.role === 'ADMIN' ? <Protected><Settings /></Protected> : <Navigate to="/dashboard" replace />}
+              />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </Suspense>
         </main>
       </div>
     </div>
