@@ -7,6 +7,9 @@ import {
   updateVehicleRecord,
   updateVehicleOdometerRecord,
   bulkUpdateVehicleOdometerRecords,
+  getPendingVrmsOdometerReviews,
+  confirmVrmsOdometerReview,
+  dismissVrmsOdometerReview,
   deleteVehicleRecord,
   previewVehicleImport,
   saveVehicleImport,
@@ -24,6 +27,7 @@ import {
   type VehicleImportRow,
   type OdometerImportRow,
   type VehicleMaintenanceDefaults,
+  type PendingVrmsOdometerReview,
 } from "../../lib/api/vmmsApi";
 import type { MaintenanceTask } from "../../types/maintenance";
 import {
@@ -105,6 +109,7 @@ const keepsVehicleUnderMaintenance = (task: MaintenanceTask) => {
 export default function Vehicles() {
   const currentUser = useAuthStore((state) => state.currentUser);
   const canManage = canManageVehicles(currentUser);
+  const isOperations = currentUser?.role === "OPERATIONS";
   const canViewAudit = canSeeVmmsWebNavigation(currentUser);
   const [vehicles, setVehicles] = useState<VehicleRecord[]>([]);
   const [garages, setGarages] = useState<GarageFullRecord[]>([]);
@@ -140,6 +145,26 @@ export default function Vehicles() {
   const [odometerError, setOdometerError] = useState("");
   const [odometerSaving, setOdometerSaving] = useState(false);
   const [odometerConfirmOpen, setOdometerConfirmOpen] = useState(false);
+  const [pendingOdometerReviews, setPendingOdometerReviews] = useState<
+    PendingVrmsOdometerReview[]
+  >([]);
+  const [pendingOdometerReviewCursor, setPendingOdometerReviewCursor] =
+    useState<string | null>(null);
+  const [pendingOdometerReviewsLoading, setPendingOdometerReviewsLoading] =
+    useState(false);
+  const [
+    pendingOdometerReviewsLoadingMore,
+    setPendingOdometerReviewsLoadingMore,
+  ] = useState(false);
+  const [pendingOdometerReviewsError, setPendingOdometerReviewsError] =
+    useState(false);
+  const [odometerReviewDecision, setOdometerReviewDecision] = useState<{
+    review: PendingVrmsOdometerReview;
+    decision: "CONFIRM" | "DISMISS";
+  } | null>(null);
+  const [odometerReviewSavingId, setOdometerReviewSavingId] = useState<
+    string | null
+  >(null);
   const [maintenanceDefaultsVehicle, setMaintenanceDefaultsVehicle] =
     useState<VehicleRecord | null>(null);
   const [maintenanceDefaults, setMaintenanceDefaults] =
@@ -213,10 +238,51 @@ export default function Vehicles() {
     }
   }, []);
 
+  const loadPendingOdometerReviews = useCallback(
+    async (cursor?: string) => {
+      if (!isOperations) return;
+      const isLoadingMore = Boolean(cursor);
+      if (isLoadingMore) {
+        setPendingOdometerReviewsLoadingMore(true);
+      } else {
+        setPendingOdometerReviewsLoading(true);
+        setPendingOdometerReviewsError(false);
+      }
+
+      try {
+        const page = await getPendingVrmsOdometerReviews(cursor);
+        setPendingOdometerReviews((current) => {
+          if (!isLoadingMore) return page.items;
+          const currentIds = new Set(current.map((review) => review.id));
+          return [
+            ...current,
+            ...page.items.filter((review) => !currentIds.has(review.id)),
+          ];
+        });
+        setPendingOdometerReviewCursor(page.nextCursor);
+        setPendingOdometerReviewsError(false);
+      } catch {
+        setPendingOdometerReviewsError(true);
+      } finally {
+        setPendingOdometerReviewsLoading(false);
+        setPendingOdometerReviewsLoadingMore(false);
+      }
+    },
+    [isOperations],
+  );
+
   useEffect(() => {
     const initialLoad = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(initialLoad);
   }, [load]);
+
+  useEffect(() => {
+    const initialLoad = window.setTimeout(
+      () => void loadPendingOdometerReviews(),
+      0,
+    );
+    return () => window.clearTimeout(initialLoad);
+  }, [loadPendingOdometerReviews]);
 
   const vehicleDetailsId = vehicleDetails?.id;
   const vehicleDetailsPlateNumber = vehicleDetails?.plateNumber;
@@ -872,6 +938,40 @@ export default function Vehicles() {
     await saveOdometerUpdate(odometer);
   };
 
+  const handleOdometerReviewDecision = async () => {
+    if (!isOperations || !odometerReviewDecision || odometerReviewSavingId) {
+      return;
+    }
+
+    const { review, decision } = odometerReviewDecision;
+    setOdometerReviewSavingId(review.id);
+    try {
+      if (decision === "CONFIRM") {
+        await confirmVrmsOdometerReview(review.id);
+      } else {
+        await dismissVrmsOdometerReview(review.id);
+      }
+      setOdometerReviewDecision(null);
+      await Promise.all([load(), loadPendingOdometerReviews()]);
+      showToast(
+        decision === "CONFIRM"
+          ? "Service reading confirmed and vehicle odometer updated."
+          : "Service reading dismissed. Vehicle odometer was not changed.",
+      );
+    } catch (error) {
+      setOdometerReviewDecision(null);
+      await Promise.all([load(), loadPendingOdometerReviews()]);
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "Failed to save the service-reading decision.",
+        "error",
+      );
+    } finally {
+      setOdometerReviewSavingId(null);
+    }
+  };
+
   const confirmDelete = (v: VehicleRecord) => {
     if (!canManage) return;
     setDeleteId(v.id);
@@ -1161,6 +1261,193 @@ export default function Vehicles() {
           ) : undefined
         }
       />
+
+      {isOperations && (
+        <section
+          aria-labelledby="vrms-odometer-review-title"
+          className="mb-5 overflow-hidden rounded-2xl border border-[#dde4ef] bg-white"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#edf1f6] px-5 py-4">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 rounded-lg bg-amber-50 p-2 text-amber-800">
+                <Gauge className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <div>
+                <h2
+                  id="vrms-odometer-review-title"
+                  className="text-base font-bold text-[#141827]"
+                >
+                  VRMS odometer review
+                </h2>
+                <p className="mt-1 text-sm text-[#64748b]">
+                  Completed repair readings change the vehicle master only after
+                  Operations confirms them.
+                </p>
+              </div>
+            </div>
+            <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900">
+              {pendingOdometerReviews.length} loaded
+            </span>
+          </div>
+
+          {pendingOdometerReviewsLoading ? (
+            <div
+              aria-label="Loading pending VRMS odometer reviews"
+              className="space-y-3 px-5 py-5"
+            >
+              {[0, 1, 2].map((row) => (
+                <div
+                  key={row}
+                  className="h-12 animate-pulse rounded-lg bg-slate-100"
+                />
+              ))}
+            </div>
+          ) : pendingOdometerReviewsError &&
+            pendingOdometerReviews.length === 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+              <p role="alert" className="text-sm text-red-700">
+                Pending service readings could not be loaded.
+              </p>
+              <button
+                type="button"
+                onClick={() => void loadPendingOdometerReviews()}
+                className="rounded-lg border border-[#c8ced8] bg-white px-3 py-2 text-sm font-semibold text-[#141827] transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#070b45]"
+              >
+                Retry
+              </button>
+            </div>
+          ) : pendingOdometerReviews.length === 0 ? (
+            <p className="px-5 py-5 text-sm text-[#64748b]">
+              No completed VRMS readings are waiting for review.
+            </p>
+          ) : (
+            <>
+              {pendingOdometerReviewsError && (
+                <p role="alert" className="px-5 pt-4 text-sm text-red-700">
+                  Older readings could not be loaded. Use “Load older readings”
+                  to retry.
+                </p>
+              )}
+              <ol className="divide-y divide-[#edf1f6]">
+                {pendingOdometerReviews.map((review) => {
+                  const canConfirm =
+                    review.isActive &&
+                    review.serviceOdometerReading >= review.currentOdometer;
+                  const ticketLabel =
+                    review.repairTicketNumber ??
+                    `Ticket ${review.repairTicketId.slice(0, 8)}`;
+
+                  return (
+                    <li key={review.id}>
+                      <article className="grid gap-4 px-5 py-4 md:grid-cols-[minmax(0,1.3fr)_minmax(220px,1fr)_auto] md:items-center">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-bold text-[#141827]">
+                              {review.plateNumber}
+                            </h3>
+                            <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-[#344158]">
+                              VRMS ticket {ticketLabel}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-sm text-[#64748b]">
+                            Completed {formatRepairDate(review.occurredAt)}
+                            {review.outsideShopName
+                              ? ` · ${review.outsideShopName}`
+                              : ""}
+                          </p>
+                          {!review.isActive && (
+                            <p className="mt-1 text-sm text-amber-800">
+                              This vehicle is inactive; dismiss the reading
+                              rather than confirming it.
+                            </p>
+                          )}
+                          {review.serviceOdometerReading <
+                            review.currentOdometer && (
+                            <p className="mt-1 text-sm text-red-700">
+                              The service reading is below the current master
+                              reading and cannot be confirmed.
+                            </p>
+                          )}
+                        </div>
+
+                        <dl className="grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <dt className="text-xs font-medium text-[#64748b]">
+                              Current master
+                            </dt>
+                            <dd className="mt-1 font-semibold tabular-nums text-[#141827]">
+                              {review.currentOdometer.toLocaleString()} km
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs font-medium text-[#64748b]">
+                              VRMS service reading
+                            </dt>
+                            <dd className="mt-1 font-semibold tabular-nums text-[#141827]">
+                              {review.serviceOdometerReading.toLocaleString()}{" "}
+                              km
+                            </dd>
+                          </div>
+                        </dl>
+
+                        <div className="flex flex-wrap gap-2 md:justify-end">
+                          <button
+                            type="button"
+                            disabled={
+                              !canConfirm || odometerReviewSavingId !== null
+                            }
+                            onClick={() =>
+                              setOdometerReviewDecision({
+                                review,
+                                decision: "CONFIRM",
+                              })
+                            }
+                            className="rounded-lg bg-[#070b45] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#11175f] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#070b45]"
+                          >
+                            Confirm reading
+                          </button>
+                          <button
+                            type="button"
+                            disabled={odometerReviewSavingId !== null}
+                            onClick={() =>
+                              setOdometerReviewDecision({
+                                review,
+                                decision: "DISMISS",
+                              })
+                            }
+                            className="rounded-lg border border-[#c8ced8] bg-white px-3 py-2 text-sm font-semibold text-[#344158] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#070b45]"
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      </article>
+                    </li>
+                  );
+                })}
+              </ol>
+            </>
+          )}
+
+          {pendingOdometerReviewCursor && !pendingOdometerReviewsLoading && (
+            <div className="border-t border-[#edf1f6] px-5 py-3 text-right">
+              <button
+                type="button"
+                disabled={pendingOdometerReviewsLoadingMore}
+                onClick={() =>
+                  void loadPendingOdometerReviews(
+                    pendingOdometerReviewCursor,
+                  )
+                }
+                className="rounded-lg border border-[#c8ced8] bg-white px-3 py-2 text-sm font-semibold text-[#141827] transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#070b45]"
+              >
+                {pendingOdometerReviewsLoadingMore
+                  ? "Loading…"
+                  : "Load older readings"}
+              </button>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Table Card */}
       <div className="overflow-hidden rounded-2xl border border-[#dde4ef] bg-white">
@@ -1719,6 +2006,56 @@ export default function Vehicles() {
         busy={odometerSaving}
         onConfirm={() => void confirmOdometerUpdate()}
         onCancel={() => setOdometerConfirmOpen(false)}
+      />
+
+      <ConfirmationModal
+        isOpen={isOperations && odometerReviewDecision !== null}
+        title={
+          odometerReviewDecision?.decision === "DISMISS"
+            ? "Dismiss service reading"
+            : "Confirm service reading"
+        }
+        message={
+          odometerReviewDecision?.decision === "DISMISS" ? (
+            <p>
+              Dismiss the reading from VRMS ticket{" "}
+              <strong>
+                {odometerReviewDecision.review.repairTicketNumber ??
+                  odometerReviewDecision.review.repairTicketId}
+              </strong>
+              ? The vehicle master odometer will remain unchanged.
+            </p>
+          ) : odometerReviewDecision ? (
+            <p>
+              Confirm{" "}
+              <strong>
+                {odometerReviewDecision.review.serviceOdometerReading.toLocaleString()}{" "}
+                km
+              </strong>{" "}
+              from VRMS ticket{" "}
+              <strong>
+                {odometerReviewDecision.review.repairTicketNumber ??
+                  odometerReviewDecision.review.repairTicketId}
+              </strong>{" "}
+              for <strong>{odometerReviewDecision.review.plateNumber}</strong>?
+              The Operations odometer workflow will update the vehicle master
+              and audit the change.
+            </p>
+          ) : null
+        }
+        confirmLabel={
+          odometerReviewSavingId
+            ? "Saving…"
+            : odometerReviewDecision?.decision === "DISMISS"
+              ? "Dismiss reading"
+              : "Confirm and update"
+        }
+        variant={
+          odometerReviewDecision?.decision === "DISMISS" ? "danger" : "primary"
+        }
+        busy={odometerReviewSavingId !== null}
+        onConfirm={() => void handleOdometerReviewDecision()}
+        onCancel={() => setOdometerReviewDecision(null)}
       />
 
       {/* Vehicle Details */}

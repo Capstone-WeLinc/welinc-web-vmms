@@ -21,6 +21,24 @@ export interface VehicleOption {
   branchGarageId?: string | null;
 }
 
+export interface PendingVrmsOdometerReview {
+  id: string;
+  repairTicketId: string;
+  repairTicketNumber: string | null;
+  outsideShopName: string | null;
+  vehicleId: string;
+  plateNumber: string;
+  currentOdometer: number;
+  isActive: boolean;
+  serviceOdometerReading: number;
+  occurredAt: string;
+}
+
+export interface PendingVrmsOdometerReviewPage {
+  items: PendingVrmsOdometerReview[];
+  nextCursor: string | null;
+}
+
 export interface MaintenanceLogEditValues {
   maintenanceClass?: 'REPAIR' | 'PREVENTIVE';
   maintenanceRemarks?: string;
@@ -1379,6 +1397,36 @@ export async function updateVehicleOdometerRecord(
     method: "PATCH",
     body: JSON.stringify({ odometer }),
   });
+}
+
+export async function getPendingVrmsOdometerReviews(
+  cursor?: string,
+): Promise<PendingVrmsOdometerReviewPage> {
+  if (!useBackend) return { items: [], nextCursor: null };
+  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  return fetchJSON<PendingVrmsOdometerReviewPage>(
+    `/vehicles/odometer-reviews/pending${query}`,
+  );
+}
+
+export async function confirmVrmsOdometerReview(id: string) {
+  if (!useBackend) {
+    throw new Error("VRMS odometer review requires the backend.");
+  }
+  return fetchJSON<{ id: string; status: "CONFIRMED" }>(
+    `/vehicles/odometer-reviews/${encodeURIComponent(id)}/confirm`,
+    { method: "POST" },
+  );
+}
+
+export async function dismissVrmsOdometerReview(id: string) {
+  if (!useBackend) {
+    throw new Error("VRMS odometer review requires the backend.");
+  }
+  return fetchJSON<{ id: string; status: "DISMISSED" }>(
+    `/vehicles/odometer-reviews/${encodeURIComponent(id)}/dismiss`,
+    { method: "POST" },
+  );
 }
 
 export async function bulkUpdateVehicleOdometerRecords(
