@@ -39,6 +39,37 @@ export interface PendingVrmsOdometerReviewPage {
   nextCursor: string | null;
 }
 
+export interface PendingVrmsRetirementRequest {
+  requestId: string;
+  vmmsVehicleId: string;
+  vehiclePlate: string;
+  repairTicketId: string;
+  repairTicketNumber: string;
+  reason: string;
+  occurredAt: string;
+}
+
+export interface PendingVrmsRetirementRequestPage {
+  items: PendingVrmsRetirementRequest[];
+  nextCursor: string | null;
+}
+
+export interface VrmsRepeatRepairAlert {
+  eventId: string;
+  vmmsVehicleId: string;
+  vehiclePlate: string;
+  category: string;
+  repairTicketNumbers: string[];
+  windowDays: number;
+  count: number;
+  occurredAt: string;
+}
+
+export interface VrmsRepeatRepairAlertPage {
+  items: VrmsRepeatRepairAlert[];
+  nextCursor: string | null;
+}
+
 export interface MaintenanceLogEditValues {
   maintenanceClass?: 'REPAIR' | 'PREVENTIVE';
   maintenanceRemarks?: string;
@@ -1406,6 +1437,53 @@ export async function getPendingVrmsOdometerReviews(
   const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
   return fetchJSON<PendingVrmsOdometerReviewPage>(
     `/vehicles/odometer-reviews/pending${query}`,
+  );
+}
+
+export async function getPendingVrmsRetirementRequests(
+  cursor?: string,
+): Promise<PendingVrmsRetirementRequestPage> {
+  if (!useBackend) {
+    throw new Error('VRMS retirement requests require the backend.');
+  }
+  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+  return fetchJSON<PendingVrmsRetirementRequestPage>(
+    `/integrations/vrms/retirement-requests/pending${query}`,
+  );
+}
+
+export async function decideVrmsRetirementRequest(
+  requestId: string,
+  decision: 'APPROVED' | 'DECLINED',
+  reason?: string,
+) {
+  if (!useBackend) {
+    throw new Error('VRMS retirement decisions require the backend.');
+  }
+  return fetchJSON<{
+    requestId: string;
+    decision: 'APPROVED' | 'DECLINED';
+    reason: string | null;
+    deliveryEventId: string;
+    deliveryStatus: 'QUEUED';
+  }>(
+    `/integrations/vrms/retirement-requests/${encodeURIComponent(requestId)}/decision`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ decision, ...(reason ? { reason } : {}) }),
+    },
+  );
+}
+
+export async function getVrmsRepeatRepairAlerts(
+  cursor?: string,
+): Promise<VrmsRepeatRepairAlertPage> {
+  if (!useBackend) {
+    throw new Error('VRMS repeated-repair alerts require the backend.');
+  }
+  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+  return fetchJSON<VrmsRepeatRepairAlertPage>(
+    `/integrations/vrms/repeat-repairs${query}`,
   );
 }
 

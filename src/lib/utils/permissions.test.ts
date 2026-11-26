@@ -18,4 +18,12 @@ describe("VMMS navigation permissions", () => {
       }),
     ).toBe(false);
   });
+
+  it("limits Chief Mechanic navigation to work orders and fuel anomalies", () => {
+    const user = { role: "CHIEF_MECHANIC" };
+    expect(canSeeVmmsNavigationPath("/work-orders", user)).toBe(true);
+    expect(canSeeVmmsNavigationPath("/fuel-management", user)).toBe(true);
+    expect(canSeeVmmsNavigationPath("/maintenance-reports", user)).toBe(false);
+    expect(canSeeVmmsNavigationPath("/maintenance-costing", user)).toBe(false);
+  });
 });

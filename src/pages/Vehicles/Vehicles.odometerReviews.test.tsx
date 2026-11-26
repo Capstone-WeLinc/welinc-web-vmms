@@ -9,6 +9,8 @@ const apiMocks = vi.hoisted(() => ({
   getVehicleRecords: vi.fn(),
   getGarageRecords: vi.fn(),
   getPendingVrmsOdometerReviews: vi.fn(),
+  getPendingVrmsRetirementRequests: vi.fn(),
+  decideVrmsRetirementRequest: vi.fn(),
   confirmVrmsOdometerReview: vi.fn(),
   dismissVrmsOdometerReview: vi.fn(),
   updateVehicleOdometerRecord: vi.fn(),
@@ -28,6 +30,8 @@ vi.mock("../../lib/api/vmmsApi", async (importOriginal) => {
     getVehicleRecords: apiMocks.getVehicleRecords,
     getGarageRecords: apiMocks.getGarageRecords,
     getPendingVrmsOdometerReviews: apiMocks.getPendingVrmsOdometerReviews,
+    getPendingVrmsRetirementRequests: apiMocks.getPendingVrmsRetirementRequests,
+    decideVrmsRetirementRequest: apiMocks.decideVrmsRetirementRequest,
     confirmVrmsOdometerReview: apiMocks.confirmVrmsOdometerReview,
     dismissVrmsOdometerReview: apiMocks.dismissVrmsOdometerReview,
     updateVehicleOdometerRecord: apiMocks.updateVehicleOdometerRecord,
@@ -44,6 +48,16 @@ const pendingReview = {
   currentOdometer: 45000,
   isActive: true,
   serviceOdometerReading: 45678,
+  occurredAt: "2026-11-27T00:00:00.000Z",
+};
+
+const pendingRetirementRequest = {
+  requestId: "e35b02b2-0cec-43db-aee7-49b3617e8f91",
+  vmmsVehicleId: "23d53ff4-919c-4420-a7d3-83d077c2b93a",
+  vehiclePlate: "TGD 908",
+  repairTicketId: "ee3d6c66-1d30-4c38-9f31-1d8e13b78816",
+  repairTicketNumber: "VR-RET-100",
+  reason: "Beyond economical repair",
   occurredAt: "2026-11-27T00:00:00.000Z",
 };
 
@@ -80,6 +94,17 @@ describe("Vehicles page VRMS odometer review", () => {
         items: [],
         nextCursor: null,
       });
+    apiMocks.getPendingVrmsRetirementRequests.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
+    apiMocks.decideVrmsRetirementRequest.mockResolvedValue({
+      requestId: pendingRetirementRequest.requestId,
+      decision: "APPROVED",
+      reason: null,
+      deliveryEventId: "47bcf4b4-c82a-4a51-aa7c-73ae3af34b92",
+      deliveryStatus: "QUEUED",
+    });
     apiMocks.confirmVrmsOdometerReview.mockResolvedValue({
       id: pendingReview.id,
       status: "CONFIRMED",
@@ -178,5 +203,65 @@ describe("Vehicles page VRMS odometer review", () => {
       false,
     );
     await user.click(screen.getByRole("button", { name: "Dismiss" }));
+  });
+
+  it("requires a reason before Operations can decline a retirement request", async () => {
+    const user = userEvent.setup();
+    apiMocks.getPendingVrmsRetirementRequests.mockResolvedValue({
+      items: [pendingRetirementRequest],
+      nextCursor: null,
+    });
+    render(<Vehicles />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Decline" }),
+    );
+    const reason = screen.getByRole("textbox", {
+      name: "Reason for declining retirement request",
+    });
+    const sendDecline = screen.getByRole("button", { name: "Send decline" });
+    expect(sendDecline).toHaveProperty("disabled", true);
+    expect(apiMocks.decideVrmsRetirementRequest).not.toHaveBeenCalled();
+
+    await user.type(reason, "Repair remains feasible");
+    expect(sendDecline).toHaveProperty("disabled", false);
+    await user.click(sendDecline);
+
+    await waitFor(() =>
+      expect(apiMocks.decideVrmsRetirementRequest).toHaveBeenCalledWith(
+        pendingRetirementRequest.requestId,
+        "DECLINED",
+        "Repair remains feasible",
+      ),
+    );
+  });
+
+  it("requires confirmation before approving vehicle retirement", async () => {
+    const user = userEvent.setup();
+    apiMocks.getPendingVrmsRetirementRequests.mockResolvedValue({
+      items: [pendingRetirementRequest],
+      nextCursor: null,
+    });
+    render(<Vehicles />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Approve retirement" }),
+    );
+    expect(
+      screen.getByText(/This deactivates the VMMS vehicle/),
+    ).toBeTruthy();
+    expect(apiMocks.decideVrmsRetirementRequest).not.toHaveBeenCalled();
+    const approveButtons = screen.getAllByRole("button", {
+      name: "Approve retirement",
+    });
+    await user.click(approveButtons[approveButtons.length - 1]);
+
+    await waitFor(() =>
+      expect(apiMocks.decideVrmsRetirementRequest).toHaveBeenCalledWith(
+        pendingRetirementRequest.requestId,
+        "APPROVED",
+        undefined,
+      ),
+    );
   });
 });

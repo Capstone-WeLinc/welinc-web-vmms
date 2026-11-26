@@ -10,6 +10,8 @@ import {
   getPendingVrmsOdometerReviews,
   confirmVrmsOdometerReview,
   dismissVrmsOdometerReview,
+  getPendingVrmsRetirementRequests,
+  decideVrmsRetirementRequest,
   deleteVehicleRecord,
   previewVehicleImport,
   saveVehicleImport,
@@ -28,6 +30,7 @@ import {
   type OdometerImportRow,
   type VehicleMaintenanceDefaults,
   type PendingVrmsOdometerReview,
+  type PendingVrmsRetirementRequest,
 } from "../../lib/api/vmmsApi";
 import type { MaintenanceTask } from "../../types/maintenance";
 import {
@@ -158,6 +161,28 @@ export default function Vehicles() {
   ] = useState(false);
   const [pendingOdometerReviewsError, setPendingOdometerReviewsError] =
     useState(false);
+  const [pendingRetirementRequests, setPendingRetirementRequests] = useState<
+    PendingVrmsRetirementRequest[]
+  >([]);
+  const [pendingRetirementRequestCursor, setPendingRetirementRequestCursor] =
+    useState<string | null>(null);
+  const [pendingRetirementRequestsLoading, setPendingRetirementRequestsLoading] =
+    useState(false);
+  const [
+    pendingRetirementRequestsLoadingMore,
+    setPendingRetirementRequestsLoadingMore,
+  ] = useState(false);
+  const [pendingRetirementRequestsError, setPendingRetirementRequestsError] =
+    useState("");
+  const [retirementDecision, setRetirementDecision] = useState<{
+    request: PendingVrmsRetirementRequest;
+    decision: "APPROVED" | "DECLINED";
+  } | null>(null);
+  const [retirementDecisionReason, setRetirementDecisionReason] = useState("");
+  const [retirementDecisionError, setRetirementDecisionError] = useState("");
+  const [retirementSavingRequestId, setRetirementSavingRequestId] = useState<
+    string | null
+  >(null);
   const [odometerReviewDecision, setOdometerReviewDecision] = useState<{
     review: PendingVrmsOdometerReview;
     decision: "CONFIRM" | "DISMISS";
@@ -271,6 +296,43 @@ export default function Vehicles() {
     [isOperations],
   );
 
+  const loadPendingRetirementRequests = useCallback(
+    async (cursor?: string) => {
+      if (!isOperations) return;
+      const isLoadingMore = Boolean(cursor);
+      if (isLoadingMore) {
+        setPendingRetirementRequestsLoadingMore(true);
+      } else {
+        setPendingRetirementRequestsLoading(true);
+        setPendingRetirementRequestsError("");
+      }
+
+      try {
+        const page = await getPendingVrmsRetirementRequests(cursor);
+        setPendingRetirementRequests((current) => {
+          if (!isLoadingMore) return page.items;
+          const currentIds = new Set(current.map((request) => request.requestId));
+          return [
+            ...current,
+            ...page.items.filter((request) => !currentIds.has(request.requestId)),
+          ];
+        });
+        setPendingRetirementRequestCursor(page.nextCursor);
+        setPendingRetirementRequestsError("");
+      } catch (error) {
+        setPendingRetirementRequestsError(
+          error instanceof Error
+            ? error.message
+            : "Pending VRMS retirement requests could not be loaded.",
+        );
+      } finally {
+        setPendingRetirementRequestsLoading(false);
+        setPendingRetirementRequestsLoadingMore(false);
+      }
+    },
+    [isOperations],
+  );
+
   useEffect(() => {
     const initialLoad = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(initialLoad);
@@ -283,6 +345,14 @@ export default function Vehicles() {
     );
     return () => window.clearTimeout(initialLoad);
   }, [loadPendingOdometerReviews]);
+
+  useEffect(() => {
+    const initialLoad = window.setTimeout(
+      () => void loadPendingRetirementRequests(),
+      0,
+    );
+    return () => window.clearTimeout(initialLoad);
+  }, [loadPendingRetirementRequests]);
 
   const vehicleDetailsId = vehicleDetails?.id;
   const vehicleDetailsPlateNumber = vehicleDetails?.plateNumber;
@@ -972,6 +1042,48 @@ export default function Vehicles() {
     }
   };
 
+  const handleRetirementDecision = async () => {
+    if (!isOperations || !retirementDecision || retirementSavingRequestId) {
+      return;
+    }
+    const reason = retirementDecisionReason.trim();
+    if (retirementDecision.decision === "DECLINED" && !reason) {
+      setRetirementDecisionError("Enter a reason before declining the request.");
+      return;
+    }
+
+    setRetirementSavingRequestId(retirementDecision.request.requestId);
+    setRetirementDecisionError("");
+    try {
+      await decideVrmsRetirementRequest(
+        retirementDecision.request.requestId,
+        retirementDecision.decision,
+        reason || undefined,
+      );
+      setRetirementDecision(null);
+      setRetirementDecisionReason("");
+      showToast("Decision saved. VRMS delivery is queued.");
+      await Promise.all([load(), loadPendingRetirementRequests()]);
+    } catch (error) {
+      setRetirementDecisionError(
+        error instanceof Error
+          ? error.message
+          : "Could not save the retirement decision.",
+      );
+    } finally {
+      setRetirementSavingRequestId(null);
+    }
+  };
+
+  const openRetirementDecision = (
+    request: PendingVrmsRetirementRequest,
+    decision: "APPROVED" | "DECLINED",
+  ) => {
+    setRetirementDecision({ request, decision });
+    setRetirementDecisionReason("");
+    setRetirementDecisionError("");
+  };
+
   const confirmDelete = (v: VehicleRecord) => {
     if (!canManage) return;
     setDeleteId(v.id);
@@ -1261,6 +1373,131 @@ export default function Vehicles() {
           ) : undefined
         }
       />
+
+      {isOperations && (
+        <section
+          aria-labelledby="vrms-retirement-requests-title"
+          className="mb-5 overflow-hidden rounded-2xl border border-[#dde4ef] bg-white"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#edf1f6] px-5 py-4">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 rounded-lg bg-rose-50 p-2 text-rose-800">
+                <Truck className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <div>
+                <h2
+                  id="vrms-retirement-requests-title"
+                  className="text-base font-bold text-[#141827]"
+                >
+                  VRMS retirement requests
+                </h2>
+                <p className="mt-1 text-sm text-[#64748b]">
+                  Approving deactivates the VMMS vehicle. Declines require a reason and are sent back to VRMS.
+                </p>
+              </div>
+            </div>
+            <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-900">
+              {pendingRetirementRequests.length} loaded
+            </span>
+          </div>
+
+          {pendingRetirementRequestsLoading ? (
+            <p role="status" className="px-5 py-5 text-sm text-[#64748b]">
+              Loading pending retirement requests...
+            </p>
+          ) : pendingRetirementRequestsError &&
+            pendingRetirementRequests.length === 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+              <p role="alert" className="text-sm text-red-700">
+                {pendingRetirementRequestsError}
+              </p>
+              <button
+                type="button"
+                onClick={() => void loadPendingRetirementRequests()}
+                className="rounded-lg border border-[#c8ced8] bg-white px-3 py-2 text-sm font-semibold text-[#141827] transition hover:bg-slate-50"
+              >
+                Retry
+              </button>
+            </div>
+          ) : pendingRetirementRequests.length === 0 ? (
+            <p className="px-5 py-5 text-sm text-[#64748b]">
+              No pending VRMS retirement requests.
+            </p>
+          ) : (
+            <>
+              {pendingRetirementRequestsError && (
+                <p role="alert" className="px-5 pt-4 text-sm text-red-700">
+                  {pendingRetirementRequestsError}
+                </p>
+              )}
+              <ol className="divide-y divide-[#edf1f6]">
+                {pendingRetirementRequests.map((request) => (
+                  <li key={request.requestId}>
+                    <article className="grid gap-4 px-5 py-4 md:grid-cols-[minmax(0,1.3fr)_auto] md:items-center">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-bold text-[#141827]">
+                            {request.vehiclePlate}
+                          </h3>
+                          <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-[#344158]">
+                            VRMS ticket {request.repairTicketNumber}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-sm text-[#64748b]">
+                          Requested {formatRepairDate(request.occurredAt)}
+                        </p>
+                        <p className="mt-2 text-sm text-[#344158]">
+                          {request.reason}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2 md:justify-end">
+                        <button
+                          type="button"
+                          disabled={retirementSavingRequestId !== null}
+                          onClick={() =>
+                            openRetirementDecision(request, "APPROVED")
+                          }
+                          className="rounded-lg bg-[#070b45] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#11175f] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Approve retirement
+                        </button>
+                        <button
+                          type="button"
+                          disabled={retirementSavingRequestId !== null}
+                          onClick={() =>
+                            openRetirementDecision(request, "DECLINED")
+                          }
+                          className="rounded-lg border border-[#c8ced8] bg-white px-3 py-2 text-sm font-semibold text-[#344158] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Decline
+                        </button>
+                      </div>
+                    </article>
+                  </li>
+                ))}
+              </ol>
+              {pendingRetirementRequestCursor && (
+                <div className="border-t border-[#edf1f6] px-5 py-3 text-right">
+                  <button
+                    type="button"
+                    disabled={pendingRetirementRequestsLoadingMore}
+                    onClick={() =>
+                      void loadPendingRetirementRequests(
+                        pendingRetirementRequestCursor,
+                      )
+                    }
+                    className="rounded-lg border border-[#c8ced8] bg-white px-3 py-2 text-sm font-semibold text-[#141827] transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {pendingRetirementRequestsLoadingMore
+                      ? "Loading…"
+                      : "Load older requests"}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      )}
 
       {isOperations && (
         <section
@@ -2006,6 +2243,83 @@ export default function Vehicles() {
         busy={odometerSaving}
         onConfirm={() => void confirmOdometerUpdate()}
         onCancel={() => setOdometerConfirmOpen(false)}
+      />
+
+      <ConfirmationModal
+        isOpen={isOperations && retirementDecision !== null}
+        title={
+          retirementDecision?.decision === "DECLINED"
+            ? "Decline VRMS retirement request"
+            : "Approve vehicle retirement"
+        }
+        message={
+          retirementDecision?.decision === "DECLINED" ? (
+            <div className="space-y-3 text-left">
+              <p>
+                Decline the retirement request for{" "}
+                <strong>{retirementDecision.request.vehiclePlate}</strong> and
+                send the reason to VRMS.
+              </p>
+              <label className="block text-sm font-semibold" htmlFor="retirement-decision-reason">
+                Reason for declining
+              </label>
+              <textarea
+                id="retirement-decision-reason"
+                aria-label="Reason for declining retirement request"
+                maxLength={500}
+                rows={3}
+                value={retirementDecisionReason}
+                onChange={(event) => {
+                  setRetirementDecisionReason(event.target.value);
+                  setRetirementDecisionError("");
+                }}
+                className="w-full rounded-lg border border-[#c8ced8] p-3 text-sm"
+              />
+              {retirementDecisionError && (
+                <p role="alert" className="text-sm text-red-700">
+                  {retirementDecisionError}
+                </p>
+              )}
+            </div>
+          ) : retirementDecision ? (
+            <div className="space-y-3">
+              <p>
+                Retire <strong>{retirementDecision.request.vehiclePlate}</strong>{" "}
+                based on VRMS ticket{" "}
+                <strong>{retirementDecision.request.repairTicketNumber}</strong>?
+              </p>
+              <p className="text-sm text-[#64748b]">
+                This deactivates the VMMS vehicle. Approval is blocked if another VRMS repair remains open.
+              </p>
+              {retirementDecisionError && (
+                <p role="alert" className="text-sm text-red-700">
+                  {retirementDecisionError}
+                </p>
+              )}
+            </div>
+          ) : null
+        }
+        confirmLabel={
+          retirementSavingRequestId
+            ? "Saving…"
+            : retirementDecision?.decision === "DECLINED"
+              ? "Send decline"
+              : "Approve retirement"
+        }
+        confirmDisabled={
+          retirementDecision?.decision === "DECLINED" &&
+          !retirementDecisionReason.trim()
+        }
+        variant={
+          retirementDecision?.decision === "DECLINED" ? "danger" : "primary"
+        }
+        busy={retirementSavingRequestId !== null}
+        onConfirm={() => void handleRetirementDecision()}
+        onCancel={() => {
+          setRetirementDecision(null);
+          setRetirementDecisionReason("");
+          setRetirementDecisionError("");
+        }}
       />
 
       <ConfirmationModal
