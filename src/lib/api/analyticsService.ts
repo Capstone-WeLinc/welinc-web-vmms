@@ -85,6 +85,70 @@ export interface AnalyticsOverviewResponse {
   trends?: ExpandedTrendsResponse;
 }
 
+export interface AnalyticsDataHealthResponse {
+  state: "current" | "stale" | "unavailable";
+  reason?: string;
+  generatedAt: string | null;
+  sourceMaxUpdatedAt: string | null;
+  ageSeconds: number | null;
+  maxAgeMinutes: number;
+  sourceCoverage: {
+    state: "verified" | "mismatch" | "unavailable";
+    vehicles: { source: number | null; mart: number | null };
+    schedules: { source: number | null; mart: number | null };
+    statusesMatch: boolean | null;
+    maintenanceCostMatches: boolean | null;
+  };
+  semanticIndex: {
+    state: "verified" | "empty" | "incomplete" | "unavailable";
+    eligibleRecords: number | null;
+    indexedRecords: number | null;
+    coveragePercentage: number | null;
+    unmatchedRecords: number | null;
+  };
+}
+
+export interface AnalyticsInsightMetric {
+  key: string;
+  label: string;
+  value: number;
+  unit?: string;
+}
+
+export interface AnalyticsInsightsEvidence {
+  snapshotKey: string;
+  generatedAt: string;
+  sourceMaxUpdatedAt: string | null;
+  ageSeconds: number | null;
+  isStale: boolean;
+  reportingPeriod: { start: string | null; end: string | null };
+  metrics: AnalyticsInsightMetric[];
+  observations: Array<{ label: string; value: string }>;
+  limitations: string[];
+}
+
+export interface StructuredAnalyticsInsights {
+  aiSummary: string;
+  evidence: AnalyticsInsightsEvidence;
+}
+
+export interface AnalyticsInsightJobStatus {
+  state:
+    | "current"
+    | "queued"
+    | "generating"
+    | "failed"
+    | "waiting"
+    | "blocked";
+  hasSavedInsight: boolean;
+  hasCurrentInsight: boolean;
+  queuedAt: string | null;
+  runAfter: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  lastGeneratedAt: string | null;
+}
+
 export interface AnalyticsVehicle {
   vehicleId: string | number;
   plateNumber: string;
@@ -149,9 +213,7 @@ export interface AnalyticsAlertResponse {
   alerts: AnalyticsAlert[];
 }
 
-export type AnalyticsInsightsResponse =
-  | { aiSummary: string }
-  | string;
+export type AnalyticsInsightsResponse = StructuredAnalyticsInsights | string;
 
 export interface BackendScheduleItem {
   scheduleId: string | number;
@@ -261,33 +323,6 @@ function calculateScheduleProgress(schedule: { status?: string; workOrderProgres
   }
 }
 
-const emptyDataSource = {
-  type: "UNAVAILABLE",
-  authoritativeFor: "",
-  generatedAt: "",
-  sourceMaxUpdatedAt: null,
-  ageSeconds: null,
-  isStale: true,
-  maxAgeMinutes: 0,
-};
-
-const emptyOverview: AnalyticsOverviewResponse = {
-  dataSource: emptyDataSource,
-  snapshot: {},
-  statusBreakdown: [],
-  monthlyTrend: [],
-};
-
-const emptyVehicles: AnalyticsVehicleResponse = {
-  dataSource: emptyDataSource,
-  vehicles: [],
-};
-
-const emptyAlerts: AnalyticsAlertResponse = {
-  dataSource: emptyDataSource,
-  alerts: [],
-};
-
 export async function getAnalyticsHealth(): Promise<AnalyticsHealthResponse> {
   try {
     return await fetchJSON<AnalyticsHealthResponse>("/analytics/health");
@@ -302,54 +337,58 @@ export async function getAnalyticsHealth(): Promise<AnalyticsHealthResponse> {
   }
 }
 
-export async function getAnalyticsOverview(): Promise<AnalyticsOverviewResponse> {
+export async function getAnalyticsDataHealth(): Promise<AnalyticsDataHealthResponse> {
   try {
-    return await fetchJSON<AnalyticsOverviewResponse>("/analytics/overview");
+    return await fetchJSON<AnalyticsDataHealthResponse>("/analytics/data-health");
   } catch (error) {
-    console.warn("Analytics overview unavailable.", error);
-    return emptyOverview;
+    console.warn("Analytics data-health status unavailable.", error);
+    return {
+      state: "unavailable",
+      reason: "data_health_request_failed",
+      generatedAt: null,
+      sourceMaxUpdatedAt: null,
+      ageSeconds: null,
+      maxAgeMinutes: 0,
+      sourceCoverage: {
+        state: "unavailable",
+        vehicles: { source: null, mart: null },
+        schedules: { source: null, mart: null },
+        statusesMatch: null,
+        maintenanceCostMatches: null,
+      },
+      semanticIndex: {
+        state: "unavailable",
+        eligibleRecords: null,
+        indexedRecords: null,
+        coveragePercentage: null,
+        unmatchedRecords: null,
+      },
+    };
   }
+}
+
+export async function getAnalyticsOverview(): Promise<AnalyticsOverviewResponse> {
+  return fetchJSON<AnalyticsOverviewResponse>("/analytics/overview");
 }
 
 export async function getAnalyticsVehicles(): Promise<AnalyticsVehicleResponse> {
-  try {
-    return await fetchJSON<AnalyticsVehicleResponse>("/analytics/vehicles");
-  } catch (error) {
-    console.warn("Analytics vehicle KPIs unavailable.", error);
-    return emptyVehicles;
-  }
+  return fetchJSON<AnalyticsVehicleResponse>("/analytics/vehicles");
 }
 
 export async function getAnalyticsAlerts(): Promise<AnalyticsAlertResponse> {
-  try {
-    return await fetchJSON<AnalyticsAlertResponse>("/analytics/alerts");
-  } catch (error) {
-    console.warn("Analytics alerts unavailable.", error);
-    return emptyAlerts;
-  }
+  return fetchJSON<AnalyticsAlertResponse>("/analytics/alerts");
 }
 
-export async function getAnalyticsInsights(): Promise<AnalyticsInsightsResponse> {
-  try {
-    return await fetchJSON<AnalyticsInsightsResponse>("/analytics/insights");
-  } catch (error) {
-    console.warn("Analytics insights unavailable.", error);
-    return { aiSummary: "AI insights unavailable." };
-  }
+export async function getAnalyticsInsights(): Promise<AnalyticsInsightsResponse | null> {
+  return fetchJSON<AnalyticsInsightsResponse | null>("/analytics/insights");
+}
+
+export async function getAnalyticsInsightJobStatus(): Promise<AnalyticsInsightJobStatus> {
+  return fetchJSON<AnalyticsInsightJobStatus>("/analytics/insights/status");
 }
 
 export async function getAnalyticsReport(): Promise<AnalyticsReportResponse> {
-  try {
-    return await fetchJSON<AnalyticsReportResponse>("/analytics/report");
-  } catch (error) {
-    console.warn("Analytics report unavailable.", error);
-    return {
-      ...emptyOverview,
-      vehicles: [],
-      alerts: [],
-      schedules: [],
-    } as AnalyticsReportResponse;
-  }
+  return fetchJSON<AnalyticsReportResponse>("/analytics/report");
 }
 
 export async function searchMaintenanceSchedules(query: string, limit = 8): Promise<ScheduleSearchResult[]> {
