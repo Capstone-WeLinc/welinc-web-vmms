@@ -20,7 +20,7 @@ import {
 import PageHeader from "../../components/PageHeader/PageHeader";
 import { Card, Button, Badge, KpiCard } from "../../components/ui";
 import {
-  getAnalyticsHealth,
+  getAnalyticsDataHealth,
   getAnalyticsOverview,
   getAnalyticsVehicles,
   getAnalyticsAlerts,
@@ -28,6 +28,8 @@ import {
   getAnalyticsReport,
   searchMaintenanceSchedules,
   type AnalyticsOverviewResponse,
+  type AnalyticsDataHealthResponse,
+  type AnalyticsInsightMetric,
   type AnalyticsVehicleResponse,
   type AnalyticsAlertResponse,
   type AnalyticsInsightsResponse,
@@ -60,6 +62,35 @@ const formatDate = (value?: string | null) => {
     year: "numeric",
   }).format(date);
 };
+
+const formatDateTime = (value?: string | null) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+};
+
+function formatAge(seconds: number | null): string {
+  if (seconds === null) return "Unavailable";
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
+}
+
+function formatInsightMetric(metric: AnalyticsInsightMetric): string {
+  if (metric.unit === "currency") {
+    return `₱${metric.value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  }
+  if (metric.unit === "percent") return `${metric.value}%`;
+  return `${metric.value.toLocaleString()}${metric.unit ? ` ${metric.unit}` : ""}`;
+}
 
 /** Inline bold: **text** → <strong>text</strong> */
 function renderInline(text: string): React.ReactNode {
@@ -381,6 +412,8 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
   const [vehicles, setVehicles] = useState<AnalyticsVehicleResponse | null>(null);
   const [alerts, setAlerts] = useState<AnalyticsAlertResponse | null>(null);
   const [aiInsights, setAiInsights] = useState<AnalyticsInsightsResponse | null>(null);
+  const [aiInsightsError, setAiInsightsError] = useState<string | null>(null);
+  const [dataHealth, setDataHealth] = useState<AnalyticsDataHealthResponse | null>(null);
   const [fullReport, setFullReport] = useState<AnalyticsReportResponse | null>(null);
   const [workOrderNumbers, setWorkOrderNumbers] = useState<Record<string, string>>({});
   const [vrmsRepeatRepairAlerts, setVrmsRepeatRepairAlerts] = useState<
@@ -407,6 +440,16 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
   const loadData = async () => {
     setLoading(true);
     setError(null);
+    void getAnalyticsDataHealth().then(setDataHealth);
+    const aiInsightsRequest = getAnalyticsInsights()
+      .then((value) => ({ value, error: null }))
+      .catch((err: unknown) => ({
+        value: null,
+        error:
+          err instanceof Error
+            ? err.message
+            : "AI insights are unavailable.",
+      }));
     const repeatRepairRequest = getVrmsRepeatRepairAlerts()
       .then((page) => ({ page, error: null }))
       .catch((err: unknown) => ({
@@ -417,12 +460,11 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
             : "Could not load VRMS repeated-repair alerts.",
       }));
     try {
-      const [, overviewData, vehicleData, alertsData, aiInsightsData, reportData, schedules, repeatRepairResult] = await Promise.all([
-        getAnalyticsHealth(),
+      const [overviewData, vehicleData, alertsData, aiInsightsResult, reportData, schedules, repeatRepairResult] = await Promise.all([
         getAnalyticsOverview(),
         getAnalyticsVehicles(),
         getAnalyticsAlerts(),
-        getAnalyticsInsights(),
+        aiInsightsRequest,
         getAnalyticsReport(),
         getMaintenanceSchedules().catch(() => []),
         repeatRepairRequest,
@@ -435,7 +477,8 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
       setOverview(overviewData);
       setVehicles(vehicleData);
       setAlerts(alertsData);
-      setAiInsights(aiInsightsData);
+      setAiInsights(aiInsightsResult.value);
+      setAiInsightsError(aiInsightsResult.error);
       setFullReport(reportData);
       if (repeatRepairResult.page) {
         setVrmsRepeatRepairAlerts(repeatRepairResult.page.items);
@@ -489,10 +532,16 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
   };
 
   const handleRefreshInsights = async () => {
+    if (dataHealth?.state !== "current") return;
     setRefreshingInsights(true);
+    setAiInsightsError(null);
     try {
       const insightsData = await getAnalyticsInsights();
       setAiInsights(insightsData);
+    } catch (err: unknown) {
+      setAiInsightsError(
+        err instanceof Error ? err.message : "AI insights are unavailable.",
+      );
     } finally {
       setRefreshingInsights(false);
     }
@@ -514,6 +563,8 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
   }, [searchQuery]);
 
   const snapshot = useMemo(() => overview?.snapshot ?? {}, [overview?.snapshot]);
+  const insightEvidence =
+    aiInsights && typeof aiInsights === "object" ? aiInsights.evidence : null;
   const summaryMetrics = overview?.summaryMetrics;
   const forecast = overview?.forecast;
   const anomalies = overview?.anomalies;
@@ -753,6 +804,72 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
         )}
       </div>
 
+      {dataHealth && (
+        <Card
+          className="border border-[var(--color-border)] p-4"
+          aria-live="polite"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                  Analytics data health
+                </h2>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                    dataHealth.state === "current"
+                      ? "bg-emerald-500/10 text-emerald-600"
+                      : dataHealth.state === "stale"
+                        ? "bg-amber-500/10 text-amber-600"
+                        : "bg-rose-500/10 text-rose-600"
+                  }`}
+                >
+                  {dataHealth.state}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                Snapshot age: {formatAge(dataHealth.ageSeconds)}
+                {dataHealth.reason ? ` · ${dataHealth.reason.replace(/_/g, " ")}` : ""}
+              </p>
+            </div>
+            <div className="grid gap-x-6 gap-y-1 text-xs text-[var(--color-text-secondary)] sm:grid-cols-2">
+              <p>Generated: {formatDateTime(dataHealth.generatedAt)}</p>
+              <p>Source updated: {formatDateTime(dataHealth.sourceMaxUpdatedAt)}</p>
+              <p>
+                Vehicles: {dataHealth.sourceCoverage.vehicles.mart ?? "—"}/
+                {dataHealth.sourceCoverage.vehicles.source ?? "—"} in sync
+              </p>
+              <p>
+                Schedules: {dataHealth.sourceCoverage.schedules.mart ?? "—"}/
+                {dataHealth.sourceCoverage.schedules.source ?? "—"} in sync
+              </p>
+              <p>
+                Source parity: {dataHealth.sourceCoverage.state}
+                {dataHealth.sourceCoverage.statusesMatch === false
+                  ? " · status totals differ"
+                  : ""}
+              </p>
+              <p>
+                Maintenance-cost parity:{" "}
+                {dataHealth.sourceCoverage.maintenanceCostMatches === null
+                  ? "unavailable"
+                  : dataHealth.sourceCoverage.maintenanceCostMatches
+                    ? "verified"
+                    : "mismatch"}
+              </p>
+              <p>
+                Semantic index:{" "}
+                {dataHealth.semanticIndex.state === "empty"
+                  ? "empty (no eligible records)"
+                  : dataHealth.semanticIndex.coveragePercentage === null
+                    ? dataHealth.semanticIndex.state
+                    : `${dataHealth.semanticIndex.state}: ${dataHealth.semanticIndex.coveragePercentage}% (${dataHealth.semanticIndex.indexedRecords}/${dataHealth.semanticIndex.eligibleRecords})`}
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {error && !loading ? (
         <Card className="p-10 text-center flex flex-col items-center justify-center space-y-4 my-8 border border-rose-500/30 bg-rose-500/5">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-500 border border-rose-500/20">
@@ -889,7 +1006,12 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
               </div>
               <button
                 onClick={() => void handleRefreshInsights()}
-                disabled={refreshingInsights}
+                disabled={refreshingInsights || dataHealth?.state !== "current"}
+                title={
+                  dataHealth?.state === "current"
+                    ? "Generate insights from the current snapshot"
+                    : "Insights cannot be refreshed while analytics data is stale or unavailable"
+                }
                 className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-brand-primary)] hover:text-[var(--color-brand-primary)] disabled:opacity-50"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${refreshingInsights ? "animate-spin" : ""}`} />
@@ -905,8 +1027,77 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
                   Generating new AI analysis from fleet data…
                 </div>
               ) : (
-                <div className="prose prose-sm max-w-none text-[var(--color-text-secondary)]">
-                  {renderAiSummary(typeof aiInsights === "string" ? aiInsights : aiInsights?.aiSummary)}
+                <div className="space-y-4">
+                  {aiInsightsError && (
+                    <p
+                      role="alert"
+                      className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-3 text-xs text-rose-600"
+                    >
+                      AI insights unavailable: {aiInsightsError}
+                    </p>
+                  )}
+                  <div className="prose prose-sm max-w-none text-[var(--color-text-secondary)]">
+                    {renderAiSummary(typeof aiInsights === "string" ? aiInsights : aiInsights?.aiSummary)}
+                  </div>
+                  {insightEvidence && (
+                    <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h4 className="text-xs font-bold uppercase tracking-wide text-[var(--color-text-primary)]">
+                          Insight evidence
+                        </h4>
+                        {insightEvidence.isStale && (
+                          <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-600">
+                            Stale insight
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-2 text-xs text-[var(--color-text-secondary)]">
+                        Reporting period: {insightEvidence.reportingPeriod.start ?? "—"}
+                        {insightEvidence.reportingPeriod.end
+                          ? ` to ${insightEvidence.reportingPeriod.end}`
+                          : ""}
+                        {" · "}Snapshot {insightEvidence.snapshotKey}
+                        {" · "}Generated {formatDateTime(insightEvidence.generatedAt)}
+                        {" · "}Age {formatAge(insightEvidence.ageSeconds)}
+                      </p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {insightEvidence.metrics.map((metric) => (
+                          <div key={metric.key} className="text-xs">
+                            <span className="text-[var(--color-text-secondary)]">
+                              {metric.label}:{" "}
+                            </span>
+                            <span className="font-semibold text-[var(--color-text-primary)]">
+                              {formatInsightMetric(metric)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      {insightEvidence.observations.length > 0 && (
+                        <div className="mt-3 space-y-1">
+                          {insightEvidence.observations.map((observation) => (
+                            <p key={observation.label} className="text-xs">
+                              <span className="text-[var(--color-text-secondary)]">
+                                {observation.label}:{" "}
+                              </span>
+                              <span className="text-[var(--color-text-primary)]">
+                                {observation.value}
+                              </span>
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                      <div className="mt-3">
+                        <p className="text-xs font-semibold text-[var(--color-text-primary)]">
+                          Limitations
+                        </p>
+                        <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-[var(--color-text-secondary)]">
+                          {insightEvidence.limitations.map((limitation) => (
+                            <li key={limitation}>{limitation}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </section>
+                  )}
                 </div>
               )}
             </div>
