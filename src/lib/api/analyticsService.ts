@@ -132,6 +132,23 @@ export interface StructuredAnalyticsInsights {
   evidence: AnalyticsInsightsEvidence;
 }
 
+export interface AnalyticsInsightJobStatus {
+  state:
+    | "current"
+    | "queued"
+    | "generating"
+    | "failed"
+    | "waiting"
+    | "blocked";
+  hasSavedInsight: boolean;
+  hasCurrentInsight: boolean;
+  queuedAt: string | null;
+  runAfter: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  lastGeneratedAt: string | null;
+}
+
 export interface AnalyticsVehicle {
   vehicleId: string | number;
   plateNumber: string;
@@ -362,8 +379,12 @@ export async function getAnalyticsAlerts(): Promise<AnalyticsAlertResponse> {
   return fetchJSON<AnalyticsAlertResponse>("/analytics/alerts");
 }
 
-export async function getAnalyticsInsights(): Promise<AnalyticsInsightsResponse> {
-  return fetchJSON<AnalyticsInsightsResponse>("/analytics/insights");
+export async function getAnalyticsInsights(): Promise<AnalyticsInsightsResponse | null> {
+  return fetchJSON<AnalyticsInsightsResponse | null>("/analytics/insights");
+}
+
+export async function getAnalyticsInsightJobStatus(): Promise<AnalyticsInsightJobStatus> {
+  return fetchJSON<AnalyticsInsightJobStatus>("/analytics/insights/status");
 }
 
 export async function getAnalyticsReport(): Promise<AnalyticsReportResponse> {

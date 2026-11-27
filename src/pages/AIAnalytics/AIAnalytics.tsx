@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BrainCircuit,
   Search,
@@ -25,6 +25,7 @@ import {
   getAnalyticsVehicles,
   getAnalyticsAlerts,
   getAnalyticsInsights,
+  getAnalyticsInsightJobStatus,
   getAnalyticsReport,
   searchMaintenanceSchedules,
   type AnalyticsOverviewResponse,
@@ -33,14 +34,19 @@ import {
   type AnalyticsVehicleResponse,
   type AnalyticsAlertResponse,
   type AnalyticsInsightsResponse,
+  type AnalyticsInsightJobStatus,
   type AnalyticsReportResponse,
   type ScheduleSearchResult,
 } from "../../lib/api/analyticsService";
 import {
   getMaintenanceSchedules,
+  getMaintenancePredictions,
   getVrmsRepeatRepairAlerts,
   type VrmsRepeatRepairAlert,
 } from "../../lib/api/vmmsApi";
+import { useAuthStore } from "../../store/authStore";
+import { canManageSchedules } from "../../lib/utils/permissions";
+import type { MaintenancePrediction } from "../../types/maintenance";
 
 const formatValue = (value: unknown) => {
   if (typeof value === "number") {
@@ -75,6 +81,25 @@ const formatDateTime = (value?: string | null) => {
     minute: "2-digit",
   }).format(date);
 };
+
+function formatManilaDate(value: string): string {
+  const date = new Date(`${value}T00:00:00+08:00`);
+  return new Intl.DateTimeFormat("en-PH", {
+    timeZone: "Asia/Manila",
+    dateStyle: "medium",
+  }).format(date);
+}
+
+function getDaysUntilDate(value: string): number {
+  const dueDate = new Date(value);
+  const today = new Date();
+  dueDate.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  return Math.max(
+    0,
+    Math.ceil((dueDate.getTime() - today.getTime()) / 86_400_000),
+  );
+}
 
 function formatAge(seconds: number | null): string {
   if (seconds === null) return "Unavailable";
@@ -175,7 +200,10 @@ function parseAiSummary(raw: string): AiBlock[] {
 function renderAiSummary(summary?: string) {
   if (!summary?.trim()) {
     return (
-      <p className="text-sm text-[var(--color-text-secondary)]">No AI insights available.</p>
+      <p className="text-sm text-[var(--color-text-secondary)]">
+        No saved AI insight is available for this data revision. Provider
+        generation is separate from analytics and does not run on page refresh.
+      </p>
     );
   }
 
@@ -407,12 +435,24 @@ function TrendBars({ items }: { items: Array<{ monthKey: string; scheduledCount?
 }
 
 export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTab?: "overview" | "vehicles" | "alerts" | "report" }) {
+  const currentUser = useAuthStore((state) => state.currentUser);
+  const canViewSchedulePredictions = canManageSchedules(currentUser);
   const [activeTab, setActiveTab] = useState<"overview" | "vehicles" | "alerts" | "report">(initialTab);
   const [overview, setOverview] = useState<AnalyticsOverviewResponse | null>(null);
   const [vehicles, setVehicles] = useState<AnalyticsVehicleResponse | null>(null);
   const [alerts, setAlerts] = useState<AnalyticsAlertResponse | null>(null);
+  const [schedulePredictions, setSchedulePredictions] = useState<
+    MaintenancePrediction[] | null
+  >(null);
+  const [schedulePredictionsError, setSchedulePredictionsError] = useState<
+    string | null
+  >(null);
   const [aiInsights, setAiInsights] = useState<AnalyticsInsightsResponse | null>(null);
   const [aiInsightsError, setAiInsightsError] = useState<string | null>(null);
+  const [aiInsightStatus, setAiInsightStatus] =
+    useState<AnalyticsInsightJobStatus | null>(null);
+  const [aiInsightStatusError, setAiInsightStatusError] =
+    useState<string | null>(null);
   const [dataHealth, setDataHealth] = useState<AnalyticsDataHealthResponse | null>(null);
   const [fullReport, setFullReport] = useState<AnalyticsReportResponse | null>(null);
   const [workOrderNumbers, setWorkOrderNumbers] = useState<Record<string, string>>({});
@@ -429,17 +469,22 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
     useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<ScheduleSearchResult[]>([]);
-  const [hasGenerated, setHasGenerated] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshingInsights, setRefreshingInsights] = useState(false);
   const [vehicleRiskFilter, setVehicleRiskFilter] = useState<"ALL" | "HIGH" | "MEDIUM" | "LOW">("ALL");
   const [vehicleSearch, setVehicleSearch] = useState("");
   const [alertSeverityFilter, setAlertSeverityFilter] = useState<"ALL" | "HIGH" | "MEDIUM" | "LOW">("ALL");
 
-  const loadData = async () => {
+  const initialLoadStarted = useRef(false);
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
+    if (canViewSchedulePredictions) {
+      setSchedulePredictions(null);
+      setSchedulePredictionsError(null);
+    }
     void getAnalyticsDataHealth().then(setDataHealth);
     const aiInsightsRequest = getAnalyticsInsights()
       .then((value) => ({ value, error: null }))
@@ -450,6 +495,15 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
             ? err.message
             : "AI insights are unavailable.",
       }));
+    const aiInsightStatusRequest = getAnalyticsInsightJobStatus()
+      .then((value) => ({ value, error: null }))
+      .catch((err: unknown) => ({
+        value: null,
+        error:
+          err instanceof Error
+            ? err.message
+            : "AI report status is unavailable.",
+      }));
     const repeatRepairRequest = getVrmsRepeatRepairAlerts()
       .then((page) => ({ page, error: null }))
       .catch((err: unknown) => ({
@@ -459,14 +513,27 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
             ? err.message
             : "Could not load VRMS repeated-repair alerts.",
       }));
+    const schedulePredictionsRequest = canViewSchedulePredictions
+      ? getMaintenancePredictions()
+            .then((predictions) => ({ predictions, error: null }))
+            .catch((err: unknown) => ({
+              predictions: null,
+              error:
+                err instanceof Error
+                  ? err.message
+                  : "Could not load projected maintenance dates.",
+            }))
+      : Promise.resolve({ predictions: null, error: null });
     try {
-      const [overviewData, vehicleData, alertsData, aiInsightsResult, reportData, schedules, repeatRepairResult] = await Promise.all([
+      const [overviewData, vehicleData, alertsData, aiInsightsResult, aiInsightStatusResult, reportData, schedules, schedulePredictionsResult, repeatRepairResult] = await Promise.all([
         getAnalyticsOverview(),
         getAnalyticsVehicles(),
         getAnalyticsAlerts(),
         aiInsightsRequest,
+        aiInsightStatusRequest,
         getAnalyticsReport(),
         getMaintenanceSchedules().catch(() => []),
+        schedulePredictionsRequest,
         repeatRepairRequest,
       ]);
       setWorkOrderNumbers(Object.fromEntries(
@@ -477,8 +544,12 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
       setOverview(overviewData);
       setVehicles(vehicleData);
       setAlerts(alertsData);
+      setSchedulePredictions(schedulePredictionsResult.predictions);
+      setSchedulePredictionsError(schedulePredictionsResult.error);
       setAiInsights(aiInsightsResult.value);
       setAiInsightsError(aiInsightsResult.error);
+      setAiInsightStatus(aiInsightStatusResult.value);
+      setAiInsightStatusError(aiInsightStatusResult.error);
       setFullReport(reportData);
       if (repeatRepairResult.page) {
         setVrmsRepeatRepairAlerts(repeatRepairResult.page.items);
@@ -489,7 +560,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
         setRepeatRepairCursor(null);
         setRepeatRepairError(repeatRepairResult.error);
       }
-      setHasGenerated(true);
+      setHasLoaded(true);
     } catch (err: unknown) {
       console.error("Failed to load analytics data:", err);
       const message = err instanceof Error ? err.message : "Failed to connect to analytics service.";
@@ -497,7 +568,57 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
     } finally {
       setLoading(false);
     }
-  };
+  }, [canViewSchedulePredictions]);
+
+  useEffect(() => {
+    if (
+      aiInsightStatus?.state !== "queued" &&
+      aiInsightStatus?.state !== "generating"
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    let requestInFlight = false;
+    const pollStatus = async () => {
+      if (requestInFlight) return;
+      requestInFlight = true;
+      try {
+        const status = await getAnalyticsInsightJobStatus();
+        if (cancelled) return;
+        setAiInsightStatus(status);
+        setAiInsightStatusError(null);
+        if (status.state === "current" || status.hasCurrentInsight) {
+          const savedInsight = await getAnalyticsInsights();
+          if (cancelled) return;
+          setAiInsights(savedInsight);
+          setAiInsightsError(null);
+        }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          setAiInsightStatusError(
+            err instanceof Error ? err.message : "AI report status is unavailable.",
+          );
+        }
+      } finally {
+        requestInFlight = false;
+      }
+    };
+
+    const interval = window.setInterval(() => {
+      void pollStatus();
+    }, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [aiInsightStatus?.state]);
+
+  useEffect(() => {
+    if (initialLoadStarted.current) return;
+    initialLoadStarted.current = true;
+    void loadData();
+  }, [loadData]);
 
   const loadMoreRepeatRepairAlerts = async () => {
     if (!repeatRepairCursor || loadingMoreRepeatRepairs) return;
@@ -527,21 +648,37 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
   const persistedWorkOrderNumber = (scheduleId: string | number) =>
     workOrderNumbers[String(scheduleId)] ?? "N/A";
 
-  const handleManualGenerate = () => {
+  const handleRefreshAnalytics = () => {
     void loadData();
   };
 
   const handleRefreshInsights = async () => {
-    if (dataHealth?.state !== "current") return;
     setRefreshingInsights(true);
     setAiInsightsError(null);
+    setAiInsightStatusError(null);
     try {
-      const insightsData = await getAnalyticsInsights();
-      setAiInsights(insightsData);
-    } catch (err: unknown) {
-      setAiInsightsError(
-        err instanceof Error ? err.message : "AI insights are unavailable.",
-      );
+      const [insightsResult, statusResult] = await Promise.allSettled([
+        getAnalyticsInsights(),
+        getAnalyticsInsightJobStatus(),
+      ]);
+      if (insightsResult.status === "fulfilled") {
+        setAiInsights(insightsResult.value);
+      } else {
+        setAiInsightsError(
+          insightsResult.reason instanceof Error
+            ? insightsResult.reason.message
+            : "AI insights are unavailable.",
+        );
+      }
+      if (statusResult.status === "fulfilled") {
+        setAiInsightStatus(statusResult.value);
+      } else {
+        setAiInsightStatusError(
+          statusResult.reason instanceof Error
+            ? statusResult.reason.message
+            : "AI report status is unavailable.",
+        );
+      }
     } finally {
       setRefreshingInsights(false);
     }
@@ -568,6 +705,31 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
   const summaryMetrics = overview?.summaryMetrics;
   const forecast = overview?.forecast;
   const anomalies = overview?.anomalies;
+  const upcomingDueSchedules = useMemo(
+    () =>
+      (alerts?.alerts ?? [])
+        .filter(
+          (alert) =>
+            alert.alertType === "DUE_SOON" &&
+            Number.isFinite(Date.parse(alert.dueDate ?? "")),
+        )
+        .sort(
+          (left, right) =>
+            Date.parse(left.dueDate ?? "") - Date.parse(right.dueDate ?? ""),
+        )
+        .slice(0, 3),
+    [alerts?.alerts],
+  );
+  const sortedSchedulePredictions = useMemo(
+    () =>
+      [...(schedulePredictions ?? [])].sort(
+        (left, right) => left.daysUntilDue - right.daysUntilDue,
+      ),
+    [schedulePredictions],
+  );
+  const projectedDueIn7Days = sortedSchedulePredictions.filter(
+    (prediction) => prediction.daysUntilDue <= 7,
+  ).length;
   const stats = useMemo(() => {
     return [
       {
@@ -591,11 +753,22 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
       {
         label: "Completion Rate",
         value: snapshot.completionRate !== undefined ? `${snapshot.completionRate}%` : "—",
-        hint: `Due in 7 days: ${forecast?.dueIn7Days ?? snapshot.dueWithin7Days ?? 0}`,
+        hint: canViewSchedulePredictions
+          ? schedulePredictions === null
+            ? "Projected dates unavailable"
+            : `Projected due in 7 days: ${projectedDueIn7Days}`
+          : `Due in 7 days: ${forecast?.dueIn7Days ?? snapshot.dueWithin7Days ?? 0}`,
         icon: TrendingUp,
       },
     ];
-  }, [snapshot, summaryMetrics, forecast]);
+  }, [
+    snapshot,
+    summaryMetrics,
+    forecast,
+    canViewSchedulePredictions,
+    schedulePredictions,
+    projectedDueIn7Days,
+  ]);
 
   const filteredVehicles = useMemo(() => {
     let list = vehicles?.vehicles ?? [];
@@ -793,12 +966,11 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
           subtitle="Real-time operational analytics, predictive maintenance forecasts, and risk assessment"
         />
 
-        {/* Manual Analytics Generation / Re-Generation Button */}
-        {(hasGenerated || loading || error) && (
+        {(hasLoaded || (error && !loading)) && (
           <div className="flex items-center gap-2">
-            <Button variant="primary" size="sm" onClick={handleManualGenerate} disabled={loading}>
-              <Sparkles className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-              <span>{loading ? "Generating..." : "Re-Generate Analytics"}</span>
+            <Button variant="primary" size="sm" onClick={handleRefreshAnalytics} disabled={loading}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              <span>{loading ? "Loading..." : "Refresh analytics"}</span>
             </Button>
           </div>
         )}
@@ -870,62 +1042,49 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
         </Card>
       )}
 
-      {error && !loading ? (
+      {error && hasLoaded && !loading && (
+        <p
+          role="alert"
+          className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-3 text-xs text-rose-600"
+        >
+          Analytics refresh failed: {error}. Showing the previously loaded data.
+        </p>
+      )}
+
+      {error && !loading && !hasLoaded ? (
         <Card className="p-10 text-center flex flex-col items-center justify-center space-y-4 my-8 border border-rose-500/30 bg-rose-500/5">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-500 border border-rose-500/20">
             <AlertTriangle size={36} />
           </div>
           <div className="max-w-xl space-y-2">
-            <h2 className="text-xl font-bold text-[var(--color-text-primary)]">Analytics Generation Failed</h2>
+            <h2 className="text-xl font-bold text-[var(--color-text-primary)]">Analytics data unavailable</h2>
             <p className="text-xs text-rose-500 font-medium leading-relaxed">
               {error}
             </p>
             <p className="text-xs text-[var(--color-text-secondary)]">
-              Please check your backend service connections and try re-generating.
+              Check the analytics service connection, then retry the refresh.
             </p>
           </div>
           <Button
             variant="primary"
             size="md"
-            onClick={handleManualGenerate}
+            onClick={handleRefreshAnalytics}
             disabled={loading}
             className="mt-4 flex items-center gap-2 px-6 py-2.5 text-sm font-semibold"
           >
             <RefreshCw className="h-4 w-4" />
-            <span>Re-Generate Analytics</span>
+            <span>Retry analytics load</span>
           </Button>
         </Card>
-      ) : !hasGenerated && !loading ? (
-        <Card className="p-10 text-center flex flex-col items-center justify-center space-y-4 my-8">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20">
-            <BrainCircuit size={36} />
-          </div>
-          <div className="max-w-xl space-y-2">
-            <h2 className="text-xl font-bold text-[var(--color-text-primary)]">Fleet AI & Predictive Analytics</h2>
-            <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
-              Click below to run real-time operational analytics, generate vehicle risk matrix scoring, process maintenance alerts, and aggregate datamart reports on demand.
-            </p>
-          </div>
-          <Button
-            variant="primary"
-            size="md"
-            onClick={handleManualGenerate}
-            disabled={loading}
-            className="mt-4 flex items-center gap-2 px-6 py-2.5 text-sm font-semibold"
-          >
-            <Sparkles className="h-4 w-4" />
-            <span>Generate AI Analytics</span>
-          </Button>
-        </Card>
-      ) : !hasGenerated && loading ? (
+      ) : !hasLoaded && loading ? (
         <Card className="p-16 text-center flex flex-col items-center justify-center space-y-4 my-8">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--color-brand-primary)]/10 text-[var(--color-brand-primary)] border border-[var(--color-brand-primary)]/20">
             <Sparkles className="h-8 w-8 animate-spin" />
           </div>
           <div className="max-w-xl space-y-2">
-            <h2 className="text-xl font-bold text-[var(--color-text-primary)]">Generating AI Analytics...</h2>
+            <h2 className="text-xl font-bold text-[var(--color-text-primary)]">Loading analytics...</h2>
             <p className="text-xs text-[var(--color-text-secondary)]">
-              Fetching datamart reports, scoring vehicle risks, and processing fleet intelligence metrics.
+              Fetching fleet reports, risk indicators, and maintenance metrics.
             </p>
           </div>
         </Card>
@@ -979,17 +1138,8 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
             </button>
           </div>
 
-          {loading ? (
-            <Card className="p-8 text-center text-sm text-[var(--color-text-secondary)]">
-              <div className="flex items-center justify-center gap-3">
-                <RefreshCw className="h-5 w-5 animate-spin text-[var(--color-brand-primary)]" />
-                <span>Generating analytics data...</span>
-              </div>
-            </Card>
-          ) : null}
-
       {/* OVERVIEW & INTELLIGENCE TAB */}
-      {!loading && activeTab === "overview" && (
+      {hasLoaded && activeTab === "overview" && (
         <div className="space-y-6">
           {/* AI Operational Report — full-width premium card */}
           <Card className="overflow-hidden border border-[var(--color-border)] p-0">
@@ -1001,22 +1151,59 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">AI Operational Report</h3>
-                  <p className="text-xs text-[var(--color-text-secondary)]">Automated fleet intelligence analysis.</p>
+                  <p className="text-xs text-[var(--color-text-secondary)]">Generated once for each changed, validated analytics data revision.</p>
                 </div>
               </div>
               <button
                 onClick={() => void handleRefreshInsights()}
-                disabled={refreshingInsights || dataHealth?.state !== "current"}
+                disabled={refreshingInsights}
                 title={
                   dataHealth?.state === "current"
-                    ? "Generate insights from the current snapshot"
-                    : "Insights cannot be refreshed while analytics data is stale or unavailable"
+                    ? "Load the saved insight for the current data revision"
+                    : "Load the saved insight; it may be marked stale"
                 }
                 className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-brand-primary)] hover:text-[var(--color-brand-primary)] disabled:opacity-50"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${refreshingInsights ? "animate-spin" : ""}`} />
-                {refreshingInsights ? "Generating…" : "Refresh"}
+                {refreshingInsights ? "Loading…" : "Reload report"}
               </button>
+            </div>
+
+            <div
+              aria-live="polite"
+              className="flex flex-col gap-1 border-b border-[var(--color-border)] bg-[var(--color-input-bg)]/60 px-6 py-3 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <p className="text-xs text-[var(--color-text-secondary)]">
+                {aiInsightStatusError
+                  ? `Report status unavailable: ${aiInsightStatusError}`
+                  : aiInsightStatus?.state === "current"
+                    ? "The saved report matches the latest validated analytics data."
+                    : aiInsightStatus?.state === "queued"
+                      ? `One report is queued for this data revision${aiInsightStatus.runAfter ? ` after ${formatDateTime(aiInsightStatus.runAfter)}` : ""}.`
+                      : aiInsightStatus?.state === "generating"
+                        ? "Generating one report for the latest validated data revision."
+                        : aiInsightStatus?.state === "failed"
+                          ? "Report generation failed for this revision. It will not retry until source data changes."
+                          : aiInsightStatus?.state === "blocked"
+                            ? "Report generation is paused until analytics data is current."
+                            : "Waiting for a validated analytics sync to schedule a report."}
+              </p>
+              {aiInsightStatus && (
+                <span
+                  className={`w-fit rounded-full px-2 py-0.5 text-xs font-semibold ${
+                    aiInsightStatus.state === "current"
+                      ? "bg-emerald-500/10 text-emerald-600"
+                      : aiInsightStatus.state === "failed" ||
+                          aiInsightStatus.state === "blocked"
+                        ? "bg-amber-500/10 text-amber-700"
+                        : aiInsightStatus.state === "generating"
+                          ? "bg-blue-500/10 text-blue-700"
+                          : "bg-[var(--color-card-bg)] text-[var(--color-text-secondary)]"
+                  }`}
+                >
+                  {aiInsightStatus.state}
+                </span>
+              )}
             </div>
 
             {/* Report body */}
@@ -1024,7 +1211,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
               {refreshingInsights ? (
                 <div className="flex items-center gap-3 py-6 text-sm text-[var(--color-text-secondary)]">
                   <RefreshCw className="h-4 w-4 animate-spin text-[var(--color-brand-primary)]" />
-                  Generating new AI analysis from fleet data…
+                  Loading the saved AI report…
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -1170,153 +1357,276 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
             ))}
           </div>
 
-          {/* Predictive Forecast & Anomalies Cards */}
-          <div className="grid gap-4 md:grid-cols-2">
-            {/* Predictive Forecast Card */}
-            <Card className="p-6">
-              <div className="flex items-center justify-between">
-                <h3 className="flex items-center gap-2 text-base font-semibold text-[var(--color-text-primary)]">
-                  <Clock className="h-5 w-5 text-amber-500" />
-                  Predictive Maintenance Forecast
-                </h3>
-                <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-600">Upcoming Workload</span>
-              </div>
-              <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Projected maintenance due windows based on cycle intervals.</p>
-              <div className="mt-5 grid grid-cols-3 gap-3 text-center">
-                <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4">
-                  <p className="text-2xl font-bold text-rose-500">{forecast?.dueIn7Days ?? 0}</p>
-                  <p className="mt-1 text-xs font-medium text-[var(--color-text-secondary)]">Next 7 Days</p>
+          <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
+            <div className="space-y-4">
+              <Card className="p-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="flex items-center gap-2 text-base font-semibold text-[var(--color-text-primary)]">
+                    <Clock className="h-5 w-5 text-amber-500" />
+                    {canViewSchedulePredictions
+                      ? "Projected odometer due dates"
+                      : "Predictive Maintenance Forecast"}
+                  </h3>
+                  <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-600">
+                    {canViewSchedulePredictions
+                      ? "Scheduling projections"
+                      : "Upcoming Workload"}
+                  </span>
                 </div>
-                <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4">
-                  <p className="text-2xl font-bold text-amber-500">{forecast?.dueIn30Days ?? 0}</p>
-                  <p className="mt-1 text-xs font-medium text-[var(--color-text-secondary)]">Next 30 Days</p>
-                </div>
-                <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4">
-                  <p className="text-2xl font-bold text-[var(--color-brand-primary)]">{forecast?.dueIn90Days ?? 0}</p>
-                  <p className="mt-1 text-xs font-medium text-[var(--color-text-secondary)]">Next 90 Days</p>
-                </div>
-              </div>
-            </Card>
-
-            {/* Anomalies Panel */}
-            <Card className="p-6">
-              <div className="flex items-center justify-between">
-                <h3 className="flex items-center gap-2 text-base font-semibold text-[var(--color-text-primary)]">
-                  <AlertTriangle className="h-5 w-5 text-rose-500" />
-                  Detected Fleet Anomalies
-                </h3>
-                <span className="rounded-full bg-rose-500/15 px-2.5 py-0.5 text-xs font-semibold text-rose-600">Data Integrity</span>
-              </div>
-              <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Automated detection of repeated vehicle component failures and missing due dates.</p>
-
-              <div className="mt-4 space-y-2.5">
-                {(anomalies?.repeatedFailures?.length ?? 0) === 0 && (anomalies?.missingDates?.length ?? 0) === 0 && vrmsRepeatRepairAlerts.length === 0 && !repeatRepairError ? (
-                  <p className="text-xs text-[var(--color-text-secondary)]">No anomalies detected in current cycle.</p>
-                ) : (
-                  <>
-                    {(anomalies?.repeatedFailures ?? []).slice(0, 2).map((r, i) => (
-                      <div key={i} className="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
-                        <div>
-                          <p className="font-semibold text-amber-600">Repeated Failure: {r.vehiclePlate}</p>
-                          <p className="text-[var(--color-text-secondary)]">{r.incidentCount} instances of "{r.maintenanceTitle}"</p>
-                        </div>
-                        <Badge variant="warning">{r.incidentCount}x</Badge>
-                      </div>
-                    ))}
-                    {vrmsRepeatRepairAlerts.map((alert) => (
-                      <div key={alert.eventId} className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="font-semibold text-amber-600">VRMS Repeated Repair: {alert.vehiclePlate}</p>
-                            <p className="text-[var(--color-text-secondary)]">
-                              {alert.count} {alert.category} repair{alert.count === 1 ? "" : "s"} within {alert.windowDays} days
-                            </p>
-                            <p className="mt-1 text-[var(--color-text-secondary)]">
-                              Reported {formatDate(alert.occurredAt)}
-                            </p>
-                            {alert.repairTicketNumbers.length > 0 && (
-                              <p className="mt-1 text-[var(--color-text-secondary)]">
-                                Tickets: {alert.repairTicketNumbers.join(", ")}
-                              </p>
-                            )}
-                          </div>
-                          <Badge variant="warning">{alert.count}x</Badge>
-                        </div>
-                      </div>
-                    ))}
-                    {(anomalies?.missingDates ?? []).slice(0, 2).map((m, i) => (
-                      <div key={i} className="flex items-center justify-between rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs">
-                        <div>
-                          <p className="font-semibold text-rose-600">Missing Next Due Date: {m.vehiclePlate}</p>
-                          <p className="text-[var(--color-text-secondary)]">{persistedWorkOrderNumber(m.scheduleId)} ({m.maintenanceTitle})</p>
-                        </div>
-                        <Badge variant="danger">Date Missing</Badge>
-                      </div>
-                    ))}
-                    {repeatRepairError && (
-                      <p role="alert" className="text-xs text-red-700">
-                        Could not load VRMS repeated-repair alerts: {repeatRepairError}
+                <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                  {canViewSchedulePredictions
+                    ? "The same read-only odometer projections shown in Maintenance Scheduling, limited to 30 days."
+                    : "Analytics estimates from schedule intervals; these are distinct from Operations' odometer projections."}
+                </p>
+                {canViewSchedulePredictions ? (
+                  <div className="mt-5 grid grid-cols-2 gap-3 text-center">
+                    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4">
+                      <p className="text-2xl font-bold text-rose-500">
+                        {schedulePredictions === null
+                          ? "—"
+                          : projectedDueIn7Days}
                       </p>
-                    )}
-                    {repeatRepairCursor && (
-                      <button
-                        type="button"
-                        onClick={() => void loadMoreRepeatRepairAlerts()}
-                        disabled={loadingMoreRepeatRepairs}
-                        className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs font-semibold disabled:opacity-60"
-                      >
-                        {loadingMoreRepeatRepairs ? "Loading…" : "Load older repair alerts"}
-                      </button>
-                    )}
-                  </>
+                      <p className="mt-1 text-xs font-medium text-[var(--color-text-secondary)]">
+                        Next 7 Days
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4">
+                      <p className="text-2xl font-bold text-amber-500">
+                        {schedulePredictions === null
+                          ? "—"
+                          : sortedSchedulePredictions.length}
+                      </p>
+                      <p className="mt-1 text-xs font-medium text-[var(--color-text-secondary)]">
+                        Next 30 Days
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-5 grid grid-cols-3 gap-3 text-center">
+                    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4">
+                      <p className="text-2xl font-bold text-rose-500">{forecast?.dueIn7Days ?? 0}</p>
+                      <p className="mt-1 text-xs font-medium text-[var(--color-text-secondary)]">Next 7 Days</p>
+                    </div>
+                    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4">
+                      <p className="text-2xl font-bold text-amber-500">{forecast?.dueIn30Days ?? 0}</p>
+                      <p className="mt-1 text-xs font-medium text-[var(--color-text-secondary)]">Next 30 Days</p>
+                    </div>
+                    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-input-bg)] p-4">
+                      <p className="text-2xl font-bold text-[var(--color-brand-primary)]">{forecast?.dueIn90Days ?? 0}</p>
+                      <p className="mt-1 text-xs font-medium text-[var(--color-text-secondary)]">Next 90 Days</p>
+                    </div>
+                  </div>
                 )}
-              </div>
-            </Card>
-          </div>
-
-          {/* Charts Row */}
-          <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-            <Card className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-semibold text-[var(--color-text-primary)]">Monthly Maintenance Cycles</h3>
-                  <p className="text-xs text-[var(--color-text-secondary)]">Comparison between scheduled work and completed maintenance cycles.</p>
+                <div className="mt-5 border-t border-[var(--color-border)] pt-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h4 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                      {canViewSchedulePredictions
+                        ? "Upcoming projected schedules"
+                        : "Due in the next 7 days"}
+                    </h4>
+                    <a
+                      href="/maintenance-scheduling"
+                      className="shrink-0 text-xs font-semibold text-[var(--color-brand-primary)] underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-primary)]"
+                    >
+                      View schedules
+                    </a>
+                  </div>
+                  {canViewSchedulePredictions ? (
+                    schedulePredictionsError ? (
+                      <p role="alert" className="mt-2 text-xs text-red-700">
+                        {schedulePredictionsError}
+                      </p>
+                    ) : schedulePredictions === null ? (
+                      <p role="status" className="mt-2 text-xs text-[var(--color-text-secondary)]">
+                        Loading projected schedules…
+                      </p>
+                    ) : sortedSchedulePredictions.length > 0 ? (
+                      <ul className="mt-2 divide-y divide-[var(--color-border)]">
+                        {sortedSchedulePredictions.slice(0, 3).map((prediction) => (
+                          <li
+                            key={prediction.scheduleId}
+                            className="flex items-center justify-between gap-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-[var(--color-text-primary)]">
+                                {prediction.title}
+                              </p>
+                              <p className="text-xs text-[var(--color-text-secondary)]">
+                                {prediction.vehicleId} · {prediction.remainingKm.toLocaleString("en-PH")} km remaining
+                              </p>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="text-xs font-semibold text-[var(--color-text-primary)]">
+                                {formatManilaDate(prediction.estimatedDueDate)}
+                              </p>
+                              <p className="text-xs text-[var(--color-text-secondary)]">
+                                {prediction.daysUntilDue === 0
+                                  ? "Expected today"
+                                  : `In ${prediction.daysUntilDue} days`}
+                              </p>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-xs text-[var(--color-text-secondary)]">
+                        No eligible odometer schedules are projected to reach their due reading within 30 days.
+                      </p>
+                    )
+                  ) : upcomingDueSchedules.length > 0 ? (
+                    <ul className="mt-2 divide-y divide-[var(--color-border)]">
+                      {upcomingDueSchedules.map((schedule) => {
+                        const daysUntil = getDaysUntilDate(
+                          schedule.dueDate ?? "",
+                        );
+                        return (
+                          <li
+                            key={schedule.alertId}
+                            className="flex items-center justify-between gap-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-[var(--color-text-primary)]">
+                                {schedule.maintenanceTitle}
+                              </p>
+                              <p className="text-xs text-[var(--color-text-secondary)]">
+                                {schedule.vehiclePlate} · Due {formatDate(schedule.dueDate)}
+                              </p>
+                            </div>
+                            <span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-1 text-xs font-semibold text-amber-700">
+                              {daysUntil === 0 ? "Today" : `${daysUntil}d`}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-xs text-[var(--color-text-secondary)]">
+                      {forecast?.dueIn7Days
+                        ? "No date-specific schedules are available for this forecast."
+                        : "No maintenance is due in the next 7 days."}
+                    </p>
+                  )}
                 </div>
-                <div className="flex items-center gap-3 text-xs">
-                  <span className="flex items-center gap-1 text-[var(--color-brand-primary)]"><span className="h-2 w-2 rounded-full bg-[var(--color-brand-primary)]" /> Scheduled</span>
-                  <span className="flex items-center gap-1 text-emerald-500"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Completed</span>
-                </div>
-              </div>
-              <TrendBars
-                items={(overview?.monthlyTrend ?? []).map((item) => ({
-                  monthKey: String(item.monthKey ?? "Unknown"),
-                  scheduledCount: Number(item.scheduledCount ?? 0),
-                  completedCount: Number(item.completedCount ?? 0),
-                  activeCount: Number(item.activeCount ?? 0),
-                  overdueCount: Number(item.overdueCount ?? 0),
-                }))}
-              />
-            </Card>
+              </Card>
 
-            <Card className="p-6">
-              <h3 className="text-base font-semibold text-[var(--color-text-primary)]">Maintenance Status Distribution</h3>
-              <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Breakdown of current schedule statuses in DuckDB analytics mart.</p>
-              <div className="mt-5">
-                <StatusBars
-                  items={(overview?.statusBreakdown ?? []).map((item) => ({
-                    status: String(item.status ?? "Unknown"),
-                    percentage: Number(item.percentage ?? item.scheduleCount ?? 0),
-                    scheduleCount: Number(item.scheduleCount ?? 0),
+              <Card className="p-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="flex items-center gap-2 text-base font-semibold text-[var(--color-text-primary)]">
+                    <AlertTriangle className="h-5 w-5 text-rose-500" />
+                    Detected Fleet Anomalies
+                  </h3>
+                  <span className="rounded-full bg-rose-500/15 px-2.5 py-0.5 text-xs font-semibold text-rose-600">Data Integrity</span>
+                </div>
+                <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Automated detection of repeated vehicle component failures and missing due dates.</p>
+
+                <div className="mt-4 space-y-2.5">
+                  {(anomalies?.repeatedFailures?.length ?? 0) === 0 && (anomalies?.missingDates?.length ?? 0) === 0 && vrmsRepeatRepairAlerts.length === 0 && !repeatRepairError ? (
+                    <p className="text-xs text-[var(--color-text-secondary)]">No anomalies detected in current cycle.</p>
+                  ) : (
+                    <>
+                      {(anomalies?.repeatedFailures ?? []).slice(0, 2).map((r, i) => (
+                        <div key={i} className="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
+                          <div>
+                            <p className="font-semibold text-amber-600">Repeated Failure: {r.vehiclePlate}</p>
+                            <p className="text-[var(--color-text-secondary)]">{r.incidentCount} instances of "{r.maintenanceTitle}"</p>
+                          </div>
+                          <Badge variant="warning">{r.incidentCount}x</Badge>
+                        </div>
+                      ))}
+                      {vrmsRepeatRepairAlerts.map((alert) => (
+                        <div key={alert.eventId} className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-amber-600">VRMS Repeated Repair: {alert.vehiclePlate}</p>
+                              <p className="text-[var(--color-text-secondary)]">
+                                {alert.count} {alert.category} repair{alert.count === 1 ? "" : "s"} within {alert.windowDays} days
+                              </p>
+                              <p className="mt-1 text-[var(--color-text-secondary)]">
+                                Reported {formatDate(alert.occurredAt)}
+                              </p>
+                              {alert.repairTicketNumbers.length > 0 && (
+                                <p className="mt-1 text-[var(--color-text-secondary)]">
+                                  Tickets: {alert.repairTicketNumbers.join(", ")}
+                                </p>
+                              )}
+                            </div>
+                            <Badge variant="warning">{alert.count}x</Badge>
+                          </div>
+                        </div>
+                      ))}
+                      {(anomalies?.missingDates ?? []).slice(0, 2).map((m, i) => (
+                        <div key={i} className="flex items-center justify-between rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs">
+                          <div>
+                            <p className="font-semibold text-rose-600">Missing Next Due Date: {m.vehiclePlate}</p>
+                            <p className="text-[var(--color-text-secondary)]">{persistedWorkOrderNumber(m.scheduleId)} ({m.maintenanceTitle})</p>
+                          </div>
+                          <Badge variant="danger">Date Missing</Badge>
+                        </div>
+                      ))}
+                      {repeatRepairError && (
+                        <p role="alert" className="text-xs text-red-700">
+                          Could not load VRMS repeated-repair alerts: {repeatRepairError}
+                        </p>
+                      )}
+                      {repeatRepairCursor && (
+                        <button
+                          type="button"
+                          onClick={() => void loadMoreRepeatRepairAlerts()}
+                          disabled={loadingMoreRepeatRepairs}
+                          className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs font-semibold disabled:opacity-60"
+                        >
+                          {loadingMoreRepeatRepairs ? "Loading…" : "Load older repair alerts"}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </Card>
+            </div>
+
+            <div className="space-y-4">
+              <Card className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-semibold text-[var(--color-text-primary)]">Monthly Maintenance Cycles</h3>
+                    <p className="text-xs text-[var(--color-text-secondary)]">Comparison between scheduled work and completed maintenance cycles.</p>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs">
+                    <span className="flex items-center gap-1 text-[var(--color-brand-primary)]"><span className="h-2 w-2 rounded-full bg-[var(--color-brand-primary)]" /> Scheduled</span>
+                    <span className="flex items-center gap-1 text-emerald-500"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Completed</span>
+                  </div>
+                </div>
+                <TrendBars
+                  items={(overview?.monthlyTrend ?? []).map((item) => ({
+                    monthKey: String(item.monthKey ?? "Unknown"),
+                    scheduledCount: Number(item.scheduledCount ?? 0),
+                    completedCount: Number(item.completedCount ?? 0),
+                    activeCount: Number(item.activeCount ?? 0),
+                    overdueCount: Number(item.overdueCount ?? 0),
                   }))}
                 />
-              </div>
-            </Card>
+              </Card>
+
+              <Card className="p-6">
+                <h3 className="text-base font-semibold text-[var(--color-text-primary)]">Maintenance Status Distribution</h3>
+                <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Breakdown of current schedule statuses in DuckDB analytics mart.</p>
+                <div className="mt-5">
+                  <StatusBars
+                    items={(overview?.statusBreakdown ?? []).map((item) => ({
+                      status: String(item.status ?? "Unknown"),
+                      percentage: Number(item.percentage ?? item.scheduleCount ?? 0),
+                      scheduleCount: Number(item.scheduleCount ?? 0),
+                    }))}
+                  />
+                </div>
+              </Card>
+            </div>
           </div>
         </div>
       )}
 
       {/* VEHICLE RISK MATRIX TAB */}
-      {!loading && activeTab === "vehicles" && (
+      {hasLoaded && activeTab === "vehicles" && (
         <div className="space-y-4">
           <Card className="p-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -1438,7 +1748,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
       )}
 
       {/* PRIORITY ALERTS TAB */}
-      {!loading && activeTab === "alerts" && (
+      {hasLoaded && activeTab === "alerts" && (
         <div className="space-y-4">
           <Card className="p-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -1523,7 +1833,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
       )}
 
       {/* FULL REPORT & EXPORT TAB */}
-      {!loading && activeTab === "report" && (
+      {hasLoaded && activeTab === "report" && (
         <div className="space-y-4">
           <Card className="p-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
