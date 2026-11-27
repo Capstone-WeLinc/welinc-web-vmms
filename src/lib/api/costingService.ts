@@ -47,3 +47,24 @@ export async function updateMaintenanceCostThreshold(threshold: number) {
     body: JSON.stringify({ threshold }),
   });
 }
+
+export async function exportMaintenanceCostingXlsx(
+  from: string,
+  to: string,
+  selectedTruckId?: string,
+) {
+  const query = new URLSearchParams({ from, to });
+  if (selectedTruckId) query.set('selectedTruckId', selectedTruckId);
+  return fetchJSON<Blob>(`/maintenance-costing/export.xlsx?${query.toString()}`);
+}
+
+export async function auditMaintenanceCostingPdfExport(
+  from: string,
+  to: string,
+  selectedTruckId?: string,
+) {
+  return fetchJSON<{ recorded: boolean }>('/maintenance-costing/export/pdf', {
+    method: 'POST',
+    body: JSON.stringify({ from, to, selectedTruckId }),
+  });
+}

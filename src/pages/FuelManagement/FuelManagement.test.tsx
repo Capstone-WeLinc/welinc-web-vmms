@@ -10,6 +10,7 @@ import {
   getFuelAnomalyThreshold,
   getFuelEntries,
   getFuelStations,
+  referFuelAnomalyForRepair,
   recordFuelReportExport,
   uploadFuelAnomalyAttachment,
   voidFuelEntry,
@@ -17,6 +18,10 @@ import {
 import { getVehicles } from '../../lib/api/vmmsApi';
 import { exportRowsAsXlsx } from '../../lib/utils/excelExport';
 import { exportRowsToPDF } from '../../lib/utils/fuelExport';
+import {
+  formatFuelAnomalyDetectedAt,
+  getFuelAnomalyAgeDays,
+} from './fuelAnomalyTime';
 
 const authMock = vi.hoisted(() => ({ role: 'ADMIN' }));
 
@@ -37,9 +42,13 @@ vi.mock('../../lib/api/fuelService', () => ({
   updateFuelAnomaly: vi.fn(),
   updateFuelAnomalyThreshold: vi.fn(),
   uploadFuelAnomalyAttachment: vi.fn(),
+  referFuelAnomalyForRepair: vi.fn(),
   voidFuelEntry: vi.fn(),
 }));
-vi.mock('../../lib/api/vmmsApi', () => ({ getVehicles: vi.fn() }));
+vi.mock('../../lib/api/vmmsApi', () => ({
+  getVehicles: vi.fn(),
+  retryWorkOrderRepairReferral: vi.fn(),
+}));
 vi.mock('../../lib/utils/excelExport', () => ({ exportRowsAsXlsx: vi.fn() }));
 vi.mock('../../lib/utils/fuelExport', () => ({ exportRowsToPDF: vi.fn() }));
 
@@ -77,6 +86,45 @@ describe('Fuel Management period and log filters', () => {
     });
     vi.mocked(exportRowsAsXlsx).mockReset();
     vi.mocked(exportRowsToPDF).mockReset();
+  });
+
+  it('calculates anomaly age using elapsed 24-hour periods across Manila midnight', () => {
+    const detectedAt = Date.parse('2026-11-01T15:59:59.999Z');
+    const dayMs = 24 * 60 * 60 * 1000;
+
+    expect(getFuelAnomalyAgeDays(new Date(detectedAt).toISOString(), detectedAt + dayMs - 1)).toBe(0);
+    expect(getFuelAnomalyAgeDays(new Date(detectedAt).toISOString(), detectedAt + dayMs)).toBe(1);
+    expect(getFuelAnomalyAgeDays(new Date(detectedAt).toISOString(), detectedAt + 3 * dayMs - 1)).toBe(2);
+    expect(getFuelAnomalyAgeDays(new Date(detectedAt).toISOString(), detectedAt + 3 * dayMs)).toBe(3);
+    expect(getFuelAnomalyAgeDays(new Date(detectedAt).toISOString(), detectedAt + 7 * dayMs - 1)).toBe(6);
+    expect(getFuelAnomalyAgeDays(new Date(detectedAt).toISOString(), detectedAt + 7 * dayMs)).toBe(7);
+  });
+
+  it('shows first-detected time and elapsed age for open anomalies', async () => {
+    const createdAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    vi.mocked(getFuelAnomalies).mockResolvedValue([
+      {
+        id: 'anomaly-aged',
+        vehicle: { plateNumber: 'NDG 5821', model: 'Truck A' },
+        efficiency: 5,
+        rollingAverage: 10,
+        status: 'OPEN',
+        severity: 'WARNING',
+        note: null,
+        acknowledgedAt: null,
+        createdAt,
+        fillUp: { date: '2026-11-01', station: { name: 'Petron' } },
+      },
+    ]);
+    render(<FuelManagement />);
+    await waitFor(() => expect(kpiValue('Total Fill-ups')).toBe('3'));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Anomaly Detection' }));
+
+    expect(screen.getByText('Status: OPEN')).toBeTruthy();
+    expect(
+      screen.getByText(`First detected: ${formatFuelAnomalyDetectedAt(createdAt)}`),
+    ).toBeTruthy();
+    expect(screen.getByText('Age: 1 day')).toBeTruthy();
   });
 
   it('keeps KPIs and fuel log exports aligned when log filters change after a period is applied', async () => {
@@ -470,6 +518,46 @@ describe('Fuel Management period and log filters', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Anomaly Detection' }));
     expect(screen.getByRole('button', { name: 'Resolve' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Acknowledge' })).toBeNull();
+  });
+
+  it('limits Chief Mechanic to anomaly referrals and sends the selected anomaly to VRMS', async () => {
+    const user = userEvent.setup();
+    const anomaly = {
+      id: 'anomaly-chief',
+      vehicle: { plateNumber: 'NDG 5821', model: 'Truck A' },
+      efficiency: 5,
+      rollingAverage: 10,
+      status: 'OPEN',
+      severity: 'CRITICAL',
+      note: 'Unexpected consumption',
+      acknowledgedAt: null,
+      createdAt: '2026-11-01T00:00:00.000Z',
+      fillUp: { date: '2026-11-01', station: { name: 'Petron' } },
+    };
+    authMock.role = 'CHIEF_MECHANIC';
+    vi.mocked(getFuelAnomalies).mockResolvedValue([anomaly]);
+    vi.mocked(referFuelAnomalyForRepair).mockResolvedValue({
+      id: 'referral-1',
+      created: true,
+    });
+
+    render(<FuelManagement />);
+
+    expect(await screen.findByText('Fuel Anomaly Referrals')).toBeTruthy();
+    expect(await screen.findByText(/NDG 5821/)).toBeTruthy();
+    expect(screen.getByText('Unexpected consumption')).toBeTruthy();
+    expect(screen.queryByText('Fuel Log')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Log Fill-up' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Export report' })).toBeNull();
+    expect(screen.queryByText(/Total Fuel Cost/)).toBeNull();
+    expect(getFuelEntries).not.toHaveBeenCalled();
+    expect(getFuelStations).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Refer for repair' }));
+    await waitFor(() =>
+      expect(referFuelAnomalyForRepair).toHaveBeenCalledWith('anomaly-chief'),
+    );
+    expect(getFuelAnomalies).toHaveBeenCalled();
   });
 
   it('shows the 10 MB upload limit and handles oversized report selections and server responses', async () => {

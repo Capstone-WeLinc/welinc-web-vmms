@@ -34,7 +34,11 @@ import {
   type AnalyticsReportResponse,
   type ScheduleSearchResult,
 } from "../../lib/api/analyticsService";
-import { getMaintenanceSchedules } from "../../lib/api/vmmsApi";
+import {
+  getMaintenanceSchedules,
+  getVrmsRepeatRepairAlerts,
+  type VrmsRepeatRepairAlert,
+} from "../../lib/api/vmmsApi";
 
 const formatValue = (value: unknown) => {
   if (typeof value === "number") {
@@ -379,6 +383,17 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
   const [aiInsights, setAiInsights] = useState<AnalyticsInsightsResponse | null>(null);
   const [fullReport, setFullReport] = useState<AnalyticsReportResponse | null>(null);
   const [workOrderNumbers, setWorkOrderNumbers] = useState<Record<string, string>>({});
+  const [vrmsRepeatRepairAlerts, setVrmsRepeatRepairAlerts] = useState<
+    VrmsRepeatRepairAlert[]
+  >([]);
+  const [repeatRepairCursor, setRepeatRepairCursor] = useState<string | null>(
+    null,
+  );
+  const [repeatRepairError, setRepeatRepairError] = useState<string | null>(
+    null,
+  );
+  const [loadingMoreRepeatRepairs, setLoadingMoreRepeatRepairs] =
+    useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<ScheduleSearchResult[]>([]);
   const [hasGenerated, setHasGenerated] = useState(false);
@@ -392,8 +407,17 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
   const loadData = async () => {
     setLoading(true);
     setError(null);
+    const repeatRepairRequest = getVrmsRepeatRepairAlerts()
+      .then((page) => ({ page, error: null }))
+      .catch((err: unknown) => ({
+        page: null,
+        error:
+          err instanceof Error
+            ? err.message
+            : "Could not load VRMS repeated-repair alerts.",
+      }));
     try {
-      const [, overviewData, vehicleData, alertsData, aiInsightsData, reportData, schedules] = await Promise.all([
+      const [, overviewData, vehicleData, alertsData, aiInsightsData, reportData, schedules, repeatRepairResult] = await Promise.all([
         getAnalyticsHealth(),
         getAnalyticsOverview(),
         getAnalyticsVehicles(),
@@ -401,6 +425,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
         getAnalyticsInsights(),
         getAnalyticsReport(),
         getMaintenanceSchedules().catch(() => []),
+        repeatRepairRequest,
       ]);
       setWorkOrderNumbers(Object.fromEntries(
         schedules.flatMap((schedule) => schedule.workOrderNumber
@@ -412,6 +437,15 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
       setAlerts(alertsData);
       setAiInsights(aiInsightsData);
       setFullReport(reportData);
+      if (repeatRepairResult.page) {
+        setVrmsRepeatRepairAlerts(repeatRepairResult.page.items);
+        setRepeatRepairCursor(repeatRepairResult.page.nextCursor);
+        setRepeatRepairError(null);
+      } else {
+        setVrmsRepeatRepairAlerts([]);
+        setRepeatRepairCursor(null);
+        setRepeatRepairError(repeatRepairResult.error);
+      }
       setHasGenerated(true);
     } catch (err: unknown) {
       console.error("Failed to load analytics data:", err);
@@ -419,6 +453,31 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
       setError(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMoreRepeatRepairAlerts = async () => {
+    if (!repeatRepairCursor || loadingMoreRepeatRepairs) return;
+    setLoadingMoreRepeatRepairs(true);
+    setRepeatRepairError(null);
+    try {
+      const page = await getVrmsRepeatRepairAlerts(repeatRepairCursor);
+      setVrmsRepeatRepairAlerts((current) => {
+        const currentIds = new Set(current.map((alert) => alert.eventId));
+        return [
+          ...current,
+          ...page.items.filter((alert) => !currentIds.has(alert.eventId)),
+        ];
+      });
+      setRepeatRepairCursor(page.nextCursor);
+    } catch (err: unknown) {
+      setRepeatRepairError(
+        err instanceof Error
+          ? err.message
+          : "Could not load older VRMS repeated-repair alerts.",
+      );
+    } finally {
+      setLoadingMoreRepeatRepairs(false);
     }
   };
 
@@ -960,7 +1019,7 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
               <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Automated detection of repeated vehicle component failures and missing due dates.</p>
 
               <div className="mt-4 space-y-2.5">
-                {(anomalies?.repeatedFailures?.length ?? 0) === 0 && (anomalies?.missingDates?.length ?? 0) === 0 ? (
+                {(anomalies?.repeatedFailures?.length ?? 0) === 0 && (anomalies?.missingDates?.length ?? 0) === 0 && vrmsRepeatRepairAlerts.length === 0 && !repeatRepairError ? (
                   <p className="text-xs text-[var(--color-text-secondary)]">No anomalies detected in current cycle.</p>
                 ) : (
                   <>
@@ -973,6 +1032,27 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
                         <Badge variant="warning">{r.incidentCount}x</Badge>
                       </div>
                     ))}
+                    {vrmsRepeatRepairAlerts.map((alert) => (
+                      <div key={alert.eventId} className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-amber-600">VRMS Repeated Repair: {alert.vehiclePlate}</p>
+                            <p className="text-[var(--color-text-secondary)]">
+                              {alert.count} {alert.category} repair{alert.count === 1 ? "" : "s"} within {alert.windowDays} days
+                            </p>
+                            <p className="mt-1 text-[var(--color-text-secondary)]">
+                              Reported {formatDate(alert.occurredAt)}
+                            </p>
+                            {alert.repairTicketNumbers.length > 0 && (
+                              <p className="mt-1 text-[var(--color-text-secondary)]">
+                                Tickets: {alert.repairTicketNumbers.join(", ")}
+                              </p>
+                            )}
+                          </div>
+                          <Badge variant="warning">{alert.count}x</Badge>
+                        </div>
+                      </div>
+                    ))}
                     {(anomalies?.missingDates ?? []).slice(0, 2).map((m, i) => (
                       <div key={i} className="flex items-center justify-between rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs">
                         <div>
@@ -982,6 +1062,21 @@ export default function AIAnalyticsPage({ initialTab = "overview" }: { initialTa
                         <Badge variant="danger">Date Missing</Badge>
                       </div>
                     ))}
+                    {repeatRepairError && (
+                      <p role="alert" className="text-xs text-red-700">
+                        Could not load VRMS repeated-repair alerts: {repeatRepairError}
+                      </p>
+                    )}
+                    {repeatRepairCursor && (
+                      <button
+                        type="button"
+                        onClick={() => void loadMoreRepeatRepairAlerts()}
+                        disabled={loadingMoreRepeatRepairs}
+                        className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs font-semibold disabled:opacity-60"
+                      >
+                        {loadingMoreRepeatRepairs ? "Loading…" : "Load older repair alerts"}
+                      </button>
+                    )}
                   </>
                 )}
               </div>

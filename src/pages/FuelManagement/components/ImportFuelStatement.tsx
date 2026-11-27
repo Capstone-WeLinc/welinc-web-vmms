@@ -27,6 +27,10 @@ import {
   type FuelStation,
   type FuelVehicle,
 } from '../../../lib/api/fuelService';
+import {
+  summarizeFuelImportRows,
+  type FuelImportReconciliation,
+} from '../fuelImportReconciliation';
 
 interface Props {
   stations: FuelStation[];
@@ -134,6 +138,8 @@ export default function ImportFuelStatement({
   const [busy, setBusy] = useState(false);
   const [fileName, setFileName] = useState('');
   const [resultMessage, setResultMessage] = useState('');
+  const [reconciliation, setReconciliation] =
+    useState<FuelImportReconciliation | null>(null);
   const [saveHadFailures, setSaveHadFailures] = useState(false);
   const [skippedSheets, setSkippedSheets] = useState<string[]>([]);
   const [search, setSearch] = useState('');
@@ -170,6 +176,11 @@ export default function ImportFuelStatement({
       sourceName: string,
       version: number,
     ) => {
+      const draftRows = snapshot.map((row) => {
+        const draftRow = { ...row };
+        delete draftRow.totalCost;
+        return draftRow;
+      });
       const write = draftSaveQueue.current
         .catch(() => undefined)
         .then(async () => {
@@ -199,9 +210,9 @@ export default function ImportFuelStatement({
             ? await updateFuelImportDraft(
                 draftIdRef.current,
                 sourceName,
-                snapshot,
+                draftRows,
               )
-            : await createFuelImportDraft(sourceName, snapshot);
+            : await createFuelImportDraft(sourceName, draftRows);
           draftIdRef.current = draft.id;
           setDrafts((current) => [
             summarizeDraft(draft),
@@ -362,6 +373,7 @@ export default function ImportFuelStatement({
   ) => {
     setError('');
     setResultMessage('');
+    setReconciliation(null);
     setSaveHadFailures(false);
     setRows((current) =>
       current.map((row) => {
@@ -412,6 +424,7 @@ export default function ImportFuelStatement({
   const updateVehicleByPlate = (key: string, plateNumber: string) => {
     setError('');
     setResultMessage('');
+    setReconciliation(null);
     setSaveHadFailures(false);
     const normalized = normalizedPlate(plateNumber);
     const vehicle = normalized
@@ -485,6 +498,7 @@ export default function ImportFuelStatement({
     setNewlyAddedRowKey(row.key);
     markDraftDirty();
     setError('');
+    setReconciliation(null);
     setResultMessage(
       `Added manual row ${worksheetRow}. Showing page ${targetPage} of ${targetPage}.`,
     );
@@ -504,6 +518,7 @@ export default function ImportFuelStatement({
     markDraftDirty();
     setError('');
     setResultMessage('');
+    setReconciliation(null);
     setSaveHadFailures(false);
     setRowToRemove(null);
   };
@@ -511,6 +526,7 @@ export default function ImportFuelStatement({
   const updateSheetStation = (sheetName: string, stationId: string) => {
     setError('');
     setResultMessage('');
+    setReconciliation(null);
     setSaveHadFailures(false);
     setRows((current) =>
       current.map((row) => {
@@ -533,6 +549,7 @@ export default function ImportFuelStatement({
     if (!file) return;
     setError('');
     setResultMessage('');
+    setReconciliation(null);
     setSaveHadFailures(false);
     setSkippedSheets([]);
     if (!file.name.toLowerCase().endsWith('.xlsx')) {
@@ -578,6 +595,7 @@ export default function ImportFuelStatement({
     setBusy(true);
     setError('');
     setResultMessage('');
+    setReconciliation(null);
     try {
       const draft = await getFuelImportDraft(id);
       draftIdRef.current = draft.id;
@@ -637,6 +655,7 @@ export default function ImportFuelStatement({
         setCurrentPage(1);
         setDraftSyncState('idle');
         setResultMessage('');
+        setReconciliation(null);
       }
       setDraftToDelete(null);
     } catch (draftError) {
@@ -656,10 +675,13 @@ export default function ImportFuelStatement({
     if (!(await flushDraft())) return;
     setError('');
     setResultMessage('');
+    setReconciliation(null);
     setSaveHadFailures(false);
     setBusy(true);
     try {
       const result = await saveFuelImport(readyRows);
+      const reconciliationResult = summarizeFuelImportRows(result.rows, stations);
+      setReconciliation(reconciliationResult);
       const returnedRows = new Map(result.rows.map((row) => [row.key, row]));
       const updatedRows = rows.map((row) => returnedRows.get(row.key) ?? row);
       setRows(updatedRows);
@@ -667,14 +689,16 @@ export default function ImportFuelStatement({
       draftVersionRef.current = version;
       setDraftVersion(version);
       setDraftSyncState('unsaved');
-      setSaveHadFailures(result.failed > 0 || result.saved === 0);
+      setSaveHadFailures(
+        reconciliationResult.failed > 0 || reconciliationResult.saved === 0,
+      );
       const messages = [];
-      if (result.saved > 0)
-        messages.push(`Saved ${result.saved} fill-up${result.saved === 1 ? '' : 's'}.`);
+      if (reconciliationResult.saved > 0)
+        messages.push(`Saved ${reconciliationResult.saved} fill-up${reconciliationResult.saved === 1 ? '' : 's'}.`);
       else messages.push('No fill-ups were saved.');
-      if (result.failed > 0)
+      if (reconciliationResult.failed > 0)
         messages.push(
-          `${result.failed} submitted row${result.failed === 1 ? '' : 's'} need attention.`,
+          `${reconciliationResult.failed} submitted row${reconciliationResult.failed === 1 ? '' : 's'} need attention.`,
         );
       setResultMessage(messages.join(' '));
       try {
@@ -699,7 +723,7 @@ export default function ImportFuelStatement({
             : 'Fuel rows were saved, but their draft could not be updated.',
         );
       }
-      if (result.saved > 0) {
+      if (reconciliationResult.saved > 0) {
         try {
           await onImported();
         } catch {
@@ -902,6 +926,81 @@ export default function ImportFuelStatement({
               )}
               <span>{resultMessage}</span>
             </div>
+          )}
+          {reconciliation && (
+            <section
+              aria-label="Import reconciliation summary"
+              className="space-y-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4"
+            >
+              <h3 className="font-semibold text-[var(--color-text-primary)]">
+                Import reconciliation
+              </h3>
+              <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+                <div>
+                  <dt className="text-[var(--color-text-secondary)]">Submitted rows</dt>
+                  <dd className="font-semibold tabular-nums">{reconciliation.submitted}</dd>
+                </div>
+                <div>
+                  <dt className="text-[var(--color-text-secondary)]">Saved rows</dt>
+                  <dd className="font-semibold tabular-nums">{reconciliation.saved}</dd>
+                </div>
+                <div>
+                  <dt className="text-[var(--color-text-secondary)]">Failed rows</dt>
+                  <dd className="font-semibold tabular-nums">{reconciliation.failed}</dd>
+                </div>
+                <div>
+                  <dt className="text-[var(--color-text-secondary)]">Saved liters</dt>
+                  <dd className="font-semibold tabular-nums">
+                    {reconciliation.liters.toLocaleString('en-PH', {
+                      maximumFractionDigits: 2,
+                    })} L
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[var(--color-text-secondary)]">Persisted total cost</dt>
+                  <dd className="font-semibold tabular-nums">
+                    ₱{reconciliation.totalCost.toLocaleString('en-PH', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </dd>
+                </div>
+              </dl>
+              {reconciliation.groups.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                    Saved totals by worksheet and station
+                  </h4>
+                  <ul aria-label="Totals by worksheet and station" className="mt-1 space-y-1 text-sm">
+                    {reconciliation.groups.map((group) => (
+                      <li key={`${group.sheetName}:${group.stationName}`}>
+                        <span className="font-medium">{group.sheetName} · {group.stationName}</span>
+                        {`: ${group.saved} saved, ${group.failed} failed · ${group.liters.toLocaleString('en-PH', {
+                          maximumFractionDigits: 2,
+                        })} L · ₱${group.totalCost.toLocaleString('en-PH', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}`}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {reconciliation.failedRows.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold text-amber-950">
+                    Failed rows excluded from totals
+                  </h4>
+                  <ul className="mt-1 space-y-1 text-sm text-amber-950">
+                    {reconciliation.failedRows.map((row) => (
+                      <li key={`${row.sheetName}:${row.worksheetRow}`}>
+                        {row.sheetName} · row {row.worksheetRow}: {row.errors.join(' ') || 'Unable to save this row.'}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </section>
           )}
           {skippedSheets.length > 0 && (
             <div role="status" className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-950">

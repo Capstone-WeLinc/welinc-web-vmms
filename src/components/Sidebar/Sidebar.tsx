@@ -148,8 +148,19 @@ export default function Sidebar({ currentUser }: SidebarProps) {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isSignOutErrorOpen, setIsSignOutErrorOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
-  const [accountMenuPosition, setAccountMenuPosition] = useState<{ left: number; bottom: number } | null>(null);
+  const [accountMenuPath, setAccountMenuPath] = useState(location.pathname);
+  const [accountMenuExpanded, setAccountMenuExpanded] = useState(false);
+  const [accountMenuPosition, setAccountMenuPosition] = useState<{
+    left: number;
+    bottom: number;
+  } | null>(null);
+  if (accountMenuPath !== location.pathname) {
+    setAccountMenuPath(location.pathname);
+    setAccountMenuExpanded(false);
+    setAccountMenuPosition(null);
+  }
+  const isAccountMenuOpen =
+    accountMenuPath === location.pathname && accountMenuExpanded;
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const accountMenuPanelRef = useRef<HTMLDivElement | null>(null);
 
@@ -208,10 +219,10 @@ export default function Sidebar({ currentUser }: SidebarProps) {
       if (accountMenuRef.current?.contains(target) || accountMenuPanelRef.current?.contains(target)) {
         return;
       }
-      setIsAccountMenuOpen(false);
+      setAccountMenuExpanded(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsAccountMenuOpen(false);
+      if (event.key === "Escape") setAccountMenuExpanded(false);
     };
 
     document.addEventListener("mousedown", onPointerDown);
@@ -223,14 +234,7 @@ export default function Sidebar({ currentUser }: SidebarProps) {
   }, [isAccountMenuOpen]);
 
   useEffect(() => {
-    setIsAccountMenuOpen(false);
-  }, [location.pathname]);
-
-  useEffect(() => {
-    if (!isAccountMenuOpen) {
-      setAccountMenuPosition(null);
-      return;
-    }
+    if (!isAccountMenuOpen) return;
 
     const updatePosition = () => {
       const rect = accountMenuRef.current?.getBoundingClientRect();
@@ -265,7 +269,7 @@ export default function Sidebar({ currentUser }: SidebarProps) {
   };
 
   const handleBackToHome = () => {
-    setIsAccountMenuOpen(false);
+    setAccountMenuExpanded(false);
     window.location.assign(PORTAL_URL ? `${PORTAL_URL}/` : "/");
   };
 
@@ -425,7 +429,7 @@ export default function Sidebar({ currentUser }: SidebarProps) {
                   role="menuitem"
                   className="mt-1 flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-white/80 transition-colors hover:bg-white/[0.08] hover:text-white"
                   onClick={() => {
-                    setIsAccountMenuOpen(false);
+                    setAccountMenuExpanded(false);
                     navigate("/profile");
                   }}
                 >
@@ -437,7 +441,7 @@ export default function Sidebar({ currentUser }: SidebarProps) {
                   role="menuitem"
                   className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-red-300 transition-colors hover:bg-red-500/15 hover:text-red-200"
                   onClick={() => {
-                    setIsAccountMenuOpen(false);
+                    setAccountMenuExpanded(false);
                     setIsLogoutModalOpen(true);
                   }}
                 >
@@ -450,7 +454,10 @@ export default function Sidebar({ currentUser }: SidebarProps) {
 
             <button
               type="button"
-              onClick={() => setIsAccountMenuOpen((open) => !open)}
+              onClick={() => {
+                setAccountMenuPosition(null);
+                setAccountMenuExpanded(!isAccountMenuOpen);
+              }}
               aria-label={`Account menu for ${currentUser ? currentUser.name : "Admin User"}`}
               aria-expanded={isAccountMenuOpen}
               className="flex w-full items-center justify-center gap-0 rounded-md p-1.5 transition-colors duration-200 hover:bg-white/[0.08] group-hover/sidebar:justify-start group-hover/sidebar:gap-3"

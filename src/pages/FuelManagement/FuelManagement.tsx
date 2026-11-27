@@ -10,10 +10,14 @@ import ConfigureFuelStations from './components/ConfigureFuelStations';
 import { useAuthStore } from '../../store/authStore';
 import { useBackend } from '../../lib/api/httpClient';
 import { getMaintenanceCostPeriod, type MaintenanceCostHalf, type MaintenanceCostPeriodType } from '../../lib/utils/maintenanceCostingPeriod';
-import { getVehicles } from '../../lib/api/vmmsApi';
-import { acknowledgeFuelAnomaly, createFuelEntry, createFuelStation, getFuelAnomalies, getFuelAnomalyAttachment, getFuelAnomalyThreshold, getFuelEntries, getFuelReceiptAttachment, getFuelStations, recordFuelReportExport, updateFuelAnomaly, updateFuelAnomalyThreshold, updateFuelStation, uploadFuelAnomalyAttachment, voidFuelEntry, type FuelAnomalyRecord, type FuelFillUpInput, type FuelStation, type FuelStationManagement, type FuelStationUpdate, type FuelVehicle } from '../../lib/api/fuelService';
+import { getVehicles, retryWorkOrderRepairReferral } from '../../lib/api/vmmsApi';
+import { acknowledgeFuelAnomaly, createFuelEntry, createFuelStation, getFuelAnomalies, getFuelAnomalyAttachment, getFuelAnomalyThreshold, getFuelEntries, getFuelReceiptAttachment, getFuelStations, recordFuelReportExport, referFuelAnomalyForRepair, updateFuelAnomaly, updateFuelAnomalyThreshold, updateFuelStation, uploadFuelAnomalyAttachment, voidFuelEntry, type FuelAnomalyRecord, type FuelFillUpInput, type FuelStation, type FuelStationManagement, type FuelStationUpdate, type FuelVehicle } from '../../lib/api/fuelService';
 import type { FuelFillUp } from './types';
 import { excludeVoidedFuelFillUps } from './fuelReportData';
+import {
+  formatFuelAnomalyDetectedAt,
+  getFuelAnomalyAgeDays,
+} from './fuelAnomalyTime';
 
 type Tab = 'fuel-log' | 'efficiency-trends' | 'anomaly-detection';
 const MAX_FUEL_ANOMALY_ATTACHMENT_BYTES = 10 * 1024 * 1024;
@@ -31,9 +35,11 @@ function currentMonthPeriod() {
 
 export default function FuelManagement() {
   const role = useAuthStore((state) => state.currentUser?.role);
-  const canView = role === 'ADMIN' || role === 'OPERATIONS';
+  const canView = role === 'ADMIN' || role === 'OPERATIONS' || role === 'CHIEF_MECHANIC';
+  const isChiefMechanic = role === 'CHIEF_MECHANIC';
   const canWrite = role === 'OPERATIONS';
   const canAcknowledge = role === 'ADMIN';
+  const canRefer = role === 'ADMIN' || isChiefMechanic;
   const [activeTab, setActiveTab] = useState<Tab>('fuel-log');
   const [showLogForm, setShowLogForm] = useState(false);
   const [showStationConfig, setShowStationConfig] = useState(false);
@@ -48,6 +54,8 @@ export default function FuelManagement() {
   const [savingThreshold, setSavingThreshold] = useState(false);
   const [pageError, setPageError] = useState('');
   const [loading, setLoading] = useState(canView);
+  const [referringAnomalyId, setReferringAnomalyId] = useState<string | null>(null);
+  const [retryingReferralId, setRetryingReferralId] = useState<string | null>(null);
 
   const initialPeriod = useMemo(() => currentMonthPeriod(), []);
   const now = new Date();
@@ -69,17 +77,21 @@ export default function FuelManagement() {
   ];
 
   const load = useCallback(async (period: { from: string; to: string }, showLoading = true) => {
-    if (!canView) { setPageError('Fuel Management is available to Admin and Operations on the web.'); setLoading(false); return; }
+    if (!canView) { setPageError('Fuel Management is available to Admin, Operations, and Chief Mechanic on the web.'); setLoading(false); return; }
     if (!useBackend) { setPageError('Fuel management requires the VMMS backend. Configure VITE_API_BASE_URL to use persisted fuel records.'); setLoading(false); return; }
     if (showLoading) setLoading(true);
     setPageError('');
     try {
+      if (isChiefMechanic) {
+        setAnomalies(await getFuelAnomalies());
+        return;
+      }
       const [entries, stationRows, vehicleRows, anomalyRows, threshold] = await Promise.all([getFuelEntries(period.from, period.to), getFuelStations(), getVehicles(), getFuelAnomalies(), getFuelAnomalyThreshold()]);
       setFillUps(entries); setStations(stationRows); setVehicles(vehicleRows as FuelVehicle[]); setAnomalies(anomalyRows); setAnomalyThreshold(threshold.thresholdPercent); setThresholdDraft(String(threshold.thresholdPercent));
       setAppliedPeriod(period);
     } catch (error) { setPageError(error instanceof Error ? error.message : 'Unable to load fuel records.'); }
     finally { if (showLoading) setLoading(false); }
-  }, [canView]);
+  }, [canView, isChiefMechanic]);
   const refresh = useCallback((showLoading = false) => load(appliedPeriod, showLoading), [appliedPeriod, load]);
   useEffect(() => {
     if (!canView) {
@@ -196,6 +208,34 @@ export default function FuelManagement() {
     }
   };
 
+  const handleReferAnomalyForRepair = async (anomalyId: string) => {
+    if (!canRefer || referringAnomalyId) return;
+    setReferringAnomalyId(anomalyId);
+    setPageError('');
+    try {
+      await referFuelAnomalyForRepair(anomalyId);
+      await refresh();
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : 'Unable to refer the fuel anomaly.');
+    } finally {
+      setReferringAnomalyId(null);
+    }
+  };
+
+  const handleRetryFuelReferral = async (referralId: string) => {
+    if (role !== 'ADMIN' || retryingReferralId) return;
+    setRetryingReferralId(referralId);
+    setPageError('');
+    try {
+      await retryWorkOrderRepairReferral(referralId);
+      await refresh();
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : 'Could not retry the repair referral.');
+    } finally {
+      setRetryingReferralId(null);
+    }
+  };
+
   const applyPeriod = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const period = getMaintenanceCostPeriod(periodType, periodYear, periodMonth, periodHalf, from, to, twoMonthBlock);
@@ -208,10 +248,67 @@ export default function FuelManagement() {
     const first = kpiFilteredFillUps.find((entry) => entry.vehicleId === vehicleId)!;
     return { vehicleId, vehicleName: first.vehicleName, model: first.vehicleModel, avgEfficiency: rows.length ? rows.reduce((sum, row) => sum + (row.efficiency ?? 0), 0) / rows.length : 0, fillUps: rows.length, trend: 'normal' as const };
   }), [kpiFilteredFillUps]);
-  const anomalyCards = useMemo(() => anomalies.filter((item) => item.status === 'OPEN').map((item) => ({ vehicleId: item.vehicle.plateNumber, vehicleName: item.vehicle.plateNumber, model: item.vehicle.model, efficiency: item.efficiency, status: 'Anomaly' as const, fleetAvg: item.rollingAverage, recommendation: item.note ?? 'Review the fuel entry and add an operations resolution note.' })), [anomalies]);
+  const anomalyCards = useMemo(() => anomalies.filter((item) => item.status === 'OPEN').map((item) => ({ id: item.id, vehicleId: item.vehicle.plateNumber, vehicleName: item.vehicle.plateNumber, model: item.vehicle.model, efficiency: item.efficiency, status: 'Anomaly' as const, fleetAvg: item.rollingAverage, recommendation: item.note ?? 'Review the fuel entry and add an operations resolution note.' })), [anomalies]);
 
   if (!canView) {
-    return <div className="space-y-6"><PageHeader icon={Droplet} title="Fuel Management" subtitle="Fuel tracking and reports" /><p role="status" className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 text-sm text-[var(--color-text-secondary)]">Fuel Management on the web is available to Admin and Operations.</p></div>;
+    return <div className="space-y-6"><PageHeader icon={Droplet} title="Fuel Management" subtitle="Fuel tracking and reports" /><p role="status" className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 text-sm text-[var(--color-text-secondary)]">Fuel Management on the web is available to Admin, Operations, and Chief Mechanic.</p></div>;
+  }
+
+  if (isChiefMechanic) {
+    return (
+      <div className={containerClasses}>
+        <PageHeader
+          icon={Droplet}
+          title="Fuel Anomaly Referrals"
+          subtitle="Review open fuel anomalies and refer them to VRMS."
+        />
+        {pageError && <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">{pageError}</div>}
+        {loading ? (
+          <p role="status" className="text-sm text-[var(--color-text-secondary)]">Loading fuel anomalies...</p>
+        ) : anomalyCards.length === 0 ? (
+          <p role="status" className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-5 text-sm text-[var(--color-text-secondary)]">No open fuel anomalies.</p>
+        ) : (
+          <div className="space-y-3">
+            {anomalyCards.map((anomaly) => {
+              const record = anomalies.find((item) => item.id === anomaly.id)!;
+              return (
+                <article key={record.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
+                  <div>
+                    <strong>{anomaly.vehicleName} - {anomaly.efficiency.toFixed(1)} km/L</strong>
+                    <p className="text-sm">Rolling average {anomaly.fleetAvg.toFixed(1)} km/L - {record.severity}</p>
+                    <p className="text-sm">{record.note || 'Fuel efficiency is outside the expected range.'}</p>
+                    {record.repairReferral && (
+                      <p className="mt-1 text-sm" role="status">
+                        VRMS referral: {record.repairReferral.status}
+                        {record.repairReferral.repairTicketNumber
+                          ? ` · Ticket ${record.repairReferral.repairTicketNumber}`
+                          : ''}
+                        {record.repairReferral.outcomeReason
+                          ? ` · ${record.repairReferral.outcomeReason}`
+                          : ''}
+                      </p>
+                    )}
+                  </div>
+                  {!record.repairReferral && (
+                    <button
+                      type="button"
+                      disabled={referringAnomalyId !== null}
+                      onClick={() => void handleReferAnomalyForRepair(record.id)}
+                      className="rounded-lg bg-[var(--color-brand-primary)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                    >
+                      {referringAnomalyId === record.id ? 'Referring…' : 'Refer for repair'}
+                    </button>
+                  )}
+                  {record.repairReferral?.status === 'FAILED' && (
+                    <p role="status" className="text-sm text-amber-700">VMMS Admin must retry this failed referral.</p>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -361,12 +458,16 @@ export default function FuelManagement() {
           </div>
         )}
         {activeTab === 'anomaly-detection' && <div className="space-y-3">{anomalyCards.length === 0 ? <p className="text-sm text-[var(--color-text-secondary)]">No open fuel anomalies.</p> : anomalyCards.map((anomaly) => {
-          const record = anomalies.find((item) => item.vehicle.plateNumber === anomaly.vehicleId && item.status === 'OPEN')!;
+          const record = anomalies.find((item) => item.id === anomaly.id)!;
+          const ageDays = getFuelAnomalyAgeDays(record.createdAt);
           return (
             <div key={record.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4">
               <div>
                 <strong>{anomaly.vehicleName} - {anomaly.efficiency.toFixed(1)} km/L</strong>
                 <div className="text-sm">Rolling average {anomaly.fleetAvg.toFixed(1)} km/L - {record.severity}</div>
+                <div className="text-sm">Status: {record.status}</div>
+                <div className="text-sm">First detected: {formatFuelAnomalyDetectedAt(record.createdAt)}</div>
+                <div className="text-sm">Age: {ageDays === null ? 'Unavailable' : `${ageDays} ${ageDays === 1 ? 'day' : 'days'}`}</div>
                 <div className="text-sm">{record.note || 'No resolution note recorded'}</div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {record.attachments?.map((attachment) => (
@@ -383,6 +484,34 @@ export default function FuelManagement() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
+                {canRefer && !record.repairReferral && (
+                  <button
+                    type="button"
+                    disabled={referringAnomalyId !== null}
+                    onClick={() => void handleReferAnomalyForRepair(record.id)}
+                    className="rounded-lg border px-3 py-2 text-sm disabled:opacity-60"
+                  >
+                    {referringAnomalyId === record.id ? 'Referring…' : 'Refer for repair'}
+                  </button>
+                )}
+                {record.repairReferral && (
+                  <span className="self-center text-sm text-[var(--color-text-secondary)]">
+                    VRMS referral: {record.repairReferral.status}
+                    {record.repairReferral.repairTicketNumber
+                      ? ` · ${record.repairReferral.repairTicketNumber}`
+                      : ''}
+                  </span>
+                )}
+                {role === 'ADMIN' && record.repairReferral?.status === 'FAILED' && (
+                  <button
+                    type="button"
+                    disabled={retryingReferralId !== null}
+                    onClick={() => void handleRetryFuelReferral(record.repairReferral!.id)}
+                    className="rounded-lg border px-3 py-2 text-sm disabled:opacity-60"
+                  >
+                    {retryingReferralId === record.repairReferral.id ? 'Retrying…' : 'Retry referral'}
+                  </button>
+                )}
                 {canWrite && <>
                   <button onClick={async () => {
                     const note = window.prompt('Add or update resolution note');

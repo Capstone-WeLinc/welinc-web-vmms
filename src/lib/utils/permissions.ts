@@ -78,7 +78,9 @@ export function canSeeVmmsNavigationPath(
 ): boolean {
   const role = resolveVmmsRole(user);
   if (role === "OPERATIONS") return OPERATIONS_NAV_PATHS.has(path);
-  if (role === "CHIEF_MECHANIC") return path === "/work-orders";
+  if (role === "CHIEF_MECHANIC") {
+    return path === "/work-orders" || path === "/fuel-management";
+  }
   return role === "ADMIN";
 }
 

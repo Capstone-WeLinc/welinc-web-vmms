@@ -227,6 +227,7 @@ const MaintenanceSchedulingCombined = () => {
   const canEditPriority = canEditWorkOrderPriority(currentUser);
   const location = useLocation();
   const navigate = useNavigate();
+  const locationSearchKey = `${location.pathname}${location.search}`;
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -236,7 +237,10 @@ const MaintenanceSchedulingCombined = () => {
     formatDateStr(today.getFullYear(), today.getMonth(), today.getDate()),
   );
   const [viewMode, setViewMode] = useState<"calendar" | "list">("list");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("search") || params.get("q") || "";
+  });
   const [selectedStatusFilters, setSelectedStatusFilters] = useState<string[]>([]);
   const [priorityFilter, setPriorityFilter] = useState<MaintenancePriority | "All">("All");
   const [vehicleFilter, setVehicleFilter] = useState<string>("All");
@@ -250,6 +254,8 @@ const MaintenanceSchedulingCombined = () => {
   const [sortOrder, setSortOrder] =
     useState<ScheduleSortOrder>("DUE_DATE_DESC");
   const [currentPage, setCurrentPage] = useState(1);
+  const [handledLocationSearch, setHandledLocationSearch] =
+    useState(locationSearchKey);
   const [schedulesPerPage, setSchedulesPerPage] = useState(8);
   const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
   const [predictions, setPredictions] = useState<MaintenancePrediction[]>([]);
@@ -288,31 +294,42 @@ const MaintenanceSchedulingCombined = () => {
   const [extensionReviewReasons, setExtensionReviewReasons] = useState<
     Record<string, string>
   >({});
-  const [extensionHistory, setExtensionHistory] =
-    useState<MaintenanceScheduleExtensionHistory | null>(null);
-  const [extensionHistoryLoading, setExtensionHistoryLoading] = useState(false);
-  const [extensionHistoryError, setExtensionHistoryError] = useState("");
+  const [extensionHistoryState, setExtensionHistoryState] = useState<{
+    scheduleId: string;
+    history: MaintenanceScheduleExtensionHistory | null;
+    error: string;
+  } | null>(null);
   const extensionHistoryRequest = useRef(0);
+
+  if (handledLocationSearch !== locationSearchKey) {
+    setHandledLocationSearch(locationSearchKey);
+    const params = new URLSearchParams(location.search);
+    const search = params.get("search") || params.get("q");
+    if (search) {
+      setSearchQuery(search);
+      setCurrentPage(1);
+    }
+  }
 
   useBodyScrollLock(Boolean(pendingAction));
 
-  const loadMaintenancePredictions = useCallback(async () => {
-    if (!canSchedule) return;
+  const refreshMaintenancePredictions = () => {
     setPredictionsLoading(true);
-    setPredictionsError("");
-    try {
-      setPredictions(await getMaintenancePredictions());
-    } catch (error) {
-      setPredictions([]);
-      setPredictionsError(
-        error instanceof Error
-          ? error.message
-          : "Could not load maintenance predictions.",
-      );
-    } finally {
-      setPredictionsLoading(false);
-    }
-  }, [canSchedule]);
+    void getMaintenancePredictions()
+      .then((loadedPredictions) => {
+        setPredictions(loadedPredictions);
+        setPredictionsError("");
+      })
+      .catch((error: unknown) => {
+        setPredictions([]);
+        setPredictionsError(
+          error instanceof Error
+            ? error.message
+            : "Could not load maintenance predictions.",
+        );
+      })
+      .finally(() => setPredictionsLoading(false));
+  };
 
   const loadMaintenanceSchedules = async () => {
     const loadedTasks = await getMaintenanceSchedules();
@@ -322,25 +339,21 @@ const MaintenanceSchedulingCombined = () => {
 
   const loadExtensionHistory = useCallback(async (scheduleId: string) => {
     const requestId = ++extensionHistoryRequest.current;
-    setExtensionHistoryLoading(true);
-    setExtensionHistoryError("");
-    setExtensionHistory(null);
     try {
       const history = await getMaintenanceScheduleExtensionHistory(scheduleId);
       if (requestId === extensionHistoryRequest.current) {
-        setExtensionHistory(history);
+        setExtensionHistoryState({ scheduleId, history, error: "" });
       }
     } catch (error) {
       if (requestId === extensionHistoryRequest.current) {
-        setExtensionHistoryError(
-          error instanceof Error
-            ? error.message
-            : "Could not load schedule extension history.",
-        );
-      }
-    } finally {
-      if (requestId === extensionHistoryRequest.current) {
-        setExtensionHistoryLoading(false);
+        setExtensionHistoryState({
+          scheduleId,
+          history: null,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Could not load schedule extension history.",
+        });
       }
     }
   }, []);
@@ -439,8 +452,30 @@ const MaintenanceSchedulingCombined = () => {
   }, []);
 
   useEffect(() => {
-    if (canSchedule) void loadMaintenancePredictions();
-  }, [canSchedule, loadMaintenancePredictions]);
+    if (!canSchedule) return;
+    let cancelled = false;
+    void getMaintenancePredictions()
+      .then((loadedPredictions) => {
+        if (cancelled) return;
+        setPredictions(loadedPredictions);
+        setPredictionsError("");
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setPredictions([]);
+        setPredictionsError(
+          error instanceof Error
+            ? error.message
+            : "Could not load maintenance predictions.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setPredictionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canSchedule]);
 
   useEffect(() => {
     if (!canSchedule || new URLSearchParams(location.search).get("create") !== "true") return;
@@ -558,6 +593,19 @@ const MaintenanceSchedulingCombined = () => {
     const vehicle = getVehicleOption(vehicleId);
     return vehicle?.plateNumber ?? vehicle?.value ?? vehicleId;
   };
+  const trimmedSearchQuery = searchQuery.trim();
+  const uuidSearchMatch =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      trimmedSearchQuery,
+    )
+      ? tasks.find((task) => task.id === trimmedSearchQuery)
+      : undefined;
+  const displaySearchQuery = uuidSearchMatch
+    ? uuidSearchMatch.workOrderNumber?.trim() ||
+      getVehiclePlateNumber(uuidSearchMatch.vehicleId) ||
+      uuidSearchMatch.title ||
+      trimmedSearchQuery
+    : searchQuery;
   const scheduleStatusOptions = [
     MaintenanceStatus.PENDING,
     MaintenanceStatus.DUE,
@@ -604,7 +652,7 @@ const MaintenanceSchedulingCombined = () => {
       const dateMatches = (dateRangeFilter === 'All' && !dateFromFilter && !dateToFilter) ||
         candidateDates.some((date) => date && dateFilter(new Date(`${date}T00:00:00`)) &&
           (!dateFromFilter || date >= dateFromFilter) && (!dateToFilter || date <= dateToFilter));
-      const query = searchQuery.toLowerCase();
+      const query = displaySearchQuery.toLowerCase();
       const searchMatches =
         task.id.toLowerCase().includes(query) ||
         (task.workOrderNumber ?? "").toLowerCase().includes(query) ||
@@ -755,8 +803,6 @@ const MaintenanceSchedulingCombined = () => {
     const params = new URLSearchParams(location.search);
     const search = params.get("search") || params.get("q");
     if (!search) return;
-    setSearchQuery(search);
-    setCurrentPage(1);
     params.delete("search");
     params.delete("q");
     const nextSearch = params.toString();
@@ -766,28 +812,9 @@ const MaintenanceSchedulingCombined = () => {
     );
   }, [location.pathname, location.search, navigate]);
 
-  useEffect(() => {
-    const trimmed = searchQuery.trim();
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(trimmed)) {
-      return;
-    }
-    const match = tasks.find((task) => task.id === trimmed);
-    if (!match) return;
-    const friendly =
-      match.workOrderNumber?.trim() ||
-      getVehiclePlateNumber(match.vehicleId) ||
-      match.title ||
-      trimmed;
-    if (friendly && friendly !== searchQuery) {
-      setSearchQuery(friendly);
-    }
-  }, [searchQuery, tasks]);
-
   const closeScheduleDetails = () => {
     extensionHistoryRequest.current += 1;
-    setExtensionHistory(null);
-    setExtensionHistoryError("");
-    setExtensionHistoryLoading(false);
+    setExtensionHistoryState(null);
     setSelectedSchedules([]);
     setSelectedSchedulePage(0);
   };
@@ -795,12 +822,46 @@ const MaintenanceSchedulingCombined = () => {
   const selectedSchedule =
     selectedSchedules[selectedSchedulePage] ?? selectedSchedules[0] ?? null;
   const selectedScheduleId = selectedSchedule?.id;
+  const currentExtensionHistory =
+    extensionHistoryState?.scheduleId === selectedScheduleId
+      ? extensionHistoryState
+      : null;
+  const extensionHistory = currentExtensionHistory?.history ?? null;
+  const extensionHistoryLoading =
+    Boolean(selectedScheduleId) && !currentExtensionHistory;
+  const extensionHistoryError = currentExtensionHistory?.error ?? "";
 
   useEffect(() => {
-    if (selectedScheduleId) {
-      void loadExtensionHistory(selectedScheduleId);
-    }
-  }, [loadExtensionHistory, selectedScheduleId]);
+    if (!selectedScheduleId) return;
+    const requestId = ++extensionHistoryRequest.current;
+    void getMaintenanceScheduleExtensionHistory(selectedScheduleId)
+      .then((history) => {
+        if (requestId === extensionHistoryRequest.current) {
+          setExtensionHistoryState({
+            scheduleId: selectedScheduleId,
+            history,
+            error: "",
+          });
+        }
+      })
+      .catch((error: unknown) => {
+        if (requestId === extensionHistoryRequest.current) {
+          setExtensionHistoryState({
+            scheduleId: selectedScheduleId,
+            history: null,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Could not load schedule extension history.",
+          });
+        }
+      });
+    return () => {
+      if (requestId === extensionHistoryRequest.current) {
+        extensionHistoryRequest.current += 1;
+      }
+    };
+  }, [selectedScheduleId]);
 
   const handlePriorityChange = async (task: MaintenanceTask, priority: MaintenancePriority) => {
     if (!canEditPriority || priority === (task.priority ?? MaintenancePriority.MEDIUM)) return;
@@ -944,7 +1005,7 @@ const MaintenanceSchedulingCombined = () => {
             <button
               type="button"
               disabled={predictionsLoading}
-              onClick={() => void loadMaintenancePredictions()}
+              onClick={refreshMaintenancePredictions}
               className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm font-medium text-[var(--color-text-primary)] transition hover:bg-[var(--color-card-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {predictionsLoading ? "Refreshing..." : "Refresh"}
@@ -1296,7 +1357,7 @@ const MaintenanceSchedulingCombined = () => {
             <div className="flex-1">
               <SearchInput
                 placeholder="Search tasks..."
-                value={searchQuery}
+                value={displaySearchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
                   setCurrentPage(1);
@@ -2167,7 +2228,7 @@ const MaintenanceSchedulingCombined = () => {
           } catch (error) {
             console.error("Failed to refresh maintenance schedules", error);
           }
-          void loadMaintenancePredictions();
+          refreshMaintenancePredictions();
           setIsModalOpen(false);
           setEditingTask(null);
         }}
