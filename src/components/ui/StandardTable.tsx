@@ -20,7 +20,11 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { maintenanceStatusLabels } from "../../types/maintenance";
 
+const filterStatusLabels: Record<string, string> = {
+  ...maintenanceStatusLabels,
+};
 
 export type StandardStatus =
   | "Completed"
@@ -437,7 +441,7 @@ export const FilterDropdown = ({
                       checked={checked}
                       onChange={() => toggleStatus(status)}
                     />
-                    {status}
+                    {filterStatusLabels[status] ?? status.replace(/_/g, " ")}
                   </label>
                 );
               })}

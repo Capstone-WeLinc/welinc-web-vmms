@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Bell, ChevronRight } from "lucide-react";
+import {
+  AlertTriangle,
+  Bell,
+  ChevronRight,
+  FileText,
+  Fuel,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Modal } from "../ui";
 import { fetchJSON } from "../../lib/api/httpClient";
@@ -21,6 +29,34 @@ interface NotificationInboxResponse {
   items: NotificationRecord[];
   nextCursor: string | null;
   counts: { total: number; unread: number };
+}
+
+const categoryMeta: Record<
+  NotificationRecord["category"],
+  { label: string; className: string; icon: LucideIcon }
+> = {
+  MAINTENANCE: { label: "Maintenance", className: "bg-indigo-50 text-indigo-800", icon: Wrench },
+  FUEL: { label: "Fuel", className: "bg-amber-50 text-amber-900", icon: Fuel },
+  REPORT: { label: "Report", className: "bg-blue-50 text-blue-800", icon: FileText },
+  GENERAL: { label: "General", className: "bg-slate-100 text-slate-700", icon: Bell },
+};
+
+function hasKnownAction(target: NotificationRecord["actionTarget"]): boolean {
+  if (!target) return false;
+  if (target.type === "MAINTENANCE_SCHEDULE") return Boolean(target.id);
+  return target.type === "FUEL_MANAGEMENT" || target.type === "REPORTS";
+}
+
+function formatNotificationDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Date unavailable";
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 const routeMeta: Record<string, { group: string; label: string }> = {
@@ -64,6 +100,7 @@ export default function Navbar() {
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
   const [notificationError, setNotificationError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [counts, setCounts] = useState({ total: 0, unread: 0 });
@@ -157,6 +194,9 @@ export default function Navbar() {
   };
 
   const markAllNotificationsAsRead = async () => {
+    if (!userId || isMarkingAllRead || visibleCounts.unread === 0) return;
+
+    setIsMarkingAllRead(true);
     try {
       await fetchJSON<{ updated: number }>("/notifications/inbox/read-all", { method: "PATCH" });
       if (requestUserId.current !== userId) return;
@@ -167,6 +207,8 @@ export default function Navbar() {
       if (requestUserId.current === userId) {
         setNotificationError(error instanceof Error ? error.message : "Unable to mark notifications as read.");
       }
+    } finally {
+      setIsMarkingAllRead(false);
     }
   };
 
@@ -175,9 +217,10 @@ export default function Navbar() {
   const visibleCounts = hasCurrentUserData ? counts : { total: 0, unread: 0 };
   const visibleNextCursor = hasCurrentUserData ? nextCursor : null;
   const visibleError = hasCurrentUserData ? notificationError : null;
+  const hasActiveFilters = categoryFilter !== "ALL" || readFilter !== "ALL";
 
   const openNotification = (notification: NotificationRecord) => {
-    void markNotificationAsRead(notification);
+    if (!notification.isRead) void markNotificationAsRead(notification);
     const target = notification.actionTarget;
     if (!target?.id) {
       if (target?.type === "FUEL_MANAGEMENT") {
@@ -237,144 +280,185 @@ export default function Navbar() {
 
       <Modal
         isOpen={isNotificationsOpen}
-        title="Notifications"
+        title={
+          <span className="flex items-center gap-3">
+            Notifications
+            <span className="rounded-full bg-[#eef0fa] px-2.5 py-1 text-xs font-semibold text-[#1a1f6e]">
+              {visibleCounts.unread} unread
+            </span>
+          </span>
+        }
         onClose={() => setIsNotificationsOpen(false)}
         size="lg"
-        className="!max-w-5xl !h-[85dvh] !max-h-[calc(100dvh-2rem)] !p-0 flex flex-col overflow-hidden"
+        className="!max-w-3xl !h-[min(84dvh,48rem)] !max-h-[calc(100dvh-1rem)] !p-0 flex flex-col overflow-hidden"
         footer={
-          <div className="flex justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <button
               type="button"
               onClick={() => void markAllNotificationsAsRead()}
-              disabled={visibleCounts.unread === 0}
-              className="rounded-lg border border-[#dce3ed] px-4 py-2 text-sm font-semibold text-[#1a1f6e] disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={visibleCounts.unread === 0 || isMarkingAllRead}
+              className="inline-flex min-h-10 w-full items-center justify-center rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-primary)] transition-colors hover:bg-[var(--color-card-bg-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-primary)] disabled:cursor-not-allowed sm:w-auto"
             >
-              Mark all read
+              {isMarkingAllRead ? "Marking notifications read..." : "Mark all read"}
             </button>
             <button
               type="button"
               onClick={() => setIsNotificationsOpen(false)}
-              className="rounded-lg bg-[#070b45] px-6 py-3 text-base font-semibold text-white transition hover:bg-[#111a62]"
+              className="inline-flex min-h-10 w-full items-center justify-center rounded-lg bg-[var(--color-brand-primary)] px-5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-brand-dark)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-primary)] sm:w-auto"
             >
               Close
             </button>
           </div>
         }
       >
-        <div className="h-full space-y-4 overflow-y-auto pr-2">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-[#667085]">
-              {visibleCounts.unread} unread · {visibleCounts.total} total
+        <div className="space-y-4 pb-1">
+          <div className="flex flex-col gap-3 border-b border-[var(--color-divider)] pb-4 sm:flex-row sm:items-end sm:justify-between">
+            <p aria-live="polite" className="text-sm font-medium text-[var(--color-text-secondary)]">
+              {visibleCounts.unread} unread <span aria-hidden="true">·</span> {visibleCounts.total} total
             </p>
-            <div className="flex gap-2">
-              <label className="sr-only" htmlFor="notification-category-filter">Filter by category</label>
-              <select
-                id="notification-category-filter"
-                value={categoryFilter}
-                onChange={(event) => setCategoryFilter(event.target.value)}
-                className="rounded-lg border border-[#dce3ed] bg-white px-3 py-2 text-sm"
+            <div className="grid w-full gap-3 sm:max-w-md sm:grid-cols-2">
+              <label
+                className="grid min-w-0 gap-1 text-xs font-semibold text-[var(--color-text-secondary)]"
+                htmlFor="notification-category-filter"
               >
-                <option value="ALL">All categories</option>
-                <option value="MAINTENANCE">Maintenance</option>
-                <option value="FUEL">Fuel</option>
-                <option value="REPORT">Reports</option>
-                <option value="GENERAL">General</option>
-              </select>
-              <label className="sr-only" htmlFor="notification-read-filter">Filter by read state</label>
-              <select
-                id="notification-read-filter"
-                value={readFilter}
-                onChange={(event) => setReadFilter(event.target.value)}
-                className="rounded-lg border border-[#dce3ed] bg-white px-3 py-2 text-sm"
+                Category
+                <select
+                  id="notification-category-filter"
+                  value={categoryFilter}
+                  onChange={(event) => setCategoryFilter(event.target.value)}
+                  className="min-h-10 w-full rounded-lg border border-[var(--color-input-border)] bg-[var(--color-input-bg)] px-3 text-sm font-normal text-[var(--color-text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-primary)]"
+                >
+                  <option value="ALL">All categories</option>
+                  <option value="MAINTENANCE">Maintenance</option>
+                  <option value="FUEL">Fuel</option>
+                  <option value="REPORT">Reports</option>
+                  <option value="GENERAL">General</option>
+                </select>
+              </label>
+              <label
+                className="grid min-w-0 gap-1 text-xs font-semibold text-[var(--color-text-secondary)]"
+                htmlFor="notification-read-filter"
               >
-                <option value="ALL">All states</option>
-                <option value="UNREAD">Unread</option>
-                <option value="READ">Read</option>
-              </select>
+                Read state
+                <select
+                  id="notification-read-filter"
+                  value={readFilter}
+                  onChange={(event) => setReadFilter(event.target.value)}
+                  className="min-h-10 w-full rounded-lg border border-[var(--color-input-border)] bg-[var(--color-input-bg)] px-3 text-sm font-normal text-[var(--color-text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-primary)]"
+                >
+                  <option value="ALL">All states</option>
+                  <option value="UNREAD">Unread</option>
+                  <option value="READ">Read</option>
+                </select>
+              </label>
             </div>
           </div>
+          {isLoadingNotifications && visibleNotifications.length > 0 ? (
+            <p role="status" className="text-xs text-[var(--color-text-secondary)]">
+              Updating notifications...
+            </p>
+          ) : null}
           {visibleError ? (
-            <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-              <span>{visibleError}</span>
-              <button type="button" onClick={() => void loadNotifications()} className="font-semibold underline">
+            <div role="alert" className="flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900 sm:flex-row sm:items-center sm:justify-between">
+              <span className="break-words">{visibleError}</span>
+              <button type="button" onClick={() => void loadNotifications()} className="shrink-0 self-start font-semibold underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-800 sm:self-auto">
                 Retry
               </button>
             </div>
           ) : null}
           {isLoadingNotifications && visibleNotifications.length === 0 ? (
-            <p className="text-base text-[#667085]">Loading notifications...</p>
-          ) : visibleNotifications.length === 0 ? (
-            <p className="text-base text-[#667085]">No notifications match this filter.</p>
+            <p role="status" aria-live="polite" className="py-8 text-center text-sm text-[var(--color-text-secondary)]">
+              Loading notifications...
+            </p>
+          ) : visibleError && visibleNotifications.length === 0 ? null : visibleNotifications.length === 0 ? (
+            <div role="status" className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)] px-5 py-10 text-center">
+              <Bell className="mx-auto size-6 text-[var(--color-text-secondary)]" aria-hidden="true" />
+              <p className="mt-3 text-sm font-semibold text-[var(--color-text-primary)]">
+                {hasActiveFilters ? "No notifications match these filters" : "You're all caught up"}
+              </p>
+              <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                {hasActiveFilters
+                  ? "Clear the filters to see more notifications."
+                  : "Updates from maintenance, fuel, reports, and other VMMS activity appear here."}
+              </p>
+              {hasActiveFilters ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategoryFilter("ALL");
+                    setReadFilter("ALL");
+                  }}
+                  className="mt-4 rounded-lg px-3 py-2 text-sm font-semibold text-[var(--color-brand-primary)] hover:bg-[var(--color-card-bg-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-primary)]"
+                >
+                  Clear filters
+                </button>
+              ) : null}
+            </div>
           ) : (
-            visibleNotifications.map((notification) => (
-              <button
-                key={`${notification.source}-${notification.id}`}
-                type="button"
-                onClick={() => openNotification(notification)}
-                aria-label={`${notification.title}. ${notification.message}${notification.actionTarget ? ". Open related item." : ". Mark as read."}`}
-                className={`w-full rounded-lg border p-5 text-left transition ${
-                  notification.title === "Critical maintenance escalation" || notification.title === "Critical fuel anomaly"
-                    ? notification.isRead
-                      ? "border-red-300 bg-red-50"
-                      : "border-red-500 bg-red-50 ring-1 ring-red-200"
-                    : notification.isRead
-                      ? "border-[#dce3ed] bg-[#f7f9fc]"
-                      : "border-[#f4c400]/60 bg-[#fffaf0]"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {notification.title === "Critical maintenance escalation" || notification.title === "Critical fuel anomaly" ? (
-                        <AlertTriangle size={18} className="text-red-700" aria-hidden="true" />
-                      ) : null}
-                      <p
-                        className={`text-lg font-bold ${
-                          notification.title === "Critical maintenance escalation" || notification.title === "Critical fuel anomaly"
-                            ? "text-red-900"
-                            : "text-[#141827]"
-                        }`}
-                      >
-                        {notification.title}
-                      </p>
-                      {notification.title === "Critical maintenance escalation" || notification.title === "Critical fuel anomaly" ? (
-                        <span className="rounded-full bg-red-700 px-2.5 py-1 text-xs font-extrabold tracking-wide text-white">
-                          CRITICAL
+            <ul className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card-bg)]">
+              {visibleNotifications.map((notification) => {
+                const critical = notification.severity.toUpperCase() === "CRITICAL";
+                const actionable = hasKnownAction(notification.actionTarget);
+                const category = categoryMeta[notification.category];
+                const CategoryIcon = category.icon;
+                return (
+                  <li key={`${notification.source}-${notification.id}`} className="border-b border-[var(--color-divider)] last:border-b-0">
+                    <button
+                      type="button"
+                      onClick={() => openNotification(notification)}
+                      disabled={notification.isRead && !actionable}
+                      aria-label={`${notification.title}. ${notification.message}. ${notification.isRead ? "Read." : "Unread."}${actionable ? " Open related item." : notification.isRead ? "" : " Mark as read."}`}
+                      className={`group flex w-full items-start gap-3 px-4 py-4 text-left transition-colors hover:bg-[var(--color-card-bg-hover)] focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-brand-primary)] disabled:cursor-default disabled:opacity-100 ${
+                        notification.isRead ? "" : "bg-[#fffaf0] hover:bg-[#fff6df]"
+                      }`}
+                    >
+                      <span className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full ${category.className}`}>
+                        <CategoryIcon size={15} strokeWidth={1.8} aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className={`break-words text-sm font-semibold ${critical ? "text-red-900" : "text-[var(--color-text-primary)]"}`}>
+                            {notification.title}
+                          </span>
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${category.className}`}>
+                            {category.label}
+                          </span>
+                          {critical ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-900">
+                              <AlertTriangle size={12} aria-hidden="true" />
+                              Critical
+                            </span>
+                          ) : null}
                         </span>
-                      ) : null}
-                      {/fleet .*report/i.test(notification.title) ? (
-                        <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold tracking-wide text-blue-800">
-                          SCHEDULED REPORT
+                        <span className="mt-1 block break-words text-sm leading-5 text-[var(--color-text-secondary)]">
+                          {notification.message}
                         </span>
+                        <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--color-text-secondary)]">
+                          <time dateTime={notification.createdAt} title={notification.createdAt}>
+                            {formatNotificationDate(notification.createdAt)}
+                          </time>
+                          {actionable ? (
+                            <span className="font-semibold text-[var(--color-brand-primary)]">Open related item</span>
+                          ) : !notification.isRead ? (
+                            <span className="font-semibold text-[var(--color-brand-primary)]">Mark as read</span>
+                          ) : null}
+                        </span>
+                      </span>
+                      {!notification.isRead ? (
+                        <span className="mt-1.5 size-2 shrink-0 rounded-full bg-[#d7a900]" aria-hidden="true" />
                       ) : null}
-                    </div>
-                    <p className="mt-2 text-base leading-6 text-[#667085]">{notification.message}</p>
-                  </div>
-                  {!notification.isRead && (
-                    <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-[#f4c400]" />
-                  )}
-                </div>
-                <p className="mt-3 text-sm font-medium uppercase tracking-wide text-[#667085]">
-                  {new Date(notification.createdAt).toLocaleString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </p>
-                {notification.actionTarget ? (
-                  <p className="mt-3 text-sm font-semibold text-[#1a1f6e]">Open related item →</p>
-                ) : null}
-              </button>
-            ))
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
           )}
           {visibleNextCursor ? (
             <button
               type="button"
               onClick={() => void loadNotifications(visibleNextCursor, true)}
               disabled={isLoadingMore}
-              className="w-full rounded-lg border border-[#dce3ed] px-4 py-3 text-sm font-semibold text-[#1a1f6e] disabled:opacity-50"
+              className="min-h-10 w-full rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-primary)] transition-colors hover:bg-[var(--color-card-bg-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-primary)]"
             >
               {isLoadingMore ? "Loading..." : "Load older notifications"}
             </button>
